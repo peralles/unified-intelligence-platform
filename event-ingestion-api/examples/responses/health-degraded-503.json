@@ -1,0 +1,24 @@
+{
+  "status": "degraded",
+  "timestamp": "2025-09-28T14:30:00.123Z",
+  "version": "1.0.0",
+  "dependencies": {
+    "pubsub": "unhealthy",
+    "schema_registry": "healthy"
+  },
+  "metrics": {
+    "uptime_seconds": 86400,
+    "requests_per_second": 25.3,
+    "average_latency_ms": 250.7,
+    "error_rate_percent": 8.5,
+    "total_events_processed": 1250000,
+    "events_processed_today": 45000
+  },
+  "issues": [
+    {
+      "component": "pubsub",
+      "message": "Connection timeout to Pub/Sub service",
+      "since": "2025-09-28T14:25:00.000Z"
+    }
+  ]
+}

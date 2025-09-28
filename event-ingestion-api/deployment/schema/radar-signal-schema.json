@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unified-intelligence-platform.com/schemas/radar-signal/v1.0.0",
+  "title": "RadarSignal Event Schema",
+  "description": "Canonical schema for all business events ingested by the Unified Data Intelligence Platform",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventTimestamp", 
+    "eventSource",
+    "eventType",
+    "eventVersion",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the specific event occurrence. Must be a valid UUID v4.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "examples": [
+        "123e4567-e89b-12d3-a456-426614174000",
+        "550e8400-e29b-41d4-a716-446655440000"
+      ]
+    },
+    "eventTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp indicating when the business event occurred (not when it was ingested)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$",
+      "examples": [
+        "2025-09-28T14:30:00.000Z",
+        "2025-12-01T09:15:30.123Z"
+      ]
+    },
+    "eventSource": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "System, service, or application that generated the event. Must be a valid identifier.",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-_.]*[a-zA-Z0-9]$",
+      "examples": [
+        "user-management-service",
+        "payment-gateway",
+        "mobile-app-v2",
+        "external-webhook-provider"
+      ]
+    },
+    "eventType": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Hierarchical event classification using dot notation. Follows the pattern domain.entity.action.",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9-]*\\.[a-zA-Z][a-zA-Z0-9-]*\\.[a-zA-Z][a-zA-Z0-9-]*$",
+      "examples": [
+        "user.account.created",
+        "payment.transaction.completed",
+        "inventory.item.updated", 
+        "system.backup.failed"
+      ]
+    },
+    "eventVersion": {
+      "type": "string",
+      "description": "Semantic version of the event schema for backward compatibility and evolution tracking",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": [
+        "1.0.0",
+        "2.1.3",
+        "1.0.0-beta.1"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "description": "Business-specific event data. Content varies by eventType but must be valid JSON object",
+      "minProperties": 1,
+      "maxProperties": 50,
+      "additionalProperties": true,
+      "examples": [
+        {
+          "userId": "usr_789",
+          "email": "user@example.com",
+          "subscription": "premium"
+        },
+        {
+          "transactionId": "txn_456",
+          "amount": 99.99,
+          "currency": "USD",
+          "status": "completed"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "eventId": "123e4567-e89b-12d3-a456-426614174000",
+      "eventTimestamp": "2025-09-28T14:30:00.000Z",
+      "eventSource": "user-management-service", 
+      "eventType": "user.signup.completed",
+      "eventVersion": "1.0.0",
+      "payload": {
+        "userId": "usr_789",
+        "email": "user@example.com",
+        "subscription": "premium",
+        "referralCode": "FRIEND2025"
+      }
+    },
+    {
+      "eventId": "987f6543-c21d-43e2-b654-321098765432",
+      "eventTimestamp": "2025-09-28T15:45:30.123Z", 
+      "eventSource": "payment-gateway",
+      "eventType": "payment.transaction.failed",
+      "eventVersion": "1.0.0",
+      "payload": {
+        "transactionId": "txn_456",
+        "userId": "usr_789", 
+        "amount": 149.99,
+        "currency": "USD",
+        "errorCode": "INSUFFICIENT_FUNDS",
+        "retryable": true
+      }
+    }
+  ],
+  "definitions": {
+    "metadata": {
+      "version": "1.0.0",
+      "created": "2025-09-28T00:00:00.000Z",
+      "lastModified": "2025-09-28T00:00:00.000Z",
+      "author": "Unified Data Intelligence Platform",
+      "governance": {
+        "schemaEvolution": "backward-compatible",
+        "deprecationPolicy": "6-month notice period",
+        "validationLevel": "strict",
+        "complianceRequired": true
+      }
+    }
+  }
+}

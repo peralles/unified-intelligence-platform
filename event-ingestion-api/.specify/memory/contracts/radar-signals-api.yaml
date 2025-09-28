@@ -1,0 +1,604 @@
+openapi: 3.0.3
+info:
+  title: Radar Signals Event Ingestion API - Implementation Contract
+  description: |
+    Production-ready API contract for Python Cloud Function implementation.
+    Defines exact request/response formats for constitutional compliance testing.
+    
+    **Implementation Requirements**:
+    - Python 3.11 on Google Cloud Functions 2nd Gen
+    - jsonschema validation with <2ms performance
+    - Async Pub/Sub publishing with <30ms latency
+    - Structured logging with trace ID correlation
+    - Stateless operation with no persistent storage
+    
+  version: 1.0.0
+  contact:
+    name: Unified Data Intelligence Platform
+    email: platform@company.com
+
+servers:
+  - url: https://us-central1-{project_id}.cloudfunctions.net/radar-signals-ingestion
+    description: Production Google Cloud Function endpoint
+  - url: http://localhost:8080
+    description: Local development with Functions Framework
+
+paths:
+  /:
+    post:
+      summary: Ingest Radar Signal Event
+      description: |
+        **Cloud Function Entry Point**: Validates and publishes radar signal events
+        
+        **Processing Flow**:
+        1. Validate request size (<1MB)
+        2. Parse and validate JSON syntax  
+        3. Validate against canonical JSON schema
+        4. Validate with Pydantic models
+        5. Publish to Pub/Sub topic asynchronously
+        6. Return acceptance confirmation
+        
+        **Performance Requirements**:
+        - Total latency: <100ms (95th percentile)
+        - Validation time: <5ms per event
+        - Publishing time: <30ms per event
+        - Memory usage: <100MB per concurrent request
+        
+      operationId: ingestRadarSignal
+      tags:
+        - Event Ingestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RadarSignalEvent'
+            examples:
+              user_signup:
+                summary: User Signup Event
+                value:
+                  event_id: "123e4567-e89b-42d3-a456-426614174000"
+                  event_timestamp: "2025-09-28T14:30:00.000Z"
+                  event_source: "user-management-service"
+                  event_type: "user.signup.completed"
+                  event_version: "1.0.0"
+                  payload:
+                    user_id: "usr_789abc123"
+                    email: "jane.doe@example.com"
+                    subscription: "premium"
+                    referral_code: "FRIEND2025"
+              payment_failed:
+                summary: Payment Failure Event
+                value:
+                  event_id: "987f6543-c21d-43e2-b654-321098765432"
+                  event_timestamp: "2025-09-28T15:45:30.123Z"
+                  event_source: "payment-gateway"
+                  event_type: "payment.transaction.failed"
+                  event_version: "1.0.0"
+                  payload:
+                    transaction_id: "txn_456def789"
+                    user_id: "usr_789abc123"
+                    amount: 149.99
+                    currency: "USD"
+                    error_code: "INSUFFICIENT_FUNDS"
+                    retryable: true
+      responses:
+        '202':
+          description: Event accepted and queued for processing
+          headers:
+            X-Trace-ID:
+              schema:
+                type: string
+              description: Distributed trace identifier
+              example: "trace_abc123def456ghi789"
+            X-Message-ID:
+              schema:
+                type: string  
+              description: Pub/Sub message identifier
+              example: "1234567890123456"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventAcceptedResponse'
+              example:
+                status: "accepted"
+                event_id: "123e4567-e89b-42d3-a456-426614174000"
+                trace_id: "trace_abc123def456ghi789"
+                timestamp: "2025-09-28T14:30:00.123Z"
+                message_id: "1234567890123456"
+        '400':
+          description: Bad Request - Validation failed
+          headers:
+            X-Trace-ID:
+              schema:
+                type: string
+              description: Distributed trace identifier for error correlation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              examples:
+                schema_validation:
+                  summary: Schema Validation Failure
+                  value:
+                    error: "VALIDATION_FAILED"
+                    message: "Event validation failed against canonical schema"
+                    details:
+                      - field: "event_type"
+                        message: "Required field 'event_type' is missing"
+                        code: "MISSING_FIELD"
+                      - field: "event_id"
+                        message: "Invalid UUID format - must be valid UUID v4"
+                        code: "INVALID_FORMAT"
+                        expected_format: "UUID v4"
+                    trace_id: "trace_def456ghi789jkl012"
+                    timestamp: "2025-09-28T14:30:00.123Z"
+                    retryable: false
+                json_syntax:
+                  summary: JSON Syntax Error
+                  value:
+                    error: "VALIDATION_FAILED"
+                    message: "Invalid JSON syntax in request body"
+                    details:
+                      - field: "request_body"
+                        message: "Expecting ',' delimiter: line 5 column 8 (char 45)"
+                        code: "INVALID_JSON"
+                    trace_id: "trace_ghi789jkl012mno345"
+                    timestamp: "2025-09-28T14:30:00.123Z"
+                    retryable: false
+        '413':
+          description: Payload Too Large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "PAYLOAD_TOO_LARGE"
+                message: "Request payload size 1.2MB exceeds maximum limit of 1MB"
+                trace_id: "trace_jkl012mno345pqr678"
+                timestamp: "2025-09-28T14:30:00.123Z"
+                retryable: false
+        '429':
+          description: Too Many Requests
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
+              example: 60
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Maximum requests per time window
+              example: 1000
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Remaining requests in current window  
+              example: 0
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Unix timestamp when rate limit resets
+              example: 1695915060
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "RATE_LIMIT_EXCEEDED"
+                message: "Request rate limit of 1000/minute exceeded"
+                trace_id: "trace_mno345pqr678stu901"
+                timestamp: "2025-09-28T14:30:00.123Z"
+                retryable: true
+                retry_after: 60
+        '503':
+          description: Service Unavailable
+          headers:
+            Retry-After:
+              schema:
+                type: integer  
+              description: Seconds to wait before retrying
+              example: 30
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "SERVICE_UNAVAILABLE"
+                message: "Pub/Sub service temporarily unavailable - please retry"
+                trace_id: "trace_pqr678stu901vwx234"
+                timestamp: "2025-09-28T14:30:00.123Z"
+                retryable: true
+                retry_after: 30
+
+  /healthz:
+    get:
+      summary: Health Check
+      description: |
+        **Health Monitoring Endpoint**: Returns service and dependency status
+        
+        **Health Checks Performed**:
+        1. Function runtime status
+        2. Pub/Sub topic connectivity
+        3. Schema validator initialization  
+        4. Memory and performance metrics
+        
+        **Status Levels**:
+        - `healthy`: All systems operational
+        - `degraded`: Some non-critical issues detected
+        - `unhealthy`: Critical systems failing
+        
+      operationId: healthCheck
+      tags:
+        - System Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  summary: All Systems Healthy
+                  value:
+                    status: "healthy"
+                    timestamp: "2025-09-28T14:30:00.123Z"
+                    version: "1.0.0"
+                    dependencies:
+                      pubsub:
+                        status: "healthy"
+                        response_time_ms: 12.5
+                        last_check: "2025-09-28T14:30:00.100Z"
+                      schema_registry:
+                        status: "healthy"
+                        response_time_ms: 1.2
+                        last_check: "2025-09-28T14:30:00.110Z"
+                    metrics:
+                      uptime_seconds: 86400
+                      requests_per_second: 150.5
+                      average_latency_ms: 45.2
+                      error_rate_percent: 0.1
+                      total_events_processed: 1250000
+                      events_processed_today: 50000
+                degraded:
+                  summary: Degraded Performance
+                  value:
+                    status: "degraded"
+                    timestamp: "2025-09-28T14:30:00.123Z"
+                    version: "1.0.0"
+                    dependencies:
+                      pubsub:
+                        status: "degraded"
+                        response_time_ms: 150.7
+                        last_check: "2025-09-28T14:30:00.100Z"
+                        error_message: "High latency detected"
+                      schema_registry:
+                        status: "healthy"
+                        response_time_ms: 1.2
+                        last_check: "2025-09-28T14:30:00.110Z"
+                    metrics:
+                      uptime_seconds: 86400
+                      requests_per_second: 75.2
+                      average_latency_ms: 125.8
+                      error_rate_percent: 2.3
+                      total_events_processed: 1250000
+                      events_processed_today: 48000
+                    issues:
+                      - component: "pubsub"
+                        message: "Pub/Sub latency above 100ms threshold"
+                        since: "2025-09-28T14:25:00.000Z"
+        '503':
+          description: Service is unhealthy or degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "unhealthy"
+                timestamp: "2025-09-28T14:30:00.123Z"
+                version: "1.0.0"
+                dependencies:
+                  pubsub:
+                    status: "unhealthy"
+                    response_time_ms: null
+                    last_check: "2025-09-28T14:25:00.000Z"
+                    error_message: "Connection timeout after 30s"
+                  schema_registry:
+                    status: "healthy"
+                    response_time_ms: 1.2
+                    last_check: "2025-09-28T14:30:00.110Z"
+                metrics:
+                  uptime_seconds: 86400
+                  requests_per_second: 0.0
+                  average_latency_ms: 0.0
+                  error_rate_percent: 100.0
+                  total_events_processed: 1250000
+                  events_processed_today: 45000
+                issues:
+                  - component: "pubsub"
+                    message: "Unable to connect to Pub/Sub service"
+                    since: "2025-09-28T14:25:00.000Z"
+
+components:
+  schemas:
+    RadarSignalEvent:
+      type: object
+      required:
+        - event_id
+        - event_timestamp
+        - event_source
+        - event_type
+        - event_version
+        - payload
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          description: "Unique UUID v4 identifier for event occurrence"
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          example: "123e4567-e89b-42d3-a456-426614174000"
+        event_timestamp:
+          type: string
+          format: date-time
+          description: "ISO 8601 UTC timestamp when business event occurred"
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$'
+          example: "2025-09-28T14:30:00.000Z"
+        event_source:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: "System or service identifier that generated the event"
+          pattern: '^[a-zA-Z0-9][a-zA-Z0-9-_.]*[a-zA-Z0-9]$'
+          example: "user-management-service"
+        event_type:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: "Hierarchical event classification (domain.entity.action)"
+          pattern: '^[a-zA-Z][a-zA-Z0-9-]*\.[a-zA-Z][a-zA-Z0-9-]*\.[a-zA-Z][a-zA-Z0-9-]*$'
+          example: "user.signup.completed"
+        event_version:
+          type: string
+          description: "Semantic version of event schema"
+          pattern: '^\d+\.\d+\.\d+$'
+          example: "1.0.0"
+        payload:
+          type: object
+          minProperties: 1
+          maxProperties: 50
+          description: "Business-specific event data"
+          additionalProperties: true
+          example:
+            user_id: "usr_789"
+            email: "user@example.com"
+            subscription: "premium"
+      additionalProperties: false
+
+    ValidationError:
+      type: object
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+          description: "JSON path to field that failed validation"
+          example: "event_timestamp"
+        message:
+          type: string
+          description: "Human-readable validation error description"
+          example: "Invalid ISO 8601 timestamp format"
+        code:
+          type: string
+          description: "Machine-readable error code"
+          example: "INVALID_FORMAT"
+        expected_format:
+          type: string
+          description: "Expected format or pattern for the field"
+          example: "YYYY-MM-DDTHH:MM:SS.sssZ"
+
+    EventAcceptedResponse:
+      type: object
+      required:
+        - status
+        - event_id
+        - trace_id
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+          description: "Acceptance confirmation status"
+        event_id:
+          type: string
+          format: uuid
+          description: "Echo of submitted event ID for correlation"
+        trace_id:
+          type: string
+          description: "Distributed trace identifier for request tracking"
+        timestamp:
+          type: string
+          format: date-time
+          description: "Server timestamp when response generated"
+        message_id:
+          type: string
+          description: "Pub/Sub message ID for downstream tracking"
+
+    ValidationErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidationError'
+              description: "Specific field validation failures"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - trace_id
+        - timestamp
+        - retryable
+      properties:
+        error:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - PAYLOAD_TOO_LARGE
+            - RATE_LIMIT_EXCEEDED
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_SERVER_ERROR
+          description: "Machine-readable error type"
+        message:
+          type: string
+          description: "Human-readable error description"
+        trace_id:
+          type: string
+          description: "Distributed trace identifier for error correlation"
+        timestamp:
+          type: string
+          format: date-time
+          description: "Server timestamp when error occurred"
+        retryable:
+          type: boolean
+          description: "Whether client should retry the request"
+        retry_after:
+          type: integer
+          minimum: 1
+          description: "Seconds to wait before retrying (for rate limits)"
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - version
+        - dependencies
+        - metrics
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: "Overall service health status"
+        timestamp:
+          type: string
+          format: date-time
+          description: "Health check execution timestamp"
+        version:
+          type: string
+          description: "API version for debugging"
+        dependencies:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/DependencyHealth'
+          description: "External dependency health status"
+        metrics:
+          $ref: '#/components/schemas/HealthMetrics'
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              component:
+                type: string
+              message:
+                type: string
+              since:
+                type: string
+                format: date-time
+          description: "Current service issues (if any)"
+
+    DependencyHealth:
+      type: object
+      required:
+        - status
+        - last_check
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        response_time_ms:
+          type: number
+          minimum: 0
+          description: "Dependency response time in milliseconds"
+        last_check:
+          type: string
+          format: date-time
+          description: "Timestamp of last health check"
+        error_message:
+          type: string
+          description: "Error description if dependency unhealthy"
+
+    HealthMetrics:
+      type: object
+      required:
+        - uptime_seconds
+        - requests_per_second
+        - average_latency_ms
+        - error_rate_percent
+        - total_events_processed
+        - events_processed_today
+      properties:
+        uptime_seconds:
+          type: integer
+          minimum: 0
+          description: "Service uptime in seconds"
+        requests_per_second:
+          type: number
+          minimum: 0
+          description: "Current request rate"
+        average_latency_ms:
+          type: number
+          minimum: 0
+          description: "Average response latency"
+        error_rate_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: "Error rate percentage"
+        total_events_processed:
+          type: integer
+          minimum: 0
+          description: "Total lifetime events processed"
+        events_processed_today:
+          type: integer
+          minimum: 0
+          description: "Events processed since midnight UTC"
+
+security: []
+
+tags:
+  - name: Event Ingestion
+    description: Core radar signal validation and publishing
+  - name: System Health
+    description: Service health monitoring and diagnostics
+
+# Implementation-specific extensions
+x-google-cloud-function:
+  runtime: python311
+  entry_point: main
+  memory: 512MB
+  timeout: 60s
+  environment_variables:
+    PUBSUB_TOPIC: radar-signals-topic
+    PROJECT_ID: unified-intelligence-platform
+    LOG_LEVEL: INFO
+    
+x-performance-requirements:
+  validation_latency_ms: 5
+  publishing_latency_ms: 30
+  total_latency_p95_ms: 100
+  throughput_events_per_second: 1000
+  
+x-constitutional-compliance:
+  data_governance: "Canonical schema validation with jsonschema"
+  scalable_architecture: "Serverless Cloud Functions with auto-scaling"
+  high_observability: "Structured logging with distributed tracing"
+  modular_design: "Separation of validation, publishing, and health concerns"
+  phased_evolution: "Foundation for future intelligence integration"

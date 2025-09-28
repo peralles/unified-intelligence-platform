@@ -1,0 +1,20 @@
+{
+  "eventId": "456a7890-f12b-4345-8678-90ab12cd34ef",
+  "eventTimestamp": "2025-09-28T16:22:15.456Z",
+  "eventSource": "inventory-management-system",
+  "eventType": "inventory.item.updated",
+  "eventVersion": "1.0.0",
+  "payload": {
+    "itemId": "item_abc123def456",
+    "sku": "WIDGET-PRO-2025",
+    "name": "Premium Widget Pro",
+    "category": "electronics",
+    "previousQuantity": 150,
+    "newQuantity": 125,
+    "quantityChange": -25,
+    "changeReason": "sale",
+    "warehouseId": "wh_north_001",
+    "lastModifiedBy": "system_auto_sync",
+    "pricePerUnit": 29.99
+  }
+}

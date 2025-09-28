@@ -1,0 +1,17 @@
+{
+  "eventId": "123e4567-e89b-42d3-a456-426614174000",
+  "eventTimestamp": "2025-09-28T14:30:00.000Z",
+  "eventSource": "user-management-service",
+  "eventType": "user.signup.completed",
+  "eventVersion": "1.0.0",
+  "payload": {
+    "userId": "usr_789abc123",
+    "email": "jane.doe@example.com",
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "subscription": "premium",
+    "referralCode": "FRIEND2025",
+    "marketingConsent": true,
+    "accountCreatedAt": "2025-09-28T14:29:45.000Z"
+  }
+}

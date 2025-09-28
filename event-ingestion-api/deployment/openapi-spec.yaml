@@ -1,0 +1,422 @@
+openapi: 3.0.3
+info:
+  title: Radar Signals Event Ingestion API
+  description: |
+    High-throughput, scalable API for real-time ingestion of business events (Radar Signals) 
+    into the Unified Data Intelligence Platform. This API serves as the foundational entry point 
+    for Phase 1 MVP, enabling data-driven autonomous operations.
+    
+    ## Constitutional Compliance
+    
+    This API adheres to all Five Constitutional Principles:
+    - **Strict Data Governance**: Enforces canonical RadarSignal schema validation
+    - **Scalable Architecture**: Serverless, event-driven design with auto-scaling
+    - **High Observability**: Comprehensive logging, tracing, and monitoring
+    - **Modular Design**: Clear separation of concerns with reusable components
+    - **Phased Evolution**: Foundation for future intelligence and automation layers
+    
+  version: 1.0.0
+  contact:
+    name: Unified Data Intelligence Platform Team
+    email: platform@company.com
+  license:
+    name: Proprietary
+    url: https://company.com/licenses
+
+servers:
+  - url: https://radar-signals-api.company.com/v1
+    description: Production environment
+  - url: https://radar-signals-api-staging.company.com/v1  
+    description: Staging environment
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /events:
+    post:
+      summary: Ingest Radar Signal Event
+      description: |
+        Accepts a business event (radar signal) for ingestion into the platform.
+        Performs strict schema validation against the canonical RadarSignal format
+        and publishes the event to the message bus for downstream processing.
+        
+        **Key Behaviors:**
+        - Validates event against canonical JSON schema
+        - Rejects non-compliant events with detailed error messages  
+        - Publishes valid events to Pub/Sub without modification
+        - Returns immediately after publishing (asynchronous processing)
+        - No business logic or data transformation performed
+        
+      operationId: ingestEvent
+      tags:
+        - Event Ingestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RadarSignalEvent'
+            examples:
+              user_signup:
+                summary: User Signup Completed
+                value:
+                  eventId: "123e4567-e89b-12d3-a456-426614174000"
+                  eventTimestamp: "2025-09-28T14:30:00.000Z"
+                  eventSource: "user-management-service"
+                  eventType: "user.signup.completed" 
+                  eventVersion: "1.0.0"
+                  payload:
+                    userId: "usr_789"
+                    email: "user@example.com"
+                    subscription: "premium"
+                    referralCode: "FRIEND2025"
+              payment_failed:
+                summary: Payment Transaction Failed
+                value:
+                  eventId: "987f6543-c21d-43e2-b654-321098765432"
+                  eventTimestamp: "2025-09-28T15:45:30.123Z"
+                  eventSource: "payment-gateway"
+                  eventType: "payment.transaction.failed"
+                  eventVersion: "1.0.0" 
+                  payload:
+                    transactionId: "txn_456"
+                    userId: "usr_789"
+                    amount: 149.99
+                    currency: "USD"
+                    errorCode: "INSUFFICIENT_FUNDS"
+                    retryable: true
+      responses:
+        '202':
+          description: |
+            Event accepted and queued for processing. This indicates successful 
+            validation and publishing to the message bus, but does not guarantee
+            final processing completion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventAcceptedResponse'
+              example:
+                status: "accepted"
+                eventId: "123e4567-e89b-12d3-a456-426614174000"
+                traceId: "trace_abc123def456"
+                timestamp: "2025-09-28T14:30:00.123Z"
+        '400':
+          description: |
+            Bad Request - Event validation failed. The request contains invalid
+            data that does not conform to the canonical RadarSignal schema.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                error: "VALIDATION_FAILED"
+                message: "Event validation failed against canonical schema"
+                details:
+                  - field: "eventTimestamp"
+                    message: "Invalid ISO 8601 timestamp format"
+                  - field: "payload.email"
+                    message: "Invalid email address format"
+                traceId: "trace_def456ghi789"
+                timestamp: "2025-09-28T14:30:00.123Z"
+        '413':
+          description: Payload Too Large - Event exceeds maximum size limit (1MB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "PAYLOAD_TOO_LARGE"
+                message: "Event payload exceeds maximum size of 1MB"
+                traceId: "trace_ghi789jkl012"
+                timestamp: "2025-09-28T14:30:00.123Z"
+        '429':
+          description: Too Many Requests - Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Request limit per time window
+            X-RateLimit-Remaining:
+              schema:
+                type: integer  
+              description: Remaining requests in current window
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "RATE_LIMIT_EXCEEDED" 
+                message: "Request rate limit exceeded. Please retry after indicated time."
+                traceId: "trace_jkl012mno345"
+                timestamp: "2025-09-28T14:30:00.123Z"
+        '503':
+          description: Service Unavailable - Downstream dependencies (Pub/Sub) unavailable
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "SERVICE_UNAVAILABLE"
+                message: "Message bus temporarily unavailable. Please retry."
+                traceId: "trace_mno345pqr678"
+                timestamp: "2025-09-28T14:30:00.123Z"
+
+  /healthz:
+    get:
+      summary: Health Check
+      description: |
+        Returns the operational health status of the API and its dependencies.
+        Used for monitoring, alerting, and load balancer health checks.
+        
+        **Health Indicators:**
+        - Overall service status
+        - External dependency connectivity (Pub/Sub, Schema Registry)
+        - Performance metrics and operational statistics
+        - Version information for debugging
+        
+      operationId: healthCheck
+      tags:
+        - System Health
+      responses:
+        '200':
+          description: Service is healthy and operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "healthy"
+                timestamp: "2025-09-28T14:30:00.123Z"
+                version: "1.0.0"
+                dependencies:
+                  pubsub: "healthy"
+                  schema_registry: "healthy"
+                metrics:
+                  uptime_seconds: 86400
+                  requests_per_second: 150
+                  average_latency_ms: 45
+                  error_rate_percent: 0.1
+        '503':
+          description: Service is unhealthy or degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "degraded"
+                timestamp: "2025-09-28T14:30:00.123Z"
+                version: "1.0.0"
+                dependencies:
+                  pubsub: "unhealthy"
+                  schema_registry: "healthy"
+                metrics:
+                  uptime_seconds: 86400
+                  requests_per_second: 150
+                  average_latency_ms: 45
+                  error_rate_percent: 2.5
+
+components:
+  schemas:
+    RadarSignalEvent:
+      type: object
+      required:
+        - eventId
+        - eventTimestamp
+        - eventSource
+        - eventType
+        - eventVersion
+        - payload
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: Unique identifier for the event occurrence (UUID v4)
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        eventTimestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the business event occurred
+          pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$'
+          example: "2025-09-28T14:30:00.000Z"
+        eventSource:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: System or service that generated the event
+          pattern: '^[a-zA-Z0-9][a-zA-Z0-9-_.]*[a-zA-Z0-9]$'
+          example: "user-management-service"
+        eventType:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Hierarchical event classification (domain.entity.action)
+          pattern: '^[a-zA-Z][a-zA-Z0-9-]*\\.[a-zA-Z][a-zA-Z0-9-]*\\.[a-zA-Z][a-zA-Z0-9-]*$'
+          example: "user.signup.completed"
+        eventVersion:
+          type: string
+          description: Semantic version of the event schema
+          pattern: '^\\d+\\.\\d+\\.\\d+$'
+          example: "1.0.0"
+        payload:
+          type: object
+          description: Business-specific event data
+          minProperties: 1
+          maxProperties: 50
+          additionalProperties: true
+          example:
+            userId: "usr_789"
+            email: "user@example.com"
+            subscription: "premium"
+      additionalProperties: false
+      
+    EventAcceptedResponse:
+      type: object
+      required:
+        - status
+        - eventId
+        - traceId
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+          description: Confirmation that event was accepted and queued
+        eventId:
+          type: string
+          format: uuid
+          description: Echo of the submitted event ID for correlation
+        traceId:
+          type: string
+          description: Unique trace identifier for request tracking
+        timestamp:
+          type: string
+          format: date-time
+          description: Server timestamp when response was generated
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - details
+        - traceId
+        - timestamp
+      properties:
+        error:
+          type: string
+          enum: [VALIDATION_FAILED]
+          description: Error code for validation failures
+        message:
+          type: string
+          description: Human-readable error summary
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          description: Specific validation failure details
+        traceId:
+          type: string
+          description: Unique trace identifier for request tracking
+        timestamp:
+          type: string
+          format: date-time
+          description: Server timestamp when error occurred
+
+    ValidationError:
+      type: object
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+          description: JSON path to the field that failed validation
+        message:
+          type: string
+          description: Specific validation error message
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - traceId
+        - timestamp
+      properties:
+        error:
+          type: string
+          enum: 
+            - PAYLOAD_TOO_LARGE
+            - RATE_LIMIT_EXCEEDED
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_SERVER_ERROR
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable error description
+        traceId:
+          type: string
+          description: Unique trace identifier for request tracking
+        timestamp:
+          type: string
+          format: date-time
+          description: Server timestamp when error occurred
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - version
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: Overall service health status
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp when health check was performed
+        version:
+          type: string
+          description: API version for debugging and compatibility
+        dependencies:
+          type: object
+          description: Health status of external dependencies
+          additionalProperties:
+            type: string
+            enum: [healthy, degraded, unhealthy]
+        metrics:
+          type: object
+          description: Operational metrics and statistics
+          properties:
+            uptime_seconds:
+              type: integer
+              description: Service uptime in seconds
+            requests_per_second:
+              type: number
+              description: Current request rate
+            average_latency_ms:
+              type: number
+              description: Average response latency in milliseconds
+            error_rate_percent:
+              type: number
+              description: Error rate as percentage
+
+security: []
+
+tags:
+  - name: Event Ingestion
+    description: Core radar signal event ingestion functionality
+  - name: System Health  
+    description: Health monitoring and operational status

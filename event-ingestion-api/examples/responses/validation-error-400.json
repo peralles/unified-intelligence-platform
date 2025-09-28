@@ -1,0 +1,24 @@
+{
+  "error": "VALIDATION_FAILED",
+  "message": "Event validation failed against canonical schema",
+  "details": [
+    {
+      "field": "eventType",
+      "message": "Required field 'eventType' is missing"
+    },
+    {
+      "field": "eventId",
+      "message": "Invalid UUID format - must be valid UUID v4"
+    },
+    {
+      "field": "eventTimestamp", 
+      "message": "Invalid ISO 8601 timestamp format"
+    },
+    {
+      "field": "payload",
+      "message": "Payload must contain at least 1 property"
+    }
+  ],
+  "traceId": "trace_def456ghi789jkl012",
+  "timestamp": "2025-09-28T14:30:00.123Z"
+}

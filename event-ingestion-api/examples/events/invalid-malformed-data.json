@@ -1,0 +1,8 @@
+{
+  "eventId": "not-a-valid-uuid",
+  "eventTimestamp": "invalid-timestamp-format",
+  "eventSource": "",
+  "eventType": "invalid.format",
+  "eventVersion": "not.semantic.version.format",
+  "payload": {}
+}

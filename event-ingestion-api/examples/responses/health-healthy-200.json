@@ -1,0 +1,17 @@
+{
+  "status": "healthy",
+  "timestamp": "2025-09-28T14:30:00.123Z",
+  "version": "1.0.0",
+  "dependencies": {
+    "pubsub": "healthy",
+    "schema_registry": "healthy"
+  },
+  "metrics": {
+    "uptime_seconds": 86400,
+    "requests_per_second": 150.5,
+    "average_latency_ms": 45.2,
+    "error_rate_percent": 0.1,
+    "total_events_processed": 1250000,
+    "events_processed_today": 50000
+  }
+}
