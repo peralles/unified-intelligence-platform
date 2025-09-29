@@ -1,0 +1,16 @@
+# Development and Testing Dependencies
+
+# Testing Framework
+pytest==7.4.2                      # Testing framework
+pytest-asyncio==0.21.1            # Async test support
+pytest-mock==3.11.1               # Mocking for unit tests
+pytest-cov==4.1.0                 # Coverage reporting
+
+# Code Quality
+black==23.9.1                     # Code formatting
+flake8==6.1.0                     # Linting
+mypy==1.6.1                       # Type checking
+
+# Development Tools
+pre-commit==3.5.0                 # Git hooks for code quality
+responses==0.23.3                 # HTTP request mocking

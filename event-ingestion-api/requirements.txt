@@ -1,0 +1,18 @@
+# Radar Signals Event Ingestion API - Production Dependencies
+# Based on research.md findings for optimal performance
+
+# Google Cloud Platform
+google-cloud-pubsub==2.18.4       # Pub/Sub client with latest optimizations
+functions-framework==3.4.0         # Cloud Functions runtime framework
+google-cloud-logging==3.8.0        # Structured logging integration
+
+# Schema Validation & Data Models  
+jsonschema==4.19.1                 # JSON schema validation with performance improvements
+pydantic==2.4.2                    # Data models and response validation
+
+# System Monitoring
+psutil==5.9.6                      # System and process monitoring for health checks
+
+# Core Python Dependencies
+requests==2.31.0                   # HTTP client for testing and external calls
+python-dateutil==2.8.2            # Enhanced datetime handling
