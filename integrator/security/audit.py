@@ -24,6 +24,7 @@ def log_tool_invocation(
     duration_ms: float,
     error_kind: str | None = None,
     blocked: bool = False,
+    account_id: str | None = None,
 ) -> None:
     """
     Registro estruturado sem argumentos nem conteúdo de e-mail/eventos (sem PII).
@@ -38,6 +39,8 @@ def log_tool_invocation(
         "duration_ms": round(duration_ms, 2),
         "blocked": blocked,
     }
+    if account_id:
+        record["account"] = account_id
     if error_kind:
         record["error"] = error_kind
 

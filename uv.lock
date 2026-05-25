@@ -1012,6 +1012,7 @@ dependencies = [
     { name = "langchain-google-community", extra = ["calendar", "gmail"] },
     { name = "mcp" },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -1029,6 +1030,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9" },
 ]
 provides-extras = ["dev"]

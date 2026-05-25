@@ -13,14 +13,16 @@ dependencies = [
   "langchain-google-community[gmail,calendar]>=4.0.0",
   "langchain-core>=0.3.0",
   "pydantic-settings>=2.0",
+  "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.9"]
 
 [project.scripts]
-integrator-auth = "integrator.cli.auth_login:main"
-integrator-serve = "integrator.cli.serve:main"
+integrator = "integrator.cli.main:main"
+integrator-auth = "integrator.cli.main:main_login"
+integrator-serve = "integrator.cli.main:main_serve"
 
 [tool.hatch.build.targets.wheel]
 packages = ["integrator"]

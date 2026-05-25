@@ -8,6 +8,7 @@ from langchain_google_community import CalendarToolkit, GmailToolkit
 from langchain_google_community.calendar.utils import build_calendar_service
 from langchain_google_community.gmail.utils import build_gmail_service
 
+from integrator.accounts.registry import AccountNotFoundError, resolve_account_id
 from integrator.auth.google_oauth import GoogleAuthError, load_google_credentials
 from integrator.security.policy import (
     ConfirmationRequiredError,
@@ -15,7 +16,7 @@ from integrator.security.policy import (
     check_confirmation,
     filter_tool_metadata,
     is_tool_allowed,
-    strip_confirm_arg,
+    strip_control_args,
 )
 from integrator.security.audit import log_tool_invocation
 
@@ -97,9 +98,9 @@ def list_all_tool_metadata() -> list[dict[str, Any]]:
     return filter_tool_metadata(raw)
 
 
-def build_live_tools() -> dict[str, BaseTool]:
-    """Instancia todas as tools LangChain com credenciais válidas."""
-    credentials = load_google_credentials(interactive=False)
+def build_live_tools(account_id: str) -> dict[str, BaseTool]:
+    """Instancia Gmail + Calendar LangChain para a conta Google indicada."""
+    credentials = load_google_credentials(account_id=account_id, interactive=False)
     gmail_resource = build_gmail_service(credentials=credentials)
     calendar_resource = build_calendar_service(credentials=credentials)
 
@@ -114,6 +115,7 @@ def build_live_tools() -> dict[str, BaseTool]:
 
 def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
     started = time.perf_counter()
+    account_id: str | None = None
 
     def _finish(*, success: bool, error_kind: str | None = None, blocked: bool = False) -> None:
         log_tool_invocation(
@@ -122,6 +124,7 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
             duration_ms=(time.perf_counter() - started) * 1000,
             error_kind=error_kind,
             blocked=blocked,
+            account_id=account_id,
         )
 
     if not is_tool_allowed(name):
@@ -138,7 +141,14 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
         raise
 
     try:
-        registry = build_live_tools()
+        lc_args, explicit_account = strip_control_args(arguments)
+        account_id = resolve_account_id(explicit_account)
+    except AccountNotFoundError as exc:
+        _finish(success=False, error_kind="account", blocked=True)
+        raise ToolPolicyError(str(exc)) from exc
+
+    try:
+        registry = build_live_tools(account_id)
     except GoogleAuthError:
         _finish(success=False, error_kind="auth")
         raise
@@ -148,7 +158,7 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
         _finish(success=False, error_kind="unknown_tool")
         raise KeyError(f"Tool desconhecida: {name}")
 
-    args = strip_confirm_arg(arguments)
+    args = lc_args
     try:
         result = tool.invoke(args)
     except Exception:

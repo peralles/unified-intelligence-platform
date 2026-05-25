@@ -1,6 +1,6 @@
-from __future__ import annotations
+"""Alias legado — use integrator serve."""
 
-from integrator.mcp.server import main
+from integrator.cli.main import main_serve
 
 if __name__ == "__main__":
-    main()
+    main_serve()

@@ -41,11 +41,20 @@ class Settings(BaseSettings):
             return self.credentials_file
         return self.root_dir / "credentials" / "credentials.json"
 
+    default_account: str | None = None
+
     @property
     def token_path(self) -> Path:
+        """Token legado (única conta) — preferir token_path_for(account_id)."""
         if self.token_file:
             return self.token_file
-        return self.root_dir / "data" / "tokens" / "google.json"
+        return self.token_path_for("default")
+
+    def token_path_for(self, account_id: str) -> Path:
+        if self.token_file and account_id in ("default", self.default_account or ""):
+            return self.token_file
+        safe_id = account_id.strip().lower()
+        return self.root_dir / "data" / "tokens" / f"{safe_id}.json"
 
     def ensure_data_dirs(self) -> None:
         self.token_path.parent.mkdir(parents=True, exist_ok=True)

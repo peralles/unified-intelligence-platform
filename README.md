@@ -11,18 +11,23 @@ Os toolkits `GmailToolkit` e `CalendarToolkit` vivem em `langchain-google-commun
 Requer [uv](https://docs.astral.sh/uv/):
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh   # se ainda não tiver uv
-
 uv sync --all-extras
 
-# Google Cloud: credentials.json em credentials/
-uv run integrator-auth
+# Google Cloud: credentials/credentials.json (OAuth Desktop)
+uv run integrator login pessoal
+uv run integrator login profissional --label "Trabalho"
 
-uv run pytest
-uv run integrator-serve   # Hermes conecta via stdio
+uv run integrator status    # contas + tokens
+uv run integrator use profissional   # conta padrão
+uv run integrator serve     # MCP para o Hermes
 ```
 
-Equivalente com módulos: `uv run python -m integrator.cli.auth_login`
+**Gmail + Google Calendar** usam o mesmo login por conta (`pessoal`, `profissional`, etc.). No Hermes, passe `"account": "profissional"` nas tools (ou use a conta padrão).
+
+```bash
+uv run integrator --help
+uv run pytest
+```
 
 ### Hermes
 

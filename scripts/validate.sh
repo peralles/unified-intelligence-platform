@@ -17,6 +17,8 @@ from integrator.security.policy import get_confirm_required_tools
 meta = list_all_tool_metadata()
 assert len(meta) == 12, len(meta)
 assert get_confirm_required_tools() == frozenset({'send_gmail_message', 'delete_calendar_event'})
+from integrator.accounts.registry import validate_account_id
+assert validate_account_id('Profissional') == 'profissional'
 print('OK:', len(meta), 'tools, confirm tools:', get_confirm_required_tools())
 "
 

@@ -4,6 +4,12 @@ from pathlib import Path
 
 from langchain_google_community._utils import get_google_credentials
 
+from integrator.accounts.registry import (
+    AccountNotFoundError,
+    add_account,
+    get_account,
+    update_account_email,
+)
 from integrator.config import GOOGLE_SCOPES, settings
 from integrator.security.token_permissions import secure_token_file
 
@@ -22,25 +28,34 @@ def ensure_credentials_file() -> Path:
     return path
 
 
-def load_google_credentials(*, interactive: bool = False):
-    """
-    Carrega credenciais Google unificadas (Gmail + Calendar) em um único token.
+def _fetch_account_email(creds) -> str | None:
+    try:
+        from langchain_google_community.gmail.utils import build_gmail_service
 
-    interactive=False: não abre navegador; falha se token ausente/inválido.
-    interactive=True: permite fluxo InstalledAppFlow (auth_login).
+        service = build_gmail_service(credentials=creds)
+        profile = service.users().getProfile(userId="me").execute()
+        return profile.get("emailAddress")
+    except Exception:
+        return None
+
+
+def load_google_credentials(*, account_id: str, interactive: bool = False):
+    """
+    Credenciais Google unificadas (Gmail + Calendar) para uma conta.
+
+    Gmail e Calendar usam o mesmo token/scopes nesta conta.
     """
     settings.ensure_data_dirs()
     creds_path = ensure_credentials_file()
-    token_path = settings.token_path
+    account = get_account(account_id)
+    token_path = account.token_path
 
     if not interactive and not token_path.is_file():
         raise GoogleAuthError(
-            f"Token não encontrado: {token_path}\n"
-            "Execute: uv run integrator-auth"
+            f"Token não encontrado para '{account_id}': {token_path}\n"
+            f"Execute: integrator login {account_id}"
         )
 
-    # get_google_credentials sempre tenta refresh/local server se inválido.
-    # Para modo não interativo sem token, já falhamos acima.
     import os
 
     previous_cwd = os.getcwd()
@@ -54,8 +69,8 @@ def load_google_credentials(*, interactive: bool = False):
             )
         except Exception as exc:
             raise GoogleAuthError(
-                f"Falha ao carregar ou renovar token Google ({token_path}): {exc}\n"
-                "Execute: uv run integrator-auth"
+                f"Falha ao carregar/renovar token de '{account_id}' ({token_path}): {exc}\n"
+                f"Execute: integrator login {account_id}"
             ) from exc
         secure_token_file(token_path)
         return creds
@@ -63,9 +78,21 @@ def load_google_credentials(*, interactive: bool = False):
         os.chdir(previous_cwd)
 
 
-def run_interactive_login() -> Path:
-    """Executa OAuth no navegador e persiste token unificado."""
+def run_interactive_login(
+    account_id: str,
+    *,
+    label: str | None = None,
+) -> Path:
+    """OAuth no navegador; persiste token por conta."""
     settings.ensure_data_dirs()
     ensure_credentials_file()
-    load_google_credentials(interactive=True)
-    return settings.token_path
+    try:
+        get_account(account_id)
+    except AccountNotFoundError:
+        add_account(account_id, label=label or account_id)
+
+    creds = load_google_credentials(account_id=account_id, interactive=True)
+    email = _fetch_account_email(creds)
+    if email:
+        update_account_email(account_id, email)
+    return get_account(account_id).token_path

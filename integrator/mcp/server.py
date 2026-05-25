@@ -10,7 +10,10 @@ from mcp.server.lowlevel import Server
 from integrator.auth.google_oauth import GoogleAuthError
 from integrator.mcp.schema import metadata_to_mcp_tool
 from integrator.providers.google_tools import invoke_tool, list_all_tool_metadata
-from integrator.security.policy import ConfirmationRequiredError, ToolPolicyError
+from integrator.security.policy import (
+    ConfirmationRequiredError,
+    ToolPolicyError,
+)
 
 logger = logging.getLogger(__name__)
 
