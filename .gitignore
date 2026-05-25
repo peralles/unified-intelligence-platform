@@ -5,6 +5,7 @@ token-*.json
 service_account.json
 .env
 .env.*
+!.env.example
 
 # Python
 __pycache__/
