@@ -1,0 +1,9 @@
+# Hermes com integrador rodando como serviço macOS (LaunchAgent)
+# Pré-requisito: integrator service install
+
+mcp_servers:
+  langchain-integrator:
+    url: http://127.0.0.1:17320/sse
+    transport: sse
+
+# Verificar: curl http://127.0.0.1:17320/health

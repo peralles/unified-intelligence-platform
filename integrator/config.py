@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     audit_log_enabled: bool = True
     audit_log_file: Path | None = None
 
+    # Serviço macOS (LaunchAgent + HTTP/SSE)
+    service_host: str = "127.0.0.1"
+    service_port: int = 17320
+
     @property
     def audit_log_path(self) -> Path:
         if self.audit_log_file:
