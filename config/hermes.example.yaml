@@ -1,11 +1,19 @@
 # Copie/adapte para ~/.hermes/config.yaml
 # Hermes na mesma máquina — MCP stdio apontando para este repo.
+# Pré-requisito no repo: uv sync --all-extras
 
 mcp_servers:
   langchain-integrator:
-    command: /caminho/para/unified-intelligence-platform/.venv/bin/python
+    # Opção A (recomendada): uv gerencia o venv
+    command: uv
     args:
-      - -m
-      - integrator.cli.serve
+      - run
+      - --directory
+      - /caminho/para/unified-intelligence-platform
+      - integrator-serve
     env:
       INTEGRATOR_ROOT: /caminho/para/unified-intelligence-platform
+
+  # Opção B: Python do .venv criado por uv sync
+  # langchain-integrator-venv:
+  #   command: /caminho/para/unified-intelligence-platform/.venv/bin/integrator-serve

@@ -250,7 +250,7 @@ LangChain nem sempre tem toolkit oficial; onde não houver, usar `langchain_comm
 | LangChain | `langchain`, `langchain-core`, `langchain-google-community[gmail,calendar]` | Toolkits oficiais |
 | MCP | `mcp` (SDK Python oficial) | Compatível com Hermes |
 | Config | `pydantic-settings` + `.env` | Paths e flags sem hardcode |
-| Empacotamento | `uv` ou `pip` + `pyproject.toml` | Reprodutível local |
+| Empacotamento | **`uv`** + `pyproject.toml` + `uv.lock` | Reprodutível local |
 
 **Opcional (não Fase 1):** LangSmith tracing, LangGraph se quiser grafos complexos; para “integrador de tools”, MCP + toolkits basta.
 

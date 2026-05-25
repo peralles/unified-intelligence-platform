@@ -1,6 +1,6 @@
 # Atividades de implantação — LangChain Hermes Integrator
 
-**Stack escolhida:** Python 3.11+ (não Node) — `langchain-google-community` só tem toolkits Gmail/Calendar maduros em Python.
+**Stack escolhida:** Python 3.11+ com **[uv](https://docs.astral.sh/uv/)** (não pip/venv manual; não Node) — `langchain-google-community` só tem toolkits Gmail/Calendar maduros em Python.
 
 **Decisões aplicadas:**
 
@@ -55,23 +55,21 @@
 
 ```bash
 cd /caminho/para/unified-intelligence-platform
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --all-extras
 
 # 1) Coloque credentials.json em credentials/
-python -m integrator.cli.auth_login
+uv run integrator-auth
 
 # 2) Testes
-pytest -q
+uv run pytest
 
 # 3) Servidor MCP (Hermes chama este processo)
-python -m integrator.cli.serve
+uv run integrator-serve
 ```
 
 ### Hermes (`~/.hermes/config.yaml`)
 
-Ver `config/hermes.example.yaml` — ajuste o path do repo e do Python da venv.
+Ver `config/hermes.example.yaml` — use `uv run` (recomendado) ou o Python em `.venv/bin/` após `uv sync`.
 
 ---
 
