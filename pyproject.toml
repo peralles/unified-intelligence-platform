@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langchain-hermes-integrator"
+version = "0.1.0"
+description = "MCP local server exposing LangChain Google Gmail & Calendar tools for Hermes"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=1.27.0",
+  "langchain-google-community[gmail,calendar]>=4.0.0",
+  "langchain-core>=0.3.0",
+  "pydantic-settings>=2.0",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.9"]
+
+[project.scripts]
+integrator = "integrator.cli.main:main"
+integrator-auth = "integrator.cli.main:main_login"
+integrator-serve = "integrator.cli.main:main_serve"
+
+[tool.hatch.build.targets.wheel]
+packages = ["integrator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.uv]
+package = true
