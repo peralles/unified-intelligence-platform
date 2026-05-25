@@ -24,10 +24,10 @@ def configuration_summary() -> tuple[str, str | None]:
         (status_label, next_step_command_or_none)
     """
     if not credentials_ready():
-        return "incompleta", "integrator init"
+        return "incompleta", "./setup.sh"
     accounts = list_accounts()
     if not any(a.has_token for a in accounts):
-        return "incompleta", "integrator init"
+        return "incompleta", "./setup.sh"
     return "completa", None
 
 

@@ -44,6 +44,14 @@ Depois de clonar o repositório:
 
 ```bash
 cd unified-intelligence-platform
+./setup.sh
+```
+
+(O script só verifica se `uv` está instalado e abre o assistente `integrator init` — toda a configuração fica na CLI.)
+
+Alternativa equivalente:
+
+```bash
 uv run integrator init
 ```
 

@@ -9,7 +9,7 @@
 
 | Tarefa | Comando |
 |--------|---------|
-| Setup usuário | `uv run integrator init` |
+| Setup usuário | `./setup.sh` ou `uv run integrator init` |
 | Lint (arquivo) | `uv run ruff check integrator/caminho/arquivo.py` |
 | Lint (pacote) | `uv run ruff check integrator tests` |
 | Teste (arquivo) | `uv run pytest tests/test_arquivo.py -q --tb=short` |
@@ -58,7 +58,7 @@ Co-Authored-By: <nome do modelo> <noreply@anthropic.com>
 
 ## Referências
 
-- Onboarding: `integrator init` (preferir sobre fluxo manual)
+- Onboarding: `./setup.sh` ou `integrator init` (preferir sobre fluxo manual)
 - Hermes: `integrator hermes doctor` → `integrator hermes setup`
 - Arquitetura: `docs/PLANO_LANGCHAIN_HERMES.md`
 - CLI: `docs/CLI.md`

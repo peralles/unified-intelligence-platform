@@ -497,6 +497,7 @@ def main(argv: list[str] | None = None) -> None:
         if not is_configured():
             print("Integrador Gmail + Agenda para o Hermes\n")
             print("Para começar (recomendado):\n")
+            print("  ./setup.sh\n")
             print("  integrator init\n")
             print("\nOutros comandos:")
         parser.print_help()
