@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import json
-import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 from integrator.config import settings
+from integrator.logging_setup import enqueue_audit_line, format_audit_line, get_logger
 
-logger = logging.getLogger(__name__)
+_tools_logger_instance = None
 
 
-def _audit_path():
-    settings.ensure_data_dirs()
-    path = settings.audit_log_path
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
+def _get_tools_logger():
+    global _tools_logger_instance
+    if _tools_logger_instance is None:
+        _tools_logger_instance = get_logger("tools")
+    return _tools_logger_instance
 
 
 def log_tool_invocation(
@@ -27,9 +27,12 @@ def log_tool_invocation(
     account_id: str | None = None,
 ) -> None:
     """
-    Registro estruturado sem argumentos nem conteúdo de e-mail/eventos (sem PII).
+    Registro leve: fila assíncrona: não bloqueia invoke_tool.
+
+    - Sucesso: sem audit por padrão (INTEGRATOR_AUDIT_LOG_SUCCESS=true para gravar tudo)
+    - Falha: uma linha JSON no audit + WARNING no app log
     """
-    if not settings.audit_log_enabled:
+    if success and not settings.audit_log_success:
         return
 
     record: dict[str, Any] = {
@@ -44,9 +47,22 @@ def log_tool_invocation(
     if error_kind:
         record["error"] = error_kind
 
-    path = _audit_path()
-    try:
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except OSError:
-        logger.exception("Falha ao escrever auditoria em %s", path)
+    line = format_audit_line(record)
+    enqueue_audit_line(line)
+
+    if not success:
+        _get_tools_logger().warning(
+            "tool FAIL | %s | account=%s | error=%s | blocked=%s | %.1fms",
+            tool_name,
+            account_id or "-",
+            error_kind or "unknown",
+            blocked,
+            duration_ms,
+        )
+    elif settings.log_tool_success:
+        _get_tools_logger().info(
+            "tool ok | %s | account=%s | %.1fms",
+            tool_name,
+            account_id or "-",
+            duration_ms,
+        )

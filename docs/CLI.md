@@ -12,9 +12,54 @@ CLI única, focada em **poucos comandos** e suporte a **várias contas Google** 
 | `integrator use <id>` | Definir conta padrão |
 | `integrator logout <id>` | Remover conta e token |
 | `integrator tools` | Listar 12 tools MCP |
-| `integrator serve` | Servidor MCP (Hermes) |
+| `integrator serve` | Servidor MCP stdio (Hermes inicia o processo) |
+| `integrator serve-http` | Servidor HTTP/SSE local (background) |
+| `integrator service …` | **macOS:** LaunchAgent (instalar/ativar/desativar) |
+| `integrator logs` | Logs rotativos + diagnóstico de falhas |
+
+## Logs (rotativos)
+
+Arquivos em `data/logs/`:
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `integrator.log` | Operação geral (INFO+) |
+| `errors.log` | WARNING e erros com stack trace |
+| `audit.jsonl` | Invocações de tools (JSON, sem PII) |
+
+Rotação automática (padrão 5 MB, backups numerados `.1`, `.2`, …).
+
+**Performance:** escrita em **fila assíncrona** (não bloqueia tools). Por padrão, **sucesso não grava audit** — só falhas (`INTEGRATOR_AUDIT_LOG_SUCCESS=false`).
+
+```bash
+integrator logs                    # lista arquivos + resumo de falhas
+integrator logs --failures         # últimas falhas de tools
+integrator logs --tail             # final do integrator.log
+integrator logs --tail --errors    # final do errors.log
+```
+
+Variáveis: `INTEGRATOR_LOG_LEVEL`, `INTEGRATOR_LOG_MAX_BYTES`, `INTEGRATOR_AUDIT_LOG_BACKUP_COUNT` (ver `config/integrator.example.env`).
 
 Aliases legados: `integrator-auth` → `integrator login`, `integrator-serve` → `integrator serve`.
+
+## Serviço no macOS
+
+O Hermes via **stdio** inicia o MCP sob demanda. Para manter o integrador **sempre rodando** (HTTP/SSE), use LaunchAgent:
+
+```bash
+uv run integrator service install    # instala + inicia
+uv run integrator service status
+uv run integrator service disable    # para (mantém plist)
+uv run integrator service start      # reativa
+uv run integrator service uninstall  # remove plist e para
+```
+
+- Plist: `~/Library/LaunchAgents/com.peralles.langchain-integrator.plist`
+- URL SSE: `http://127.0.0.1:17320/sse`
+- Logs: `data/logs/service/stdout.log`, `stderr.log`
+- Hermes: ver `config/hermes.service.example.yaml`
+
+Porta customizada: `integrator service install --port 18000`
 
 ## Múltiplas contas (pessoal + profissional)
 

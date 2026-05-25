@@ -19,10 +19,29 @@ from integrator.security.policy import (
     strip_control_args,
 )
 from integrator.security.audit import log_tool_invocation
+from integrator.providers.tool_cache import (
+    get_cached_live_tools,
+    set_cached_live_tools,
+)
 
 # Todas as tools (decisão: expor todas)
 GMAIL_TOOL_CLASSES: list[Type[BaseTool]] = []
 CALENDAR_TOOL_CLASSES: list[Type[BaseTool]] = []
+
+_metadata_cache_key_stored: tuple[Any, ...] | None = None
+_metadata_cache_value: list[dict[str, Any]] | None = None
+
+
+def _compute_metadata_cache_key() -> tuple[Any, ...]:
+    from integrator.accounts.registry import list_account_ids
+    from integrator.config import settings
+
+    return (
+        frozenset(list_account_ids()),
+        settings.tool_allowlist,
+        settings.tool_denylist,
+        settings.confirm_required_tools,
+    )
 
 
 def _import_tool_classes() -> None:
@@ -89,17 +108,35 @@ def tool_metadata_from_class(tool_cls: Type[BaseTool]) -> dict[str, Any]:
     }
 
 
+def invalidate_metadata_cache() -> None:
+    global _metadata_cache_key_stored, _metadata_cache_value
+    _metadata_cache_key_stored = None
+    _metadata_cache_value = None
+
+
 def list_all_tool_metadata() -> list[dict[str, Any]]:
+    global _metadata_cache_key_stored, _metadata_cache_value
+    cache_key = _compute_metadata_cache_key()
+    if _metadata_cache_value is not None and _metadata_cache_key_stored == cache_key:
+        return _metadata_cache_value
+
     _import_tool_classes()
     raw = [
         *[tool_metadata_from_class(c) for c in GMAIL_TOOL_CLASSES],
         *[tool_metadata_from_class(c) for c in CALENDAR_TOOL_CLASSES],
     ]
-    return filter_tool_metadata(raw)
+    result = filter_tool_metadata(raw)
+    _metadata_cache_key_stored = cache_key
+    _metadata_cache_value = result
+    return result
 
 
 def build_live_tools(account_id: str) -> dict[str, BaseTool]:
     """Instancia Gmail + Calendar LangChain para a conta Google indicada."""
+    cached = get_cached_live_tools(account_id)
+    if cached is not None:
+        return cached
+
     credentials = load_google_credentials(account_id=account_id, interactive=False)
     gmail_resource = build_gmail_service(credentials=credentials)
     calendar_resource = build_calendar_service(credentials=credentials)
@@ -110,6 +147,7 @@ def build_live_tools(account_id: str) -> dict[str, BaseTool]:
     tools: dict[str, BaseTool] = {}
     for tool in gmail_toolkit.get_tools() + calendar_toolkit.get_tools():
         tools[tool.name] = tool
+    set_cached_live_tools(account_id, tools)
     return tools
 
 
@@ -161,9 +199,16 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
     args = lc_args
     try:
         result = tool.invoke(args)
-    except Exception:
+    except Exception as exc:
         _finish(success=False, error_kind="execution")
-        raise
+        from integrator.logging_setup import get_logger
+
+        get_logger("tools").exception(
+            "execução falhou | tool=%s | account=%s",
+            name,
+            account_id,
+        )
+        raise exc
 
     _finish(success=True)
     if isinstance(result, str):

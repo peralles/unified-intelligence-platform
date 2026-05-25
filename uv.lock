@@ -1013,6 +1013,7 @@ dependencies = [
     { name = "mcp" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -1032,6 +1033,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]
 provides-extras = ["dev"]
 

@@ -27,7 +27,22 @@ class Settings(BaseSettings):
 
     # Fase 2 — auditoria
     audit_log_enabled: bool = True
+    audit_log_success: bool = False
     audit_log_file: Path | None = None
+    audit_log_max_bytes: int = 5_242_880
+    audit_log_backup_count: int = 10
+
+    # Logging rotativo (app + erros) — fila assíncrona, sem bloquear tools
+    log_level: str = "INFO"
+    log_dir: Path | None = None
+    log_max_bytes: int = 5_242_880
+    log_backup_count: int = 5
+    log_console_enabled: bool = True
+    log_tool_success: bool = False
+
+    # Serviço macOS (LaunchAgent + HTTP/SSE)
+    service_host: str = "127.0.0.1"
+    service_port: int = 17320
 
     @property
     def audit_log_path(self) -> Path:

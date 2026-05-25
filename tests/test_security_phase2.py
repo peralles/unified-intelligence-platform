@@ -19,12 +19,16 @@ from integrator.security.token_permissions import secure_token_file
 
 @pytest.fixture
 def isolated_settings(tmp_path, monkeypatch):
+    from integrator.logging_setup import reset_logging, setup_logging
+
     monkeypatch.setattr(settings, "root_dir", tmp_path)
     monkeypatch.setattr(settings, "tool_allowlist", None)
     monkeypatch.setattr(settings, "tool_denylist", None)
     monkeypatch.setattr(settings, "confirm_required_tools", None)
     monkeypatch.setattr(settings, "audit_log_enabled", True)
     monkeypatch.setattr(settings, "audit_log_file", tmp_path / "data/logs/audit.jsonl")
+    reset_logging()
+    setup_logging(force=True)
     return tmp_path
 
 
@@ -77,8 +81,11 @@ def test_invoke_blocked_by_policy(isolated_settings, monkeypatch):
 def test_audit_log_written_on_blocked_invoke(isolated_settings, monkeypatch):
     monkeypatch.setattr(settings, "tool_denylist", "search_gmail")
     log_path = settings.audit_log_path
+    from integrator.logging_setup import flush_logging
+
     with pytest.raises(ToolPolicyError):
         invoke_tool("search_gmail", {})
+    flush_logging()
     lines = log_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1
     record = json.loads(lines[0])
