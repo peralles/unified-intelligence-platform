@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 
 import mcp.server.stdio
 import mcp.types as types
 from mcp.server.lowlevel import Server
 
 from integrator.auth.google_oauth import GoogleAuthError
+from integrator.logging_setup import get_logger, setup_logging
 from integrator.mcp.schema import metadata_to_mcp_tool
 from integrator.providers.google_tools import invoke_tool, list_all_tool_metadata
 from integrator.security.policy import (
@@ -15,7 +15,7 @@ from integrator.security.policy import (
     ToolPolicyError,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger("mcp")
 
 server = Server("langchain-hermes-integrator")
 
@@ -69,5 +69,5 @@ async def run_stdio_server() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    setup_logging()
     asyncio.run(run_stdio_server())

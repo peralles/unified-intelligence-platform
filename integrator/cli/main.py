@@ -25,7 +25,6 @@ from integrator.accounts.registry import (
 )
 from integrator.auth.google_oauth import GoogleAuthError, run_interactive_login
 from integrator.config import GOOGLE_SCOPES, settings
-from integrator.config import settings as app_settings
 from integrator.mcp.http_server import run_http_server
 from integrator.mcp.server import main as run_mcp_server
 from integrator.providers.google_tools import list_all_tool_metadata
@@ -53,6 +52,8 @@ Exemplos:
   integrator service install          # macOS: ativar como serviço
   integrator service disable          # macOS: parar serviço
   integrator service uninstall        # macOS: remover serviço
+  integrator logs --failures          # últimas falhas (audit rotativo)
+  integrator logs --tail              # tail do log da aplicação
 """
 
 
@@ -77,6 +78,13 @@ def _cmd_status(_: argparse.Namespace) -> int:
         print(f"  {star} {acc.id:<14} {token:<10} {email}")
     print(f"\nPadrão: {default_id or '—'}")
     print(f"Registro: {settings.root_dir / 'data/accounts.yaml'}")
+    from integrator.logging_setup import app_log_path, error_log_path
+
+    print(f"\nLogs (rotativos): {app_log_path().parent}")
+    print(f"  app:    {app_log_path()}")
+    print(f"  erros:  {error_log_path()}")
+    print(f"  audit:  {settings.audit_log_path}")
+    print("  Falhas recentes: integrator logs --failures")
     if is_macos():
         print("\nServiço macOS: integrator service status")
     return 0
@@ -173,6 +181,58 @@ def _cmd_tools(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_logs(args: argparse.Namespace) -> int:
+    from integrator.logging_setup import (
+        app_log_path,
+        error_log_path,
+        list_log_files,
+        read_audit_failures,
+        tail_file,
+    )
+
+    if args.failures:
+        rows = read_audit_failures(limit=args.lines)
+        if not rows:
+            print("Nenhuma falha registrada no audit (últimos arquivos rotativos).")
+            return 0
+        print(f"Últimas {len(rows)} falhas (audit.jsonl):\n")
+        for row in rows:
+            err = row.get("error", "?")
+            tool = row.get("tool", "?")
+            acc = row.get("account", "-")
+            ts = row.get("ts", "?")
+            ms = row.get("duration_ms", 0)
+            blocked = "blocked" if row.get("blocked") else ""
+            print(f"  {ts} | {tool} | account={acc} | {err} | {ms}ms {blocked}")
+        print("\nDetalhes: tail -f", error_log_path())
+        return 0
+
+    if args.tail:
+        path = error_log_path() if args.errors else app_log_path()
+        lines = tail_file(path, lines=args.lines)
+        if not lines:
+            print(f"Arquivo vazio ou inexistente: {path}")
+            return 0
+        print(f"--- {path} (últimas {len(lines)} linhas) ---")
+        for line in lines:
+            print(line)
+        return 0
+
+    print("Logs do integrador (rotativos)\n")
+    for path in list_log_files():
+        size_kb = path.stat().st_size / 1024
+        print(f"  {path} ({size_kb:.1f} KB)")
+    failures = read_audit_failures(limit=5)
+    print(f"\nFalhas recentes no audit: {len(failures)} (últimas 5 listadas)")
+    for row in failures:
+        print(f"  • {row.get('ts')} | {row.get('tool')} | {row.get('error')}")
+    print("\nComandos:")
+    print("  integrator logs --tail          # app")
+    print("  integrator logs --tail --errors # só WARNING+")
+    print("  integrator logs --failures      # falhas de tools")
+    return 0
+
+
 def _cmd_serve(_: argparse.Namespace) -> int:
     run_mcp_server()
     return 0
@@ -190,15 +250,15 @@ def _cmd_service(args: argparse.Namespace) -> int:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
 
-    port = args.port or app_settings.service_port
+    port = args.port or settings.service_port
 
     try:
         if args.service_action == "install":
             path = install_service(port=port, start=not getattr(args, "no_start", False))
             print(f"Instalado: {path}")
             if not args.no_start:
-                print(f"SSE:  http://{app_settings.service_host}:{port}/sse")
-                print(f"MCP:  http://{app_settings.service_host}:{port}/mcp")
+                print(f"SSE:  http://{settings.service_host}:{port}/sse")
+                print(f"MCP:  http://{settings.service_host}:{port}/mcp")
             else:
                 print("Iniciar: integrator service start")
             return 0
@@ -206,7 +266,7 @@ def _cmd_service(args: argparse.Namespace) -> int:
         if args.service_action in ("start", "enable"):
             enable_service()
             print(f"Serviço ativo ({SERVICE_LABEL})")
-            print(f"SSE: http://{app_settings.service_host}:{port}/sse")
+            print(f"SSE: http://{settings.service_host}:{port}/sse")
             return 0
 
         if args.service_action in ("stop", "disable"):
@@ -296,9 +356,34 @@ def _build_parser() -> argparse.ArgumentParser:
         "serve-http",
         help="Servidor MCP HTTP/SSE (background / LaunchAgent)",
     )
-    p_http.add_argument("--host", default=app_settings.service_host)
-    p_http.add_argument("--port", type=int, default=app_settings.service_port)
+    p_http.add_argument("--host", default=settings.service_host)
+    p_http.add_argument("--port", type=int, default=settings.service_port)
     p_http.set_defaults(func=_cmd_serve_http)
+
+    p_logs = sub.add_parser("logs", help="Logs rotativos e diagnóstico de falhas")
+    p_logs.add_argument(
+        "--tail",
+        action="store_true",
+        help="Exibir final do log da aplicação",
+    )
+    p_logs.add_argument(
+        "--errors",
+        action="store_true",
+        help="Com --tail: usar errors.log em vez de integrator.log",
+    )
+    p_logs.add_argument(
+        "--failures",
+        action="store_true",
+        help="Listar falhas de tools (audit.jsonl)",
+    )
+    p_logs.add_argument(
+        "-n",
+        "--lines",
+        type=int,
+        default=40,
+        help="Linhas para --tail ou --failures (padrão 40)",
+    )
+    p_logs.set_defaults(func=_cmd_logs)
 
     p_svc = sub.add_parser(
         "service",
@@ -341,6 +426,10 @@ def main(argv: list[str] | None = None) -> None:
     if not args.command:
         parser.print_help()
         sys.exit(0)
+    if args.command != "logs":
+        from integrator.logging_setup import setup_logging
+
+        setup_logging()
     sys.exit(args.func(args))
 
 

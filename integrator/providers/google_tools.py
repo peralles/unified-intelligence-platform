@@ -199,9 +199,16 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
     args = lc_args
     try:
         result = tool.invoke(args)
-    except Exception:
+    except Exception as exc:
+        from integrator.logging_setup import get_logger
+
+        get_logger("tools").exception(
+            "execução falhou | tool=%s | account=%s",
+            name,
+            account_id,
+        )
         _finish(success=False, error_kind="execution")
-        raise
+        raise exc
 
     _finish(success=True)
     if isinstance(result, str):

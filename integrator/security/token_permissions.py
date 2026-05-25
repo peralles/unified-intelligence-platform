@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from integrator.logging_setup import get_logger
+
+logger = get_logger("security")
 
 
 def secure_token_file(path: Path) -> None:

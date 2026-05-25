@@ -19,12 +19,16 @@ from integrator.security.token_permissions import secure_token_file
 
 @pytest.fixture
 def isolated_settings(tmp_path, monkeypatch):
+    from integrator.logging_setup import reset_logging, setup_logging
+
     monkeypatch.setattr(settings, "root_dir", tmp_path)
     monkeypatch.setattr(settings, "tool_allowlist", None)
     monkeypatch.setattr(settings, "tool_denylist", None)
     monkeypatch.setattr(settings, "confirm_required_tools", None)
     monkeypatch.setattr(settings, "audit_log_enabled", True)
     monkeypatch.setattr(settings, "audit_log_file", tmp_path / "data/logs/audit.jsonl")
+    reset_logging()
+    setup_logging(force=True)
     return tmp_path
 
 

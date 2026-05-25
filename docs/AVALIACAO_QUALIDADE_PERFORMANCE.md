@@ -10,6 +10,7 @@
 | Testes automatizados | OK | 31+ testes (unit + MCP + segurança + contas + performance) |
 | Lint (ruff) | OK | `integrator/`, `tests/` |
 | Segurança Fase 2 | OK | allowlist, confirm, auditoria sem PII, chmod 600 |
+| Logging rotativo | OK | integrator.log, errors.log, audit.jsonl + `integrator logs` |
 | Multi-conta | OK | `pessoal` / `profissional`, parâmetro `account` |
 | Gmail + Calendar | OK | 12 tools LangChain por conta |
 | CLI | OK | `integrator` unificada + serviço macOS |

@@ -14,4 +14,5 @@ def test_parser_has_core_commands():
         "serve",
         "serve-http",
         "service",
+        "logs",
     }.issubset(set(sub.choices.keys()))

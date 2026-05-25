@@ -1,20 +1,11 @@
 from __future__ import annotations
 
-import json
-import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from integrator.config import settings
+from integrator.logging_setup import get_logger, write_audit_record
 
-logger = logging.getLogger(__name__)
-
-
-def _audit_path():
-    settings.ensure_data_dirs()
-    path = settings.audit_log_path
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
+logger = get_logger("audit")
 
 
 def log_tool_invocation(
@@ -28,10 +19,8 @@ def log_tool_invocation(
 ) -> None:
     """
     Registro estruturado sem argumentos nem conteúdo de e-mail/eventos (sem PII).
+    Grava em audit.jsonl com rotação automática.
     """
-    if not settings.audit_log_enabled:
-        return
-
     record: dict[str, Any] = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "tool": tool_name,
@@ -44,9 +33,25 @@ def log_tool_invocation(
     if error_kind:
         record["error"] = error_kind
 
-    path = _audit_path()
     try:
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+        write_audit_record(record)
     except OSError:
-        logger.exception("Falha ao escrever auditoria em %s", path)
+        logger.exception("Falha ao escrever auditoria")
+
+    app_logger = get_logger("tools")
+    if success:
+        app_logger.info(
+            "tool ok | %s | account=%s | %.1fms",
+            tool_name,
+            account_id or "-",
+            duration_ms,
+        )
+    else:
+        app_logger.warning(
+            "tool FAIL | %s | account=%s | error=%s | blocked=%s | %.1fms",
+            tool_name,
+            account_id or "-",
+            error_kind or "unknown",
+            blocked,
+            duration_ms,
+        )

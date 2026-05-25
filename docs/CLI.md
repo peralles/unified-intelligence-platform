@@ -15,6 +15,28 @@ CLI única, focada em **poucos comandos** e suporte a **várias contas Google** 
 | `integrator serve` | Servidor MCP stdio (Hermes inicia o processo) |
 | `integrator serve-http` | Servidor HTTP/SSE local (background) |
 | `integrator service …` | **macOS:** LaunchAgent (instalar/ativar/desativar) |
+| `integrator logs` | Logs rotativos + diagnóstico de falhas |
+
+## Logs (rotativos)
+
+Arquivos em `data/logs/`:
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `integrator.log` | Operação geral (INFO+) |
+| `errors.log` | WARNING e erros com stack trace |
+| `audit.jsonl` | Invocações de tools (JSON, sem PII) |
+
+Rotação automática (padrão 5 MB, backups numerados `.1`, `.2`, …).
+
+```bash
+integrator logs                    # lista arquivos + resumo de falhas
+integrator logs --failures         # últimas falhas de tools
+integrator logs --tail             # final do integrator.log
+integrator logs --tail --errors    # final do errors.log
+```
+
+Variáveis: `INTEGRATOR_LOG_LEVEL`, `INTEGRATOR_LOG_MAX_BYTES`, `INTEGRATOR_AUDIT_LOG_BACKUP_COUNT` (ver `config/integrator.example.env`).
 
 Aliases legados: `integrator-auth` → `integrator login`, `integrator-serve` → `integrator serve`.
 

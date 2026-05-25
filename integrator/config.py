@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     # Fase 2 — auditoria
     audit_log_enabled: bool = True
     audit_log_file: Path | None = None
+    audit_log_max_bytes: int = 5_242_880
+    audit_log_backup_count: int = 10
+
+    # Logging rotativo (app + erros)
+    log_level: str = "INFO"
+    log_dir: Path | None = None
+    log_max_bytes: int = 5_242_880
+    log_backup_count: int = 5
 
     # Serviço macOS (LaunchAgent + HTTP/SSE)
     service_host: str = "127.0.0.1"

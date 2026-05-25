@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -17,9 +16,10 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Mount, Route
 
+from integrator.logging_setup import get_logger, setup_logging
 from integrator.mcp.server import server as mcp_server
 
-logger = logging.getLogger(__name__)
+logger = get_logger("http")
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 17320
@@ -82,7 +82,7 @@ def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> 
 
 
 def run_http_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
-    logging.basicConfig(level=logging.INFO)
+    setup_logging()
     app = create_starlette_app(host, port)
     logger.info("MCP HTTP/SSE em http://%s:%s (sse=/sse, mcp=/mcp)", host, port)
     config = uvicorn.Config(app, host=host, port=port, log_level="info")
