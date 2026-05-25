@@ -5,6 +5,7 @@ from pathlib import Path
 from langchain_google_community._utils import get_google_credentials
 
 from integrator.config import GOOGLE_SCOPES, settings
+from integrator.security.token_permissions import secure_token_file
 
 
 class GoogleAuthError(Exception):
@@ -35,7 +36,7 @@ def load_google_credentials(*, interactive: bool = False):
     if not interactive and not token_path.is_file():
         raise GoogleAuthError(
             f"Token não encontrado: {token_path}\n"
-            "Execute: python -m integrator.cli.auth_login"
+            "Execute: uv run integrator-auth"
         )
 
     # get_google_credentials sempre tenta refresh/local server se inválido.
@@ -45,11 +46,13 @@ def load_google_credentials(*, interactive: bool = False):
     previous_cwd = os.getcwd()
     try:
         os.chdir(settings.root_dir)
-        return get_google_credentials(
+        creds = get_google_credentials(
             scopes=list(GOOGLE_SCOPES),
             token_file=str(token_path),
             client_secrets_file=str(creds_path),
         )
+        secure_token_file(token_path)
+        return creds
     finally:
         os.chdir(previous_cwd)
 

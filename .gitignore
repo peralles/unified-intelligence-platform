@@ -18,5 +18,6 @@ venv/
 
 # Runtime / dados locais
 data/
+!data/.gitkeep
 *.db
 *.sqlite

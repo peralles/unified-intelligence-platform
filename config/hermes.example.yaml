@@ -13,6 +13,9 @@ mcp_servers:
       - integrator-serve
     env:
       INTEGRATOR_ROOT: /caminho/para/unified-intelligence-platform
+      # Fase 2 (opcional): bloquear envio/apagar até o agente pedir confirm=true
+      # INTEGRATOR_TOOL_DENYLIST: send_gmail_message,delete_calendar_event
+      INTEGRATOR_AUDIT_LOG_ENABLED: "true"
 
   # Opção B: Python do .venv criado por uv sync
   # langchain-integrator-venv:

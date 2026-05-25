@@ -275,12 +275,13 @@ LangChain nem sempre tem toolkit oficial; onde não houver, usar `langchain_comm
 - [x] `config/hermes.example.yaml` + testes `pytest`
 - [ ] Validação manual com credenciais Google reais + Hermes
 
-### Fase 2 — End shardening
+### Fase 2 — Hardening ✅
 
-- [ ] Allowlist / toggles por tool
-- [ ] Confirmação para ações de escrita
-- [ ] Logs de auditoria
-- [ ] Tratamento de refresh errors + mensagem “rode auth_login”
+- [x] Allowlist/denylist por env (`INTEGRATOR_TOOL_*`)
+- [x] Confirmação `confirm: true` em `send_gmail_message` e `delete_calendar_event`
+- [x] Auditoria estruturada `data/logs/audit.jsonl`
+- [x] `chmod 600` em `data/tokens/google.json`
+- [ ] Mensagem amigável em refresh OAuth expirado (melhoria futura)
 
 ### Fase 3 — Extensões
 

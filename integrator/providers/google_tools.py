@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Type
 
 from langchain_core.tools import BaseTool
@@ -8,6 +9,15 @@ from langchain_google_community.calendar.utils import build_calendar_service
 from langchain_google_community.gmail.utils import build_gmail_service
 
 from integrator.auth.google_oauth import GoogleAuthError, load_google_credentials
+from integrator.security.policy import (
+    ConfirmationRequiredError,
+    ToolPolicyError,
+    check_confirmation,
+    filter_tool_metadata,
+    is_tool_allowed,
+    strip_confirm_arg,
+)
+from integrator.security.audit import log_tool_invocation
 
 # Todas as tools (decisão: expor todas)
 GMAIL_TOOL_CLASSES: list[Type[BaseTool]] = []
@@ -80,10 +90,11 @@ def tool_metadata_from_class(tool_cls: Type[BaseTool]) -> dict[str, Any]:
 
 def list_all_tool_metadata() -> list[dict[str, Any]]:
     _import_tool_classes()
-    return [
+    raw = [
         *[tool_metadata_from_class(c) for c in GMAIL_TOOL_CLASSES],
         *[tool_metadata_from_class(c) for c in CALENDAR_TOOL_CLASSES],
     ]
+    return filter_tool_metadata(raw)
 
 
 def build_live_tools() -> dict[str, BaseTool]:
@@ -102,17 +113,49 @@ def build_live_tools() -> dict[str, BaseTool]:
 
 
 def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
+    started = time.perf_counter()
+
+    def _finish(*, success: bool, error_kind: str | None = None, blocked: bool = False) -> None:
+        log_tool_invocation(
+            name,
+            success=success,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            error_kind=error_kind,
+            blocked=blocked,
+        )
+
+    if not is_tool_allowed(name):
+        _finish(success=False, error_kind="tool_policy", blocked=True)
+        raise ToolPolicyError(
+            f"Tool '{name}' não permitida pela política do integrador. "
+            "Ajuste INTEGRATOR_TOOL_ALLOWLIST ou INTEGRATOR_TOOL_DENYLIST."
+        )
+
+    try:
+        check_confirmation(name, arguments)
+    except ConfirmationRequiredError:
+        _finish(success=False, error_kind="confirmation_required", blocked=True)
+        raise
+
     try:
         registry = build_live_tools()
-    except GoogleAuthError as exc:
+    except GoogleAuthError:
+        _finish(success=False, error_kind="auth")
         raise
 
     tool = registry.get(name)
     if tool is None:
+        _finish(success=False, error_kind="unknown_tool")
         raise KeyError(f"Tool desconhecida: {name}")
 
-    args = arguments or {}
-    result = tool.invoke(args)
+    args = strip_confirm_arg(arguments)
+    try:
+        result = tool.invoke(args)
+    except Exception:
+        _finish(success=False, error_kind="execution")
+        raise
+
+    _finish(success=True)
     if isinstance(result, str):
         return result
     import json

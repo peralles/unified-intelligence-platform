@@ -41,7 +41,10 @@ Gmail: `create_gmail_draft`, `send_gmail_message`, `search_gmail`, `get_gmail_me
 
 Calendar: `create_calendar_event`, `search_events`, `update_calendar_event`, `get_calendars_info`, `move_calendar_event`, `delete_calendar_event`, `get_current_datetime`
 
-## Segurança
+## Segurança (Fase 2)
 
-- `credentials/` e `data/tokens/` estão no `.gitignore`
-- Acesso completo às APIs Google — use apenas em ambiente confiável
+- **Denylist/allowlist:** `INTEGRATOR_TOOL_DENYLIST` / `INTEGRATOR_TOOL_ALLOWLIST` (ver `config/integrator.example.env`)
+- **Confirmação:** `send_gmail_message` e `delete_calendar_event` exigem `"confirm": true` nos argumentos
+- **Auditoria:** `data/logs/audit.jsonl` — só metadados (tool, sucesso, duração), sem conteúdo de e-mails/eventos
+- **Token:** `chmod 600` em `data/tokens/google.json` após login/refresh
+- `credentials/` e `data/` não vão para o git

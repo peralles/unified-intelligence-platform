@@ -36,12 +36,13 @@
 - [ ] **Você:** rodar `auth_login` com credenciais reais
 - [ ] **Você:** validar no Hermes (`hermes tools` + uma chamada)
 
-### Fase 2 — End shardening (backlog)
+### Fase 2 — Hardening ✅
 
-- [ ] Allowlist configurável por tool
-- [ ] Confirmação humana para `send_gmail_message` / `delete_calendar_event`
-- [ ] Log de auditoria estruturado
-- [ ] `chmod 600` automático em tokens
+- [x] Allowlist/denylist via `INTEGRATOR_TOOL_ALLOWLIST` / `INTEGRATOR_TOOL_DENYLIST`
+- [x] Confirmação explícita (`confirm: true`) para `send_gmail_message` e `delete_calendar_event`
+- [x] Auditoria JSONL em `data/logs/audit.jsonl` (sem argumentos/PII)
+- [x] `chmod 600` automático no token após OAuth/refresh
+- [x] Exemplo: `config/integrator.example.env`
 
 ### Fase 3 — Extensões (backlog)
 
