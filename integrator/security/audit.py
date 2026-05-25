@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -49,6 +48,15 @@ def log_tool_invocation(
 
     line = format_audit_line(record)
     enqueue_audit_line(line)
+
+    if success:
+        _get_tools_logger().info(
+            "tool OK | %s | account=%s | %.1fms",
+            tool_name,
+            account_id or "-",
+            duration_ms,
+        )
+        return
 
     if not success:
         _get_tools_logger().warning(

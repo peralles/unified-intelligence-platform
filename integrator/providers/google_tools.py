@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import time
 from typing import Any, Type
 
@@ -80,6 +81,60 @@ def _import_tool_classes() -> None:
     ]
 
 
+def _resolve_json_schema_refs(schema: dict[str, Any]) -> dict[str, Any]:
+    """
+    Inline $ref apontando para #/$defs/* antes de expor o schema ao MCP/Hermes.
+
+    LangChain/Pydantic costuma emitir $ref em propriedades e $defs no topo;
+    remover só $defs quebra validadores (PointerToNowhere).
+    """
+    defs = schema.get("$defs") or {}
+
+    def resolve(node: Any) -> Any:
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                key = ref[len("#/$defs/") :]
+                if key in defs:
+                    target = copy.deepcopy(defs[key])
+                    siblings = {k: v for k, v in node.items() if k != "$ref"}
+                    if siblings:
+                        if isinstance(target, dict):
+                            merged = {**target, **siblings}
+                        else:
+                            merged = siblings
+                        return resolve(merged)
+                    return resolve(target)
+            return {k: resolve(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [resolve(item) for item in node]
+        return node
+
+    resolved = resolve({k: v for k, v in schema.items() if k != "$defs"})
+    if isinstance(resolved, dict):
+        resolved.pop("$defs", None)
+        resolved.pop("title", None)
+        if resolved.get("type") == "object" and "properties" not in resolved:
+            resolved["properties"] = {}
+        return resolved
+    return {"type": "object", "properties": {}}
+
+
+def _schema_contains_ref(node: Any) -> bool:
+    if isinstance(node, dict):
+        if "$ref" in node:
+            return True
+        return any(_schema_contains_ref(v) for v in node.values())
+    if isinstance(node, list):
+        return any(_schema_contains_ref(item) for item in node)
+    return False
+
+
+def prepare_mcp_input_schema(raw_schema: dict[str, Any]) -> dict[str, Any]:
+    """Schema JSON pronto para MCP (sem $defs órfãos nem $ref internos)."""
+    return _resolve_json_schema_refs(raw_schema)
+
+
 def tool_metadata_from_class(tool_cls: Type[BaseTool]) -> dict[str, Any]:
     """Metadados MCP sem instanciar api_resource Google."""
     _import_tool_classes()
@@ -92,14 +147,9 @@ def tool_metadata_from_class(tool_cls: Type[BaseTool]) -> dict[str, Any]:
     schema_cls = args_field.default if args_field else None
 
     if schema_cls is not None:
-        input_schema = schema_cls.model_json_schema()
-        if input_schema.get("type") == "object" and "properties" not in input_schema:
-            input_schema["properties"] = {}
+        input_schema = prepare_mcp_input_schema(schema_cls.model_json_schema())
     else:
         input_schema = {"type": "object", "properties": {}}
-
-    for key in ("title", "$defs"):
-        input_schema.pop(key, None)
 
     return {
         "name": name,
