@@ -1,0 +1,21 @@
+# OAuth / secrets — nunca versionar
+credentials.json
+token.json
+token-*.json
+service_account.json
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime / dados locais
+data/
+*.db
+*.sqlite
