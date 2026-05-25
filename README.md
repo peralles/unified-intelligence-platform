@@ -38,7 +38,30 @@ scripts/validate.sh   # ruff + pytest + smokes
 2. Projeto Google Cloud com **OAuth client ID (Desktop)** → `credentials/credentials.json`
 3. Escopos Gmail + Calendar (configurados no integrador; ver `integrator/config.py`)
 
-## Instalação
+## Começar em 1 comando (recomendado)
+
+Depois de clonar o repositório:
+
+```bash
+cd unified-intelligence-platform
+uv run integrator init
+```
+
+O assistente:
+
+1. Instala dependências (`uv sync`) se precisar
+2. Abre o **Google Cloud** no navegador (APIs + credencial OAuth) e **espera** o arquivo JSON (também detecta na pasta Downloads)
+3. Abre o navegador para você **autorizar** Gmail e Agenda
+4. Configura o **Hermes** automaticamente (`~/.hermes/config.yaml`)
+
+No final: abra o Hermes e use `/reload-mcp` ou uma conversa nova. Modelo de IA do Hermes: `hermes model` (se ainda não configurou).
+
+```bash
+uv run integrator init --yes      # sem perguntas, só executa o que faltar
+uv run integrator init --verbose  # mostra caminhos técnicos
+```
+
+## Instalação manual (avançado)
 
 ```bash
 git clone <repo>
@@ -52,12 +75,13 @@ Comandos disponíveis após o sync:
 - `integrator-auth` — alias de `integrator login`
 - `integrator-serve` — alias de `integrator serve`
 
-## Configuração inicial
+### Configuração passo a passo
 
 ```bash
-# Coloque credentials.json em credentials/ (ou INTEGRATOR_CREDENTIALS_FILE)
-
+# credentials.json em credentials/ (ver integrator init para fluxo guiado)
 uv run integrator login pessoal
+uv run integrator hermes doctor
+uv run integrator hermes setup
 uv run integrator status
 ```
 
@@ -78,6 +102,7 @@ uv run integrator <comando> --help   # quando existir subcomandos
 
 | Comando | Descrição |
 |---------|-----------|
+| `integrator init` | Assistente guiado (Google + Hermes) |
 | `integrator status` | Escopos, contas, tokens, paths de logs |
 | `integrator login [id]` | OAuth no navegador (Gmail + Calendar) |
 | `integrator accounts` | Listar contas registradas |
@@ -85,6 +110,8 @@ uv run integrator <comando> --help   # quando existir subcomandos
 | `integrator use <id>` | Atalho para definir conta padrão |
 | `integrator logout <id>` | Remover conta e apagar token |
 | `integrator tools` | Listar as 12 tools expostas ao MCP |
+| `integrator hermes doctor` | Verificar pré-requisitos (integrador + Hermes) |
+| `integrator hermes setup` | Gravar MCP em `~/.hermes/config.yaml` automaticamente |
 | `integrator serve` | Servidor MCP **stdio** (Hermes inicia o processo) |
 | `integrator serve-http` | Servidor MCP **HTTP/SSE** em primeiro plano |
 | `integrator logs` | Listar arquivos de log + resumo de falhas |
@@ -238,35 +265,27 @@ uv run integrator logs --tail --errors
 
 ## Integração com Hermes
 
-### Modo stdio (recomendado)
+### Setup automático (recomendado)
 
-Hermes inicia o MCP sob demanda. Copie [`config/hermes.example.yaml`](config/hermes.example.yaml) para `~/.hermes/config.yaml` e ajuste o caminho do repo:
+Depois de `uv sync`, `credentials/credentials.json` e `integrator login <conta>`:
 
-```yaml
-mcp_servers:
-  langchain-integrator:
-    command: uv
-    args:
-      - run
-      - --directory
-      - /caminho/para/unified-intelligence-platform
-      - integrator
-      - serve
-    env:
-      INTEGRATOR_ROOT: /caminho/para/unified-intelligence-platform
-      INTEGRATOR_AUDIT_LOG_ENABLED: "true"
+```bash
+uv run integrator hermes doctor          # o que falta (Google, OAuth, uv, Hermes…)
+uv run integrator hermes setup           # grava langchain-integrator em ~/.hermes/config.yaml
+uv run integrator hermes setup --dry-run # só mostra o YAML
+uv run integrator hermes setup --yes     # substituir entrada existente
 ```
 
-### Modo SSE (serviço macOS)
+**stdio (padrão):** Hermes faz spawn de `uv run --directory <este-repo> integrator serve`.  
+**SSE:** `integrator service install` e depois `integrator hermes setup --mode sse`.
 
-Com `integrator service install`, use [`config/hermes.service.example.yaml`](config/hermes.service.example.yaml):
+Após o setup: **nova sessão Hermes** ou `/reload-mcp`. Modelo/API do Hermes continua manual (`hermes model`, `~/.hermes/.env`).
 
-```yaml
-mcp_servers:
-  langchain-integrator:
-    url: http://127.0.0.1:17320/sse
-    transport: sse
-```
+Alternativa manual (com UI de tools): `hermes mcp add langchain-integrator --command uv --args …` — fluxo interativo do Hermes.
+
+### Referência YAML (manual)
+
+[`config/hermes.example.yaml`](config/hermes.example.yaml) (stdio) e [`config/hermes.service.example.yaml`](config/hermes.service.example.yaml) (SSE) mostram o mesmo contrato que o `setup` grava.
 
 ---
 

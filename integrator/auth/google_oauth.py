@@ -22,8 +22,9 @@ def ensure_credentials_file() -> Path:
     path = settings.credentials_path
     if not path.is_file():
         raise GoogleAuthError(
-            f"Arquivo OAuth não encontrado: {path}\n"
-            "Baixe credentials.json (Desktop app) do Google Cloud e coloque em credentials/."
+            "Arquivo OAuth não encontrado.\n"
+            "Rode: integrator init\n"
+            "(O assistente abre o Google Cloud no navegador e configura o arquivo para você.)"
         )
     return path
 

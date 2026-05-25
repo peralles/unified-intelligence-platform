@@ -42,12 +42,17 @@ from integrator.service.macos import (
 )
 
 EPILOG = """
+Começar:
+  integrator init                       # assistente guiado (recomendado)
+
 Exemplos:
   integrator login pessoal              # 1ª conta (Gmail + Calendar)
   integrator login profissional -l Trabalho
   integrator accounts                 # listar contas
   integrator use profissional           # conta padrão para o Hermes
   integrator status
+  integrator hermes doctor              # pré-requisitos Hermes + integrador
+  integrator hermes setup               # gravar MCP em ~/.hermes/config.yaml
   integrator serve                    # servidor MCP (stdio, Hermes spawn)
   integrator service install          # macOS: ativar como serviço
   integrator service disable          # macOS: parar serviço
@@ -57,9 +62,17 @@ Exemplos:
 """
 
 
-def _cmd_status(_: argparse.Namespace) -> int:
+def _cmd_status(args: argparse.Namespace) -> int:
+    from integrator.cli.ux import configuration_summary
+
     print("Integrador LangChain → Hermes (Gmail + Google Calendar)\n")
-    print("Escopos:", ", ".join(GOOGLE_SCOPES))
+    label, next_step = configuration_summary()
+    print(f"Configuração: {label}")
+    if next_step:
+        print(f"Próximo passo: {next_step}")
+    print()
+    if getattr(args, "verbose", False):
+        print("Escopos:", ", ".join(GOOGLE_SCOPES))
     print("OAuth client:", settings.credentials_path)
     print()
 
@@ -114,7 +127,9 @@ def _cmd_login(args: argparse.Namespace) -> int:
     try:
         token_path = run_interactive_login(account_id, label=args.label)
     except (GoogleAuthError, ValueError) as exc:
-        print(f"Erro: {exc}", file=sys.stderr)
+        from integrator.cli.ux import friendly_google_auth_error
+
+        print(friendly_google_auth_error(str(exc)), file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         print("\nCancelado.")
@@ -296,6 +311,16 @@ def _cmd_service(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_init(args: argparse.Namespace) -> int:
+    from integrator.onboarding.init_wizard import run_init_wizard
+
+    return run_init_wizard(
+        auto_yes=args.yes,
+        verbose=args.verbose,
+        account=args.account,
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="integrator",
@@ -303,7 +328,37 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog=EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Mostrar caminhos e detalhes técnicos",
+    )
     sub = parser.add_subparsers(dest="command", metavar="comando")
+
+    p_init = sub.add_parser(
+        "init",
+        help="Assistente guiado: Google + Hermes em um fluxo",
+    )
+    p_init.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Sem perguntas; executar o que faltar automaticamente",
+    )
+    p_init.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Mostrar detalhes técnicos",
+    )
+    p_init.add_argument(
+        "--account",
+        metavar="ID",
+        default=None,
+        help="ID da conta no passo de login (padrão: pessoal)",
+    )
+    p_init.set_defaults(func=_cmd_init)
 
     sub.add_parser("status", help="Visão geral: contas, tokens, APIs").set_defaults(
         func=_cmd_status
@@ -417,13 +472,33 @@ def _build_parser() -> argparse.ArgumentParser:
         p.add_argument("--port", type=int, default=None)
         p.set_defaults(func=_cmd_service, service_action=action)
 
+    from integrator.hermes.setup_cmd import add_hermes_subparser
+
+    add_hermes_subparser(sub)
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
+    argv = list(argv) if argv is not None else None
     args = parser.parse_args(argv)
+    global_verbose = bool(
+        getattr(args, "verbose", False)
+        or (argv and ("-v" in argv or "--verbose" in argv))
+    )
+    if not hasattr(args, "verbose"):
+        args.verbose = global_verbose
+    elif global_verbose:
+        args.verbose = True
     if not args.command:
+        from integrator.cli.ux import is_configured
+
+        if not is_configured():
+            print("Integrador Gmail + Agenda para o Hermes\n")
+            print("Para começar (recomendado):\n")
+            print("  integrator init\n")
+            print("\nOutros comandos:")
         parser.print_help()
         sys.exit(0)
     if args.command != "logs":

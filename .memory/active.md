@@ -1,6 +1,6 @@
 # Contexto ativo
 
-Última atualização: seed inicial (documentação de agentes).
+Última atualização: CLI `integrator init` (wizard UX).
 
 ## Estado
 
@@ -10,7 +10,7 @@
 ## Pendências
 
 - Validação manual com Google OAuth real (`credentials.json` + `integrator login`)
-- Confirmar integração ponta a ponta com Hermes (`config/hermes.example.yaml` → `~/.hermes/config.yaml`)
+- Confirmar integração ponta a ponta com Hermes (`integrator init` + sessão Hermes)
 
 ## Próximos passos (opcionais)
 

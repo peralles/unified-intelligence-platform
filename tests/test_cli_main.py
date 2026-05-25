@@ -5,6 +5,7 @@ def test_parser_has_core_commands():
     parser = _build_parser()
     sub = next(a for a in parser._actions if a.dest == "command")
     assert {
+        "init",
         "status",
         "login",
         "accounts",
@@ -15,4 +16,5 @@ def test_parser_has_core_commands():
         "serve-http",
         "service",
         "logs",
+        "hermes",
     }.issubset(set(sub.choices.keys()))

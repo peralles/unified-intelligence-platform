@@ -6,12 +6,15 @@ CLI única, focada em **poucos comandos** e suporte a **várias contas Google** 
 
 | Comando | Descrição |
 |---------|-----------|
+| `integrator init` | Assistente guiado: deps, Google OAuth, login, Hermes MCP |
 | `integrator status` | Contas, tokens, escopos |
 | `integrator login <id>` | OAuth no navegador (Gmail + Calendar) |
 | `integrator accounts` | Listar contas |
 | `integrator use <id>` | Definir conta padrão |
 | `integrator logout <id>` | Remover conta e token |
 | `integrator tools` | Listar 12 tools MCP |
+| `integrator hermes doctor` | Pré-requisitos Hermes + integrador |
+| `integrator hermes setup` | Gravar `mcp_servers` em `~/.hermes/config.yaml` |
 | `integrator serve` | Servidor MCP stdio (Hermes inicia o processo) |
 | `integrator serve-http` | Servidor HTTP/SSE local (background) |
 | `integrator service …` | **macOS:** LaunchAgent (instalar/ativar/desativar) |
@@ -42,6 +45,21 @@ Variáveis: `INTEGRATOR_LOG_LEVEL`, `INTEGRATOR_LOG_MAX_BYTES`, `INTEGRATOR_AUDI
 
 Aliases legados: `integrator-auth` → `integrator login`, `integrator-serve` → `integrator serve`.
 
+## Configuração guiada (`init`)
+
+Fluxo recomendado para quem não quer editar YAML nem copiar arquivos à mão:
+
+```bash
+uv run integrator init
+uv run integrator init -y              # sem perguntas
+uv run integrator init --account trabalho
+uv run integrator init --verbose
+```
+
+O assistente abre o navegador no Google Cloud, detecta `credentials.json` (pasta do projeto ou Downloads), executa login OAuth no navegador e grava o MCP no Hermes.
+
+Não automatiza: instalação do binário Hermes (abre o link e espera), chaves de modelo do LLM no Hermes.
+
 ## Serviço no macOS
 
 O Hermes via **stdio** inicia o MCP sob demanda. Para manter o integrador **sempre rodando** (HTTP/SSE), use LaunchAgent:
@@ -60,6 +78,18 @@ uv run integrator service uninstall  # remove plist e para
 - Hermes: ver `config/hermes.service.example.yaml`
 
 Porta customizada: `integrator service install --port 18000`
+
+## Hermes (auto-configuração)
+
+```bash
+uv run integrator hermes doctor
+uv run integrator hermes setup              # stdio (padrão)
+uv run integrator hermes setup --mode sse   # após service install
+uv run integrator hermes setup --dry-run
+uv run integrator hermes setup --yes        # sobrescrever entrada existente
+```
+
+Não automatiza: Google Cloud + `credentials.json`, `integrator login`, instalação do binário Hermes, chaves de modelo. Após `setup`: nova sessão ou `/reload-mcp`.
 
 ## Múltiplas contas (pessoal + profissional)
 
