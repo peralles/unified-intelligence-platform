@@ -29,6 +29,8 @@ Arquivos em `data/logs/`:
 
 Rotação automática (padrão 5 MB, backups numerados `.1`, `.2`, …).
 
+**Performance:** escrita em **fila assíncrona** (não bloqueia tools). Por padrão, **sucesso não grava audit** — só falhas (`INTEGRATOR_AUDIT_LOG_SUCCESS=false`).
+
 ```bash
 integrator logs                    # lista arquivos + resumo de falhas
 integrator logs --failures         # últimas falhas de tools

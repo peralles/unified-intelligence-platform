@@ -81,8 +81,11 @@ def test_invoke_blocked_by_policy(isolated_settings, monkeypatch):
 def test_audit_log_written_on_blocked_invoke(isolated_settings, monkeypatch):
     monkeypatch.setattr(settings, "tool_denylist", "search_gmail")
     log_path = settings.audit_log_path
+    from integrator.logging_setup import flush_logging
+
     with pytest.raises(ToolPolicyError):
         invoke_tool("search_gmail", {})
+    flush_logging()
     lines = log_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1
     record = json.loads(lines[0])

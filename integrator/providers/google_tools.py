@@ -200,6 +200,7 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
     try:
         result = tool.invoke(args)
     except Exception as exc:
+        _finish(success=False, error_kind="execution")
         from integrator.logging_setup import get_logger
 
         get_logger("tools").exception(
@@ -207,7 +208,6 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
             name,
             account_id,
         )
-        _finish(success=False, error_kind="execution")
         raise exc
 
     _finish(success=True)
