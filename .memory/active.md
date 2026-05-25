@@ -1,23 +1,32 @@
 # Contexto ativo
 
-Última atualização: CLI `integrator init` (wizard UX).
+Última atualização: continual-learning (Hermes stdio, schema MCP, plano WhatsApp).
 
 ## Estado
 
-- MVP implementado: MCP stdio, 12 tools Gmail/Calendar, multi-conta, Fase 2 (policy, confirm, audit)
-- Branch de referência no plano: `cursor/langchain-hermes-integrator-86e5`
+- MVP: MCP stdio, 12 Google + 6 WhatsApp (neonize bridge), multi-conta Google, Fase 2 (policy, confirm, audit)
+- CLI WhatsApp: `status` (rápido + `--live`), `configure`, `pair`, `remove`, `disconnect`; checklist em AGENTS.md
+- Entrada amigável: `./setup.sh` + `Makefile` (delegam à CLI)
+- Auto-config Hermes: `integrator init` / `integrator hermes setup` (stdio padrão)
+- Correção MCP: schemas sem `$ref` órfão; log `tool OK` em sucesso (`integrator.tools`)
 
 ## Pendências
 
 - Validação manual com Google OAuth real (`credentials.json` + `integrator login`)
-- Confirmar integração ponta a ponta com Hermes (`integrator init` + sessão Hermes)
+- Confirmar integração ponta a ponta com Hermes após `git pull` + `/reload-mcp` ou conversa nova
 
-## Próximos passos (opcionais)
+## Próximos passos (planejado)
 
-- CI GitHub Actions (não existe no repo hoje)
+- Validação manual WhatsApp: `integrator whatsapp pair` + tools no Hermes
+- CI GitHub Actions (não existe no repo)
 - Novos providers OAuth no padrão `ToolProvider`
-- Reduzir scopes se política de menor privilégio for exigida (hoje: acesso completo Gmail + Calendar)
+
+## Hermes (operacional)
+
+- **stdio:** Hermes inicia `integrator serve` por conversa; serviço macOS não é obrigatório
+- **Reload:** só após mudar código/config do integrador ou YAML do Hermes; conversa nova costuma bastar
+- Reload lento/travando UI: checar confirmação `mcp_reload_confirm`, logs em `~/.hermes/logs/`
 
 ## Bloqueios
 
-- Nenhum bloqueio técnico registrado no código — depende de credenciais Google locais do operador
+- Nenhum bloqueio técnico no código — depende de credenciais Google locais do operador

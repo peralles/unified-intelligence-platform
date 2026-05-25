@@ -6,7 +6,11 @@ from integrator.accounts.registry import list_account_ids
 from integrator.config import settings
 
 # Fase 2: confirmação explícita para ações destrutivas
-DEFAULT_CONFIRM_REQUIRED = frozenset({"send_gmail_message", "delete_calendar_event"})
+DEFAULT_CONFIRM_REQUIRED = frozenset({
+    "send_gmail_message",
+    "delete_calendar_event",
+    "send_whatsapp_text",
+})
 
 
 class ToolPolicyError(Exception):

@@ -57,7 +57,9 @@ async def test_mcp_list_tools_under_budget(perf_env):
     start = time.perf_counter()
     tools = await handle_list_tools()
     elapsed_ms = (time.perf_counter() - start) * 1000
-    assert len(tools) == 12
+    from integrator.providers.tools import TOTAL_TOOL_COUNT
+
+    assert len(tools) == TOTAL_TOOL_COUNT
     assert elapsed_ms < 500.0, f"list_tools lento: {elapsed_ms:.1f}ms"
 
 

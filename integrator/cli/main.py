@@ -27,7 +27,11 @@ from integrator.auth.google_oauth import GoogleAuthError, run_interactive_login
 from integrator.config import GOOGLE_SCOPES, settings
 from integrator.mcp.http_server import run_http_server
 from integrator.mcp.server import main as run_mcp_server
-from integrator.providers.google_tools import list_all_tool_metadata
+from integrator.providers.tools import (
+    GOOGLE_TOOL_COUNT,
+    WHATSAPP_TOOL_COUNT,
+    list_all_tool_metadata,
+)
 from integrator.service.macos import (
     SERVICE_LABEL,
     MacServiceError,
@@ -59,6 +63,9 @@ Exemplos:
   integrator service uninstall        # macOS: remover serviço
   integrator logs --failures          # últimas falhas (audit rotativo)
   integrator logs --tail              # tail do log da aplicação
+  integrator whatsapp pair            # parear WhatsApp (QR no terminal)
+  integrator whatsapp status          # situação WhatsApp (rápido)
+  integrator whatsapp remove          # apagar sessão WhatsApp
 """
 
 
@@ -91,6 +98,19 @@ def _cmd_status(args: argparse.Namespace) -> int:
         print(f"  {star} {acc.id:<14} {token:<10} {email}")
     print(f"\nPadrão: {default_id or '—'}")
     print(f"Registro: {settings.root_dir / 'data/accounts.yaml'}")
+
+    from integrator.whatsapp.session_store import local_status_snapshot
+
+    wa = local_status_snapshot()
+    print("\nWhatsApp:")
+    if not wa["enabled"]:
+        print("  desabilitado no MCP (INTEGRATOR_WHATSAPP_ENABLED=false)")
+    elif wa["has_session_db"]:
+        print(f"  sessão local em {wa['session_dir']}")
+        print("  detalhe: integrator whatsapp status [--live]")
+    else:
+        print("  não pareado → integrator whatsapp pair")
+
     from integrator.logging_setup import app_log_path, error_log_path
 
     print(f"\nLogs (rotativos): {app_log_path().parent}")
@@ -185,7 +205,10 @@ def _cmd_logout(args: argparse.Namespace) -> int:
 
 def _cmd_tools(_: argparse.Namespace) -> int:
     meta = list_all_tool_metadata()
-    print(f"Tools MCP ({len(meta)}) — Gmail + Calendar por conta:\n")
+    print(
+        f"Tools MCP ({len(meta)}) — "
+        f"{GOOGLE_TOOL_COUNT} Google + {WHATSAPP_TOOL_COUNT} WhatsApp:\n"
+    )
     for m in meta:
         print(f"  • {m['name']}")
     ids = [a.id for a in list_accounts()]
@@ -472,8 +495,10 @@ def _build_parser() -> argparse.ArgumentParser:
         p.add_argument("--port", type=int, default=None)
         p.set_defaults(func=_cmd_service, service_action=action)
 
+    from integrator.cli.whatsapp import add_whatsapp_subparser
     from integrator.hermes.setup_cmd import add_hermes_subparser
 
+    add_whatsapp_subparser(sub)
     add_hermes_subparser(sub)
 
     return parser

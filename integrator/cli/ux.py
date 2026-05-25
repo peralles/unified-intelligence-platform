@@ -3,6 +3,7 @@ from __future__ import annotations
 from integrator.accounts.registry import list_accounts
 from integrator.config import settings
 from integrator.onboarding.google_cloud import credentials_ready
+from integrator.whatsapp.session_store import has_persisted_session
 
 
 def step(number: int, total: int, title: str) -> None:
@@ -28,6 +29,8 @@ def configuration_summary() -> tuple[str, str | None]:
     accounts = list_accounts()
     if not any(a.has_token for a in accounts):
         return "incompleta", "./setup.sh"
+    if settings.whatsapp_enabled and not has_persisted_session():
+        return "completa (Google)", "integrator whatsapp pair"
     return "completa", None
 
 
@@ -40,6 +43,8 @@ def print_ready_message(*, verbose: bool = False) -> None:
     print("  2. Se o Hermes pedir modelo de IA, configure com: hermes model")
     print("\n  No chat você pode pedir, por exemplo:")
     print('     "Quais e-mails não lidos tenho?" ou "O que tenho na agenda hoje?"')
+    if settings.whatsapp_enabled:
+        print('     "Liste meus chats do WhatsApp" (após: integrator whatsapp pair)')
     if verbose:
         print("\n  Detalhes técnicos:")
         print(f"    Credenciais: {settings.credentials_path}")

@@ -164,7 +164,7 @@ def invalidate_metadata_cache() -> None:
     _metadata_cache_value = None
 
 
-def list_all_tool_metadata() -> list[dict[str, Any]]:
+def list_google_tool_metadata() -> list[dict[str, Any]]:
     global _metadata_cache_key_stored, _metadata_cache_value
     cache_key = _compute_metadata_cache_key()
     if _metadata_cache_value is not None and _metadata_cache_key_stored == cache_key:
@@ -201,7 +201,7 @@ def build_live_tools(account_id: str) -> dict[str, BaseTool]:
     return tools
 
 
-def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
+def invoke_google_tool(name: str, arguments: dict[str, Any] | None) -> str:
     started = time.perf_counter()
     account_id: str | None = None
 
@@ -266,3 +266,8 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
     import json
 
     return json.dumps(result, default=str, ensure_ascii=False)
+
+
+# Aliases usados por testes que exercitam só o provider Google.
+list_all_tool_metadata = list_google_tool_metadata
+invoke_tool = invoke_google_tool

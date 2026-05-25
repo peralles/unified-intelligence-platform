@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "integrator-whatsapp-neonize-bridge"
+version = "0.1.0"
+description = "Isolated neonize worker for integrator WhatsApp tools (protobuf 7.x)"
+requires-python = ">=3.11"
+dependencies = [
+  "neonize>=0.3.17",
+  "protobuf>=7.34.1,<8",
+  "segno>=1.6",
+]
+
+[project.scripts]
+whatsapp-neonize-worker = "worker:main"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["worker.py"]

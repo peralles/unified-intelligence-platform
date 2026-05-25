@@ -10,7 +10,7 @@ Seguir o que já existe em `integrator/` e `tests/`.
 
 ## Tools e segurança
 
-- Metadados das 12 tools: `integrator/providers/google_tools.py` (+ cache em `tool_cache.py`)
+- Metadados Google: `integrator/providers/google_tools.py` (+ cache); WhatsApp: `whatsapp_tools.py`; agregador MCP: `integrator/providers/tools.py`
 - Antes de invoke: `check_policy` → `check_confirmation` → `strip_confirm_arg` para LangChain
 - Tools destrutivas: schema MCP inclui `confirm`; default em `get_confirm_required_tools()`
 
@@ -28,7 +28,7 @@ Seguir o que já existe em `integrator/` e `tests/`.
 ## Testes
 
 - `pytest`, `asyncio_mode = auto` (`pyproject.toml`)
-- Assert de 12 tools e tools com confirmação nos smokes de `scripts/validate.sh`
+- Assert de 18 tools (12 Google + 6 WhatsApp) e tools com confirmação nos smokes de `scripts/validate.sh`
 - Performance: budgets em `tests/test_performance.py` e smoke no validate.sh
 
 ## Logging

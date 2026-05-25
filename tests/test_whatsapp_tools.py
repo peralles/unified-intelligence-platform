@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+import json
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from integrator.providers.tools import (
+    GOOGLE_TOOL_COUNT,
+    TOTAL_TOOL_COUNT,
+    WHATSAPP_TOOL_COUNT,
+    invoke_tool,
+    list_all_tool_metadata,
+)
+from integrator.providers.whatsapp_tools import list_whatsapp_tool_metadata
+from integrator.security.policy import (
+    ConfirmationRequiredError,
+    get_confirm_required_tools,
+)
+
+
+def test_tool_counts():
+    meta = list_all_tool_metadata()
+    assert len(meta) == TOTAL_TOOL_COUNT == GOOGLE_TOOL_COUNT + WHATSAPP_TOOL_COUNT
+    names = {m["name"] for m in meta}
+    wa = {m["name"] for m in list_whatsapp_tool_metadata()}
+    assert wa.issubset(names)
+    assert len(wa) == WHATSAPP_TOOL_COUNT
+
+
+def test_send_whatsapp_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool("send_whatsapp_text", {"text": "oi", "number": "5511999999999"})
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_get_whatsapp_connection_status_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.status.return_value = {"state": "connected", "logged_in": True}
+    mock_get.return_value = session
+
+    out = invoke_tool("get_whatsapp_connection_status", {})
+    data = json.loads(out)
+    assert data["state"] == "connected"
+    session.status.assert_called_once()
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_list_whatsapp_chats_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.list_chats.return_value = [
+        {
+            "chat_id": "5511999999999@s.whatsapp.net",
+            "name": "Contato",
+            "unread_count": 1,
+            "last_message_preview": "Olá",
+            "is_group": False,
+        }
+    ]
+    mock_get.return_value = session
+
+    out = invoke_tool("list_whatsapp_chats", {"limit": 5})
+    data = json.loads(out)
+    assert data[0]["name"] == "Contato"
+
+
+def test_confirm_required_includes_whatsapp_send():
+    assert "send_whatsapp_text" in get_confirm_required_tools()
+
+
+@patch("integrator.whatsapp.bridge_client.subprocess.Popen")
+def test_bridge_client_rpc(mock_popen: MagicMock) -> None:
+    from pathlib import Path
+
+    from integrator.whatsapp.bridge_client import WhatsAppBridgeClient
+
+    proc = MagicMock()
+    proc.poll.return_value = None
+    proc.stdin = MagicMock()
+    proc.stdout.readline.return_value = json.dumps(
+        {"id": "1", "ok": True, "result": {"pong": True}}
+    ) + "\n"
+    mock_popen.return_value = proc
+
+    client = WhatsAppBridgeClient(Path("/tmp/wa-test"))
+    result = client.call("ping")
+    assert result == {"pong": True}
+    client.close()

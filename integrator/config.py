@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     service_host: str = "127.0.0.1"
     service_port: int = 17320
 
+    # WhatsApp (neonize worker em bridges/whatsapp-neonize)
+    whatsapp_enabled: bool = True
+    whatsapp_session_dir: Path | None = None
+    whatsapp_max_message_chars: int = 800
+
     @property
     def audit_log_path(self) -> Path:
         if self.audit_log_file:
@@ -71,9 +76,16 @@ class Settings(BaseSettings):
         safe_id = account_id.strip().lower()
         return self.root_dir / "data" / "tokens" / f"{safe_id}.json"
 
+    @property
+    def whatsapp_session_path(self) -> Path:
+        if self.whatsapp_session_dir:
+            return self.whatsapp_session_dir
+        return self.root_dir / "data" / "whatsapp"
+
     def ensure_data_dirs(self) -> None:
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
         self.credentials_path.parent.mkdir(parents=True, exist_ok=True)
+        self.whatsapp_session_path.mkdir(parents=True, exist_ok=True)
         if self.audit_log_enabled:
             self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
 

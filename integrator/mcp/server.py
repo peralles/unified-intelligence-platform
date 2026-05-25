@@ -9,7 +9,8 @@ from mcp.server.lowlevel import Server
 from integrator.auth.google_oauth import GoogleAuthError
 from integrator.logging_setup import get_logger, setup_logging
 from integrator.mcp.schema import metadata_to_mcp_tool
-from integrator.providers.google_tools import invoke_tool, list_all_tool_metadata
+from integrator.providers.tools import invoke_tool, list_all_tool_metadata
+from integrator.whatsapp.errors import WhatsAppNotConnectedError
 from integrator.security.policy import (
     ConfirmationRequiredError,
     ToolPolicyError,
@@ -48,6 +49,8 @@ async def handle_call_tool(
         return _mcp_success(text)
     except GoogleAuthError as exc:
         return _mcp_error(f"[integrator] Autenticação necessária: {exc}")
+    except WhatsAppNotConnectedError as exc:
+        return _mcp_error(str(exc))
     except ToolPolicyError as exc:
         return _mcp_error(f"[integrator] Política: {exc}")
     except ConfirmationRequiredError as exc:

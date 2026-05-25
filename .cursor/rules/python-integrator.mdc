@@ -14,7 +14,7 @@ alwaysApply: false
 
 ## Domínio
 
-- **12 tools** MCP fixas — alterar lista exige atualizar testes e `scripts/validate.sh`
+- **18 tools** MCP (12 Google + 6 WhatsApp) — alterar lista exige atualizar testes e `scripts/validate.sh`
 - Account IDs: `^[a-z][a-z0-9_-]{0,31}$`, normalizar com `.strip().lower()`
 - Erros MCP: prefixo `[integrator]` em [integrator/mcp/server.py](integrator/mcp/server.py)
 - Confirmação: `send_gmail_message`, `delete_calendar_event` → `confirm: true` ([integrator/security/policy.py](integrator/security/policy.py))
@@ -32,4 +32,7 @@ alwaysApply: false
 ```bash
 uv run ruff check integrator/caminho/arquivo.py
 uv run pytest tests/test_arquivo.py -q --tb=short
+./scripts/validate.sh
 ```
+
+Ao alterar providers/MCP/WhatsApp: conferir checklist em AGENTS.md (logs, performance, CLI, scripts shell).
