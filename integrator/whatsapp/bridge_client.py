@@ -11,6 +11,36 @@ from integrator.config import settings
 from integrator.whatsapp.errors import WhatsAppApiError, WhatsAppNotConnectedError
 from integrator.whatsapp.logging_whatsapp import LOGGER
 
+def _read_rpc_response(
+    stdout: Any,
+    req_id: str,
+    *,
+    method: str,
+) -> dict[str, Any]:
+    """Read lines until a JSON-RPC response for req_id (skip library noise on stdout)."""
+    while True:
+        raw = stdout.readline()
+        if not raw:
+            raise WhatsAppApiError(
+                "Worker WhatsApp encerrou sem resposta (verifique logs no terminal)."
+            )
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        try:
+            resp = json.loads(stripped)
+        except json.JSONDecodeError:
+            LOGGER.debug("bridge skip non-json stdout | method=%s | %r", method, stripped[:80])
+            continue
+        if resp.get("id") != req_id:
+            continue
+        return resp
+
+
+def resolve_session_dir(explicit: Path | None = None) -> Path:
+    """Caminho da sessão; nunca None (usa whatsapp_session_path quando dir opcional não está setado)."""
+    return explicit or settings.whatsapp_session_path
+
 
 class WhatsAppBridgeClient:
     """JSON-RPC over stdin/stdout to bridges/whatsapp-neonize worker."""
@@ -38,7 +68,11 @@ class WhatsAppBridgeClient:
                 f"Bridge neonize ausente em {bridge}. Verifique o repositório."
             )
         env = os.environ.copy()
+        env.pop("VIRTUAL_ENV", None)
         env["INTEGRATOR_WHATSAPP_SESSION_DIR"] = str(self.session_dir.resolve())
+        from integrator.whatsapp.session_store import WHATSAPP_CLIENT_NAME
+
+        env["INTEGRATOR_WHATSAPP_CLIENT_NAME"] = WHATSAPP_CLIENT_NAME
         cmd = [
             "uv",
             "run",
@@ -53,11 +87,12 @@ class WhatsAppBridgeClient:
                 self.session_dir,
                 bridge,
             )
+            # stderr inherited so pair QR (worker writes to stderr) is visible in the terminal
             self._proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=None,
                 text=True,
                 env=env,
                 cwd=str(bridge),
@@ -68,6 +103,9 @@ class WhatsAppBridgeClient:
         if self._proc.stdin is None or self._proc.stdout is None:
             raise WhatsAppApiError("Worker WhatsApp sem stdin/stdout")
         return self._proc
+
+    def is_worker_alive(self) -> bool:
+        return self._proc is not None and self._proc.poll() is None
 
     def call(self, method: str, params: dict[str, Any] | None = None) -> Any:
         params = params or {}
@@ -82,21 +120,7 @@ class WhatsAppBridgeClient:
             )
             proc.stdin.write(line + "\n")
             proc.stdin.flush()
-            raw = proc.stdout.readline()
-            if not raw:
-                err = proc.stderr.read() if proc.stderr else ""
-                if err:
-                    LOGGER.warning(
-                        "bridge no response | method=%s | stderr=%s",
-                        method,
-                        err[:300],
-                    )
-                raise WhatsAppApiError(
-                    f"Worker WhatsApp encerrou sem resposta. {err[:500]}".strip()
-                )
-            resp = json.loads(raw)
-            if resp.get("id") != req_id:
-                raise WhatsAppApiError("Resposta fora de ordem do worker WhatsApp")
+            resp = _read_rpc_response(proc.stdout, req_id, method=method)
             if not resp.get("ok"):
                 msg = str(resp.get("error", "erro desconhecido"))
                 LOGGER.warning("bridge RPC FAIL | method=%s | %s", method, msg[:200])
@@ -126,11 +150,16 @@ def run_bridge_command(
     session_dir: Path | None = None,
 ) -> Any:
     """One-shot bridge invocation (CLI pair/status live)."""
-    root = session_dir or settings.whatsapp_session_dir
+    root = resolve_session_dir(session_dir)
     root.mkdir(parents=True, exist_ok=True)
     LOGGER.debug("bridge one-shot | method=%s", method)
     client = WhatsAppBridgeClient(root)
     try:
         return client.call(method, params)
     finally:
+        if method in ("pair", "connect"):
+            try:
+                client.call("shutdown", {})
+            except WhatsAppApiError:
+                LOGGER.debug("bridge graceful shutdown skipped | method=%s", method)
         client.close()

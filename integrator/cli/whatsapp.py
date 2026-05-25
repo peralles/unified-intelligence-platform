@@ -23,7 +23,8 @@ def _print_local_status() -> None:
     print(f"  Habilitado:   {'sim' if snap['enabled'] else 'não (INTEGRATOR_WHATSAPP_ENABLED=false)'}")
     print(f"  Sessão:       {snap['session_dir']}")
     if snap["has_session_db"]:
-        print(f"  Artefato:     neonize.db ({snap['session_db_bytes']} bytes)")
+        store = snap.get("session_store_file", "integrator")
+        print(f"  Artefato:     {store} ({snap['session_db_bytes']} bytes)")
         print("  Situação:     sessão local encontrada (use --live para estado em tempo real)")
     else:
         print("  Artefato:     nenhum (não pareado)")
@@ -53,7 +54,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
     if args.live:
         try:
-            data = run_bridge_command("status")
+            data = run_bridge_command("status", {"live": True, "wait_s": 25})
             _print_live_status(data)
         except (WhatsAppApiError, WhatsAppNotConnectedError) as exc:
             LOGGER.warning("whatsapp status live FAIL | %s", exc)
@@ -96,6 +97,11 @@ def _cmd_configure(_: argparse.Namespace) -> int:
 
 def _cmd_pair(args: argparse.Namespace) -> int:
     settings.ensure_data_dirs()
+    if getattr(args, "fresh", False):
+        removed = remove_session_data()
+        if removed:
+            print("Sessão local anterior removida:", ", ".join(removed))
+        print()
     if not settings.whatsapp_enabled:
         print(
             "WhatsApp desabilitado. Defina INTEGRATOR_WHATSAPP_ENABLED=true e tente novamente.",
@@ -113,8 +119,20 @@ def _cmd_pair(args: argparse.Namespace) -> int:
     WhatsAppSession.reset()
     print(json.dumps(data, ensure_ascii=False, indent=2))
     if data.get("logged_in"):
-        LOGGER.info("whatsapp pair OK")
-        print("\nOK — sessão pareada. No Hermes: nova conversa ou /reload-mcp.")
+        outcome = str(data.get("pairing_outcome", "linked"))
+        LOGGER.info("whatsapp pair OK | outcome=%s", outcome)
+        if outcome == "restored":
+            print(
+                "\nAviso: credencial restaurada do disco (log «Successfully authenticated»), "
+                "não um novo QR nesta execução."
+            )
+            print(
+                "Se o aparelho NÃO aparece em WhatsApp → Aparelhos conectados, limpe e pareie de novo:"
+            )
+            print("  integrator whatsapp remove")
+            print("  integrator whatsapp pair --fresh")
+            return 0
+        print("\nOK — dispositivo vinculado (pareamento com QR). No Hermes: nova conversa ou /reload-mcp.")
         return 0
     print("\nPareamento incompleto. Tente novamente.", file=sys.stderr)
     return 1
@@ -183,6 +201,11 @@ def add_whatsapp_subparser(sub: argparse._SubParsersAction) -> None:
         type=float,
         default=120.0,
         help="Segundos aguardando QR (padrão 120)",
+    )
+    p_pair.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Apagar sessão local antes de parear (use se o celular não lista o dispositivo)",
     )
     p_pair.set_defaults(func=_cmd_pair)
 

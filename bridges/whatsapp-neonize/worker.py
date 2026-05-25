@@ -7,6 +7,7 @@ Protocol: one JSON object per line on stdin/stdout.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import threading
@@ -30,7 +31,6 @@ from neonize.events import (
     HistorySyncEv,
     MessageEv,
     PairStatusEv,
-    event,
 )
 from neonize.proto.Neonize_pb2 import Message as NeonizeMessage
 from neonize.utils import Jid2String, build_jid, extract_text
@@ -39,6 +39,42 @@ from neonize.utils.enum import ReceiptType
 
 class WorkerError(Exception):
     pass
+
+
+_RPC_STDOUT: Any = None
+
+
+class _LibraryStdout:
+    """Keep neonize/whatsmeow off the JSON-RPC pipe (real stdout saved in _RPC_STDOUT)."""
+
+    def write(self, data: str) -> int:
+        if data:
+            sys.stderr.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        sys.stderr.flush()
+
+    def isatty(self) -> bool:
+        return sys.stderr.isatty()
+
+
+def _redirect_library_stdout() -> None:
+    global _RPC_STDOUT
+    _RPC_STDOUT = sys.stdout
+    sys.stdout = _LibraryStdout()  # type: ignore[assignment]
+
+
+def _configure_library_logging() -> None:
+    root = logging.getLogger()
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s.%(msecs)03d [%(name)s %(levelname)s] - %(message)s")
+    )
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
 
 
 @dataclass
@@ -66,6 +102,8 @@ class SessionState:
     state: str = "disconnected"  # disconnected | qr | connected
     push_name: str = ""
     last_error: str = ""
+    pair_status: str = ""
+    qr_displayed: bool = False
     chats: dict[str, ChatEntry] = field(default_factory=dict)
     messages: dict[str, list[StoredMessage]] = field(default_factory=dict)
     lock: threading.RLock = field(default_factory=threading.RLock)
@@ -76,8 +114,8 @@ class NeonizeWorker:
         self.session_dir = session_dir
         self.session_dir.mkdir(parents=True, exist_ok=True)
         os.chdir(self.session_dir)
-        self.db_name = str(session_dir / "neonize.db")
-        self.client = NewClient("integrator", uuid="integrator")
+        self.client_name = os.environ.get("INTEGRATOR_WHATSAPP_CLIENT_NAME", "integrator")
+        self.client = NewClient(self.client_name, uuid=self.client_name)
         self.state = SessionState()
         self._connect_thread: threading.Thread | None = None
         self._pairing = False
@@ -100,6 +138,7 @@ class NeonizeWorker:
         @self.client.event(PairStatusEv)
         def on_pair_status(_client: NewClient, evt: PairStatusEv) -> None:
             with self.state.lock:
+                self.state.pair_status = str(evt.Status or "")
                 if evt.Status == "success":
                     self.state.state = "connected"
                 elif evt.Status in ("timeout", "error"):
@@ -109,11 +148,14 @@ class NeonizeWorker:
         def on_qr(_client: NewClient, qr_data: bytes) -> None:
             with self.state.lock:
                 self.state.state = "qr"
+                if self._pairing:
+                    self.state.qr_displayed = True
             if self._pairing:
                 try:
                     import segno
 
-                    segno.make_qr(qr_data).terminal(compact=True)
+                    segno.make_qr(qr_data).terminal(compact=True, out=sys.stderr)
+                    sys.stderr.flush()
                 except Exception:
                     sys.stderr.write(
                         "[integrator] Escaneie o QR no app WhatsApp "
@@ -220,7 +262,6 @@ class NeonizeWorker:
         def _run() -> None:
             try:
                 self.client.connect()
-                event.wait()
             except Exception as exc:
                 with self.state.lock:
                     self.state.last_error = str(exc)
@@ -234,25 +275,45 @@ class NeonizeWorker:
         self._connect_thread.start()
 
     def connect_background(self) -> dict[str, Any]:
-        if not self.client.is_logged_in():
+        if not self.client.is_logged_in:
             with self.state.lock:
                 self.state.state = "qr"
         self._ensure_connect_thread()
-        return self.status()
+        return self.status(live=True, wait_s=20.0)
+
+    def _wait_session_ready(self, timeout_s: float) -> None:
+        """Aguarda login + socket após pair (ex.: código 515 e reconnect do whatsmeow)."""
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            if self.client.is_logged_in and self.client.is_connected:
+                with self.state.lock:
+                    self.state.state = "connected"
+                return
+            time.sleep(0.25)
+
+    def _pairing_outcome(self) -> str:
+        """linked = QR/PairStatusEv nesta execução; restored = só credencial em disco."""
+        with self.state.lock:
+            if self.state.pair_status == "success" or self.state.qr_displayed:
+                return "linked"
+        return "restored"
 
     def pair(self, timeout_s: float = 120.0) -> dict[str, Any]:
         self._pairing = True
         try:
             with self.state.lock:
                 self.state.state = "qr"
+                self.state.pair_status = ""
+                self.state.qr_displayed = False
             thread = threading.Thread(target=self.client.connect, daemon=True)
             thread.start()
             deadline = time.time() + timeout_s
             while time.time() < deadline:
-                if self.client.is_logged_in():
-                    with self.state.lock:
-                        self.state.state = "connected"
-                    return self.status()
+                if self.client.is_logged_in:
+                    self._wait_session_ready(min(45.0, timeout_s * 0.4))
+                    result = self.status(live=True, wait_s=5.0)
+                    result["pairing_outcome"] = self._pairing_outcome()
+                    return result
                 time.sleep(0.5)
             raise WorkerError(
                 "Tempo esgotado aguardando pareamento. Escaneie o QR e tente novamente."
@@ -260,9 +321,12 @@ class NeonizeWorker:
         finally:
             self._pairing = False
 
-    def status(self) -> dict[str, Any]:
-        logged_in = self.client.is_logged_in()
-        connected = self.client.is_connected()
+    def status(self, *, live: bool = False, wait_s: float = 20.0) -> dict[str, Any]:
+        if live:
+            self._ensure_connect_thread()
+            self._wait_session_ready(wait_s)
+        logged_in = self.client.is_logged_in
+        connected = self.client.is_connected
         with self.state.lock:
             state = self.state.state
             if logged_in:
@@ -370,7 +434,7 @@ class NeonizeWorker:
         chat_id: str | None = None,
         number: str | None = None,
     ) -> dict[str, Any]:
-        if not self.client.is_logged_in():
+        if not self.client.is_logged_in:
             raise WorkerError("WhatsApp não conectado. Rode pareamento antes.")
         if chat_id:
             jid = self._jid_from_chat_id(chat_id)
@@ -388,7 +452,7 @@ class NeonizeWorker:
         }
 
     def mark_read(self, *, chat_id: str, message_ids: list[str] | None = None) -> dict[str, Any]:
-        if not self.client.is_logged_in():
+        if not self.client.is_logged_in:
             raise WorkerError("WhatsApp não conectado.")
         from neonize.proto.Neonize_pb2 import JID
 
@@ -421,7 +485,10 @@ class NeonizeWorker:
         if method == "ping":
             return {"pong": True}
         if method == "status":
-            return self.status()
+            return self.status(
+                live=bool(params.get("live")),
+                wait_s=float(params.get("wait_s", 20)),
+            )
         if method == "connect":
             return self.connect_background()
         if method == "pair":
@@ -456,7 +523,7 @@ class NeonizeWorker:
 
     def shutdown(self) -> dict[str, Any]:
         try:
-            if self.client.is_connected():
+            if self.client.is_connected:
                 self.client.disconnect()
         except Exception:
             pass
@@ -473,11 +540,15 @@ def _read_request(line: str) -> dict[str, Any]:
 
 
 def _write_response(obj: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
+    if _RPC_STDOUT is None:
+        raise WorkerError("RPC stdout não inicializado")
+    _RPC_STDOUT.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    _RPC_STDOUT.flush()
 
 
 def main() -> None:
+    _redirect_library_stdout()
+    _configure_library_logging()
     session_dir = Path(os.environ.get("INTEGRATOR_WHATSAPP_SESSION_DIR", "data/whatsapp"))
     worker = NeonizeWorker(session_dir.resolve())
     for line in sys.stdin:

@@ -36,7 +36,10 @@ def _base_metadata() -> list[dict[str, Any]]:
     return [
         {
             "name": "get_whatsapp_connection_status",
-            "description": "Estado da sessão WhatsApp local (conectado, QR, desconectado).",
+            "description": (
+                "Estado da sessão WhatsApp (conectado, QR, desconectado). "
+                "Pareamento inicial só via terminal: integrator whatsapp pair."
+            ),
             "input_schema": {"type": "object", "properties": {}},
         },
         {

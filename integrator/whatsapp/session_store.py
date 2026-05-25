@@ -5,30 +5,40 @@ from pathlib import Path
 
 from integrator.config import settings
 
+# Must match NewClient(name=...) in bridges/whatsapp-neonize/worker.py
+WHATSAPP_CLIENT_NAME = "integrator"
+
 
 def session_path() -> Path:
     return settings.whatsapp_session_path.resolve()
 
 
+def session_store_path() -> Path:
+    """Arquivo de sessão whatsmeow/neonize (nome = primeiro arg do NewClient)."""
+    return session_path() / WHATSAPP_CLIENT_NAME
+
+
 def session_db_path() -> Path:
-    return session_path() / "neonize.db"
+    """Alias legado — preferir session_store_path()."""
+    return session_store_path()
 
 
 def has_persisted_session() -> bool:
     """True se há artefato de sessão neonize no disco (sem subir o worker)."""
-    db = session_db_path()
-    return db.is_file() and db.stat().st_size > 0
+    store = session_store_path()
+    return store.is_file() and store.stat().st_size > 0
 
 
 def local_status_snapshot() -> dict[str, object]:
     """Resumo rápido para CLI/status geral — sem subprocesso neonize."""
     path = session_path()
-    db = session_db_path()
+    store = session_store_path()
     return {
         "enabled": settings.whatsapp_enabled,
         "session_dir": str(path),
+        "session_store_file": WHATSAPP_CLIENT_NAME,
         "has_session_db": has_persisted_session(),
-        "session_db_bytes": db.stat().st_size if db.is_file() else 0,
+        "session_db_bytes": store.stat().st_size if store.is_file() else 0,
         "max_message_chars": settings.whatsapp_max_message_chars,
     }
 

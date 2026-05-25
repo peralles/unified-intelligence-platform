@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from integrator.config import settings
-from integrator.whatsapp.bridge_client import WhatsAppBridgeClient
+from integrator.whatsapp.bridge_client import WhatsAppBridgeClient, resolve_session_dir
 from integrator.whatsapp.logging_whatsapp import LOGGER
 
 
@@ -22,7 +22,7 @@ class WhatsAppSession:
     @classmethod
     def get(cls) -> WhatsAppSession:
         if cls._instance is None:
-            cls._instance = WhatsAppSession(settings.whatsapp_session_dir)
+            cls._instance = WhatsAppSession(resolve_session_dir())
             atexit.register(cls._instance.shutdown)
         return cls._instance
 
@@ -35,14 +35,17 @@ class WhatsAppSession:
     def ensure_background_connection(self) -> None:
         if not settings.whatsapp_enabled:
             return
-        if self._started:
+        if self._started and self._bridge.is_worker_alive():
             return
+        self._started = False
         LOGGER.debug("session connect_background")
         self._bridge.call("connect")
         self._started = True
 
     def status(self) -> dict[str, Any]:
-        return self._bridge.call("status")
+        """Estado em tempo real (sobe connect no worker se ainda não iniciou)."""
+        self.ensure_background_connection()
+        return self._bridge.call("status", {"live": True, "wait_s": 25})
 
     def pair(self, *, timeout_s: float = 120.0) -> dict[str, Any]:
         return self._bridge.call("pair", {"timeout_s": timeout_s})
