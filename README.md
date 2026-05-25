@@ -26,8 +26,10 @@ uv run integrator serve     # MCP para o Hermes
 
 ```bash
 uv run integrator --help
-uv run pytest
+./scripts/validate.sh   # qualidade + performance
 ```
+
+Relatório: [`docs/AVALIACAO_QUALIDADE_PERFORMANCE.md`](docs/AVALIACAO_QUALIDADE_PERFORMANCE.md)
 
 ### Hermes
 

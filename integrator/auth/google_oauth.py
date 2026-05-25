@@ -95,4 +95,8 @@ def run_interactive_login(
     email = _fetch_account_email(creds)
     if email:
         update_account_email(account_id, email)
+
+    from integrator.providers.tool_cache import invalidate_live_tools
+
+    invalidate_live_tools(account_id)
     return get_account(account_id).token_path

@@ -131,7 +131,14 @@ def add_account(account_id: str, *, label: str | None = None, email: str | None 
         data["default_account"] = aid
     _save_raw(data)
     settings.token_path_for(aid).parent.mkdir(parents=True, exist_ok=True)
+    invalidate_metadata_cache_only()
     return get_account(aid)
+
+
+def invalidate_metadata_cache_only() -> None:
+    from integrator.providers.google_tools import invalidate_metadata_cache
+
+    invalidate_metadata_cache()
 
 
 def update_account_email(account_id: str, email: str) -> None:
@@ -173,6 +180,15 @@ def remove_account(account_id: str) -> None:
     if data.get("default_account") == aid:
         data["default_account"] = next(iter(accounts), None)
     _save_raw(data)
+    _invalidate_caches(aid)
+
+
+def _invalidate_caches(account_id: str) -> None:
+    from integrator.providers.google_tools import invalidate_metadata_cache
+    from integrator.providers.tool_cache import invalidate_live_tools
+
+    invalidate_live_tools(account_id)
+    invalidate_metadata_cache()
 
 
 def resolve_account_id(explicit: str | None = None) -> str:
