@@ -1,0 +1,33 @@
+---
+description: Contexto do integrador LangChain → Hermes (uv, memória, secrets)
+alwaysApply: true
+---
+
+# Projeto
+
+Servidor MCP Python: 12 tools Gmail + Calendar para [Hermes](https://dev.to/emmanuelthecoder/hermes-the-self-improving-agent-you-can-actually-run-yourself-555l).
+
+## Antes de mudanças amplas
+
+- Ler [AGENTS.md](AGENTS.md) e [.memory/active.md](.memory/active.md)
+- Decisões/padrões: [.memory/decisions.md](.memory/decisions.md), [.memory/patterns.md](.memory/patterns.md)
+
+## Ferramentas
+
+- **uv** apenas: `uv sync --all-extras`, `uv run integrator …`
+- Validação: `./scripts/validate.sh`
+- Lint/teste por arquivo: ver tabela em AGENTS.md
+
+## Nunca versionar
+
+- `credentials/`, `data/`, `.env` — OAuth e tokens
+- `.cursor/hooks/state/` — estado local do Cursor
+
+## Commits de IA
+
+Incluir `Co-Authored-By: <modelo> <noreply@anthropic.com>` quando aplicável.
+
+## Docs
+
+- CLI e setup: [README.md](README.md)
+- Hermes: [config/hermes.example.yaml](config/hermes.example.yaml)

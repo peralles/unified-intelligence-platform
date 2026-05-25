@@ -50,6 +50,11 @@ Co-Authored-By: <nome do modelo> <noreply@anthropic.com>
 - Ao concluir trabalho relevante: atualizar `active.md`; promover decisões estáveis para `decisions.md`
 - Manutenção: `.memory/README.md`
 
+## Cursor (IDE)
+
+- Regras versionadas: `.cursor/rules/` (`project.mdc`, `python-integrator.mdc`)
+- Não versionar: `.cursor/hooks/state/`
+
 ## Referências
 
 - Arquitetura: `docs/PLANO_LANGCHAIN_HERMES.md`

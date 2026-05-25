@@ -1,0 +1,35 @@
+---
+description: Convenções Python do pacote integrator e testes
+globs: integrator/**/*.py,tests/**/*.py
+alwaysApply: false
+---
+
+# Python (`integrator/` + `tests/`)
+
+## Estilo
+
+- `from __future__ import annotations` em módulos novos/alterados
+- Identificadores em inglês; mensagens CLI/docs podem ser PT-BR
+- Config via `Settings` e prefixo `INTEGRATOR_*` ([integrator/config.py](integrator/config.py))
+
+## Domínio
+
+- **12 tools** MCP fixas — alterar lista exige atualizar testes e `scripts/validate.sh`
+- Account IDs: `^[a-z][a-z0-9_-]{0,31}$`, normalizar com `.strip().lower()`
+- Erros MCP: prefixo `[integrator]` em [integrator/mcp/server.py](integrator/mcp/server.py)
+- Confirmação: `send_gmail_message`, `delete_calendar_event` → `confirm: true` ([integrator/security/policy.py](integrator/security/policy.py))
+
+## Arquivos centrais
+
+| Área | Caminho |
+|------|---------|
+| MCP | `integrator/mcp/server.py` |
+| Tools | `integrator/providers/google_tools.py` |
+| Contas | `integrator/accounts/registry.py` |
+
+## Verificação
+
+```bash
+uv run ruff check integrator/caminho/arquivo.py
+uv run pytest tests/test_arquivo.py -q --tb=short
+```

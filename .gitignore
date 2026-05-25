@@ -16,6 +16,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# Cursor — estado local (não compartilhar entre máquinas)
+.cursor/hooks/state/
+
 # Runtime / dados locais
 data/
 !data/.gitkeep
