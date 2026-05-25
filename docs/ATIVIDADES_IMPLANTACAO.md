@@ -61,8 +61,8 @@ uv sync --all-extras
 # 1) Coloque credentials.json em credentials/
 uv run integrator-auth
 
-# 2) Testes
-uv run pytest
+# 2) Validação técnica (pytest + smoke MCP)
+./scripts/validate.sh
 
 # 3) Servidor MCP (Hermes chama este processo)
 uv run integrator-serve
