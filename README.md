@@ -1,19 +1,43 @@
 # Integrador LangChain → Hermes
 
-Repositório em reinício para um **gateway local de ferramentas** (OAuth + LangChain) consumido pelo agente [Hermes](https://dev.to/emmanuelthecoder/hermes-the-self-improving-agent-you-can-actually-run-yourself-555l) via MCP.
+Servidor **MCP local** (Python) que expõe **todas** as ferramentas oficiais LangChain de **Gmail** e **Google Calendar**, com OAuth unificado Google, para o agente [Hermes](https://dev.to/emmanuelthecoder/hermes-the-self-improving-agent-you-can-actually-run-yourself-555l).
 
-## Estado atual
+## Por que Python (e não Node)?
 
-- Branch de trabalho: `cursor/langchain-hermes-integrator-86e5`
-- Conteúdo legado removido; apenas documentação de planejamento por enquanto
-- **Implementação ainda não iniciada** — ver plano antes de codar
+Os toolkits `GmailToolkit` e `CalendarToolkit` vivem em `langchain-google-community` — mantidos e documentados em **Python**. A variante JS não oferece a mesma cobertura OAuth + tools; para simplicidade e menos código próprio, usamos Python + MCP stdio.
+
+## Início rápido
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+
+# Google Cloud: credentials.json em credentials/
+python -m integrator.cli.auth_login
+
+pytest -q
+python -m integrator.cli.serve   # Hermes conecta via stdio
+```
+
+### Hermes
+
+Copie e adapte [`config/hermes.example.yaml`](config/hermes.example.yaml) para `~/.hermes/config.yaml`.
 
 ## Documentação
 
-| Documento | Conteúdo |
-|-----------|----------|
-| [docs/PLANO_LANGCHAIN_HERMES.md](docs/PLANO_LANGCHAIN_HERMES.md) | Plano completo: arquitetura, OAuth Google, MCP, fases e decisões |
+| Arquivo | Conteúdo |
+|---------|----------|
+| [docs/PLANO_LANGCHAIN_HERMES.md](docs/PLANO_LANGCHAIN_HERMES.md) | Arquitetura e decisões |
+| [docs/ATIVIDADES_IMPLANTACAO.md](docs/ATIVIDADES_IMPLANTACAO.md) | Checklist de implantação |
 
-## Próximo passo
+## Tools (12)
 
-Revisar o plano e decidir se implantamos neste repositório (Fase 1 em diante no documento).
+Gmail: `create_gmail_draft`, `send_gmail_message`, `search_gmail`, `get_gmail_message`, `get_gmail_thread`
+
+Calendar: `create_calendar_event`, `search_events`, `update_calendar_event`, `get_calendars_info`, `move_calendar_event`, `delete_calendar_event`, `get_current_datetime`
+
+## Segurança
+
+- `credentials/` e `data/tokens/` estão no `.gitignore`
+- Acesso completo às APIs Google — use apenas em ambiente confiável

@@ -1,0 +1,11 @@
+# Copie/adapte para ~/.hermes/config.yaml
+# Hermes na mesma máquina — MCP stdio apontando para este repo.
+
+mcp_servers:
+  langchain-integrator:
+    command: /caminho/para/unified-intelligence-platform/.venv/bin/python
+    args:
+      - -m
+      - integrator.cli.serve
+    env:
+      INTEGRATOR_ROOT: /caminho/para/unified-intelligence-platform

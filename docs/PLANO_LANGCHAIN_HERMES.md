@@ -1,8 +1,8 @@
 # Plano: Integrador LangChain para Hermes (OAuth + ferramentas locais)
 
-**Versão:** 0.1 (planejamento)  
+**Versão:** 1.0 (implementado — Fase 1)  
 **Branch:** `cursor/langchain-hermes-integrator-86e5`  
-**Status:** Aguardando decisão de implementação
+**Status:** MVP implementado; validação manual com Google OAuth pendente
 
 ---
 
@@ -265,15 +265,15 @@ LangChain nem sempre tem toolkit oficial; onde não houver, usar `langchain_comm
 3. Criar credencial OAuth **Desktop app** → baixar `credentials.json` → `credentials/` (fora do git).
 4. Adicionar seu e-mail como usuário de teste (app em modo Testing).
 
-### Fase 1 — MVP local (recomendado primeiro)
+### Fase 1 — MVP local ✅
 
-- [ ] `pyproject.toml` + ambiente virtual
-- [ ] Wrapper `google_oauth` usando `get_google_credentials` com paths fixos
-- [ ] CLI `auth_login` para Gmail e Calendar
-- [ ] Carregar `GmailToolkit` + `CalendarToolkit` e listar tools
-- [ ] Servidor MCP stdio expondo subset de tools (ex.: search + get apenas)
-- [ ] README com passo a passo Hermes `config.yaml`
-- [ ] Teste manual: Hermes lista tools e executa busca de e-mail / listar eventos
+- [x] `pyproject.toml` + pacote `integrator`
+- [x] Wrapper `google_oauth` com token unificado
+- [x] CLI `python -m integrator.cli.auth_login`
+- [x] `GmailToolkit` + `CalendarToolkit` — 12 tools
+- [x] Servidor MCP stdio (`python -m integrator.cli.serve`)
+- [x] `config/hermes.example.yaml` + testes `pytest`
+- [ ] Validação manual com credenciais Google reais + Hermes
 
 ### Fase 2 — End shardening
 
@@ -290,14 +290,18 @@ LangChain nem sempre tem toolkit oficial; onde não houver, usar `langchain_comm
 
 ---
 
-## 9. Decisões em aberto (para você escolher antes de codar)
+## 9. Decisões (fechadas)
 
-1. **Scopes:** readonly primeiro ou acesso completo (enviar e-mail / criar evento)?
-2. **Token único ou separado** para Gmail vs Calendar?
-3. **Quais tools expor ao Hermes** na v1 (lista mínima vs toolkit completo)?
-4. **Hermes já instalado** na mesma máquina? Versão / path do `config.yaml`?
-5. **Outros providers** na v2 (Slack, Drive, etc.) — prioridade?
-6. **LLM:** Hermes usa o modelo dele; este repo **não** precisa de API key OpenAI (só Google OAuth).
+| # | Pergunta | Decisão |
+|---|----------|---------|
+| 1 | Scopes | **Acesso completo** — `https://mail.google.com/` + `https://www.googleapis.com/auth/calendar` |
+| 2 | Token | **Um único token** (`data/tokens/google.json`) — mais simples |
+| 3 | Tools Hermes | **Todas** (12 tools Gmail + Calendar) |
+| 4 | Hermes | **Sim**, mesma máquina → transporte MCP **stdio** |
+| 5 | Linhagem LangChain | **Python** (Node não tem paridade nos toolkits Google Community) |
+| 6 | LLM | Hermes usa o próprio modelo; integrador só expõe MCP + OAuth |
+
+Atividades detalhadas: [`ATIVIDADES_IMPLANTACAO.md`](ATIVIDADES_IMPLANTACAO.md).
 
 ---
 
@@ -331,7 +335,7 @@ LangChain nem sempre tem toolkit oficial; onde não houver, usar `langchain_comm
 | Gmail / Calendar | Toolkits `langchain-google-community` + OAuth via `get_google_credentials` |
 | Hermes | Cliente MCP; config em `~/.hermes/config.yaml` |
 | Onde fica o segredo | `credentials/` + `data/tokens/` local, fora do agente |
-| Implementar agora? | **Não** — este documento é o gate; após sua aprovação, executar Fase 1 |
+| Implementação | **Fase 1 concluída** em `integrator/` — ver README e ATIVIDADES |
 
 ---
 
