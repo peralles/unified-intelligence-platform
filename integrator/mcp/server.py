@@ -22,26 +22,38 @@ async def handle_list_tools() -> list[types.Tool]:
     return [metadata_to_mcp_tool(m) for m in list_all_tool_metadata()]
 
 
-def _error_content(message: str) -> list[types.TextContent]:
-    return [types.TextContent(type="text", text=message)]
+def _mcp_error(message: str) -> types.CallToolResult:
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=message)],
+        isError=True,
+    )
+
+
+def _mcp_success(text: str) -> types.CallToolResult:
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=text)],
+        isError=False,
+    )
 
 
 @server.call_tool()
-async def handle_call_tool(name: str, arguments: dict | None) -> list[types.TextContent]:
+async def handle_call_tool(
+    name: str, arguments: dict | None
+) -> types.CallToolResult:
     try:
         text = invoke_tool(name, arguments)
-        return [types.TextContent(type="text", text=text)]
+        return _mcp_success(text)
     except GoogleAuthError as exc:
-        return _error_content(f"[integrator] Autenticação necessária: {exc}")
+        return _mcp_error(f"[integrator] Autenticação necessária: {exc}")
     except ToolPolicyError as exc:
-        return _error_content(f"[integrator] Política: {exc}")
+        return _mcp_error(f"[integrator] Política: {exc}")
     except ConfirmationRequiredError as exc:
-        return _error_content(f"[integrator] Confirmação: {exc}")
+        return _mcp_error(f"[integrator] Confirmação: {exc}")
     except KeyError as exc:
-        return _error_content(str(exc))
+        return _mcp_error(str(exc))
     except Exception as exc:
         logger.exception("Tool %s failed", name)
-        return _error_content(f"[integrator] Erro ao executar '{name}': {exc}")
+        return _mcp_error(f"[integrator] Erro ao executar '{name}': {exc}")
 
 
 async def run_stdio_server() -> None:

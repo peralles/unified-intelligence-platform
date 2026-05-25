@@ -46,11 +46,17 @@ def load_google_credentials(*, interactive: bool = False):
     previous_cwd = os.getcwd()
     try:
         os.chdir(settings.root_dir)
-        creds = get_google_credentials(
-            scopes=list(GOOGLE_SCOPES),
-            token_file=str(token_path),
-            client_secrets_file=str(creds_path),
-        )
+        try:
+            creds = get_google_credentials(
+                scopes=list(GOOGLE_SCOPES),
+                token_file=str(token_path),
+                client_secrets_file=str(creds_path),
+            )
+        except Exception as exc:
+            raise GoogleAuthError(
+                f"Falha ao carregar ou renovar token Google ({token_path}): {exc}\n"
+                "Execute: uv run integrator-auth"
+            ) from exc
         secure_token_file(token_path)
         return creds
     finally:
