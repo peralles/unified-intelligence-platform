@@ -82,6 +82,8 @@ Antes de dar por concluído, verificar e alinhar:
 - Texto de CLI/docs para o usuário em português; código do pacote `integrator/` em inglês
 - Após mudanças no código MCP do integrador: um `/reload-mcp` no Hermes ou conversa nova (não repetir init completo)
 - Push para `main` com rebase quando o usuário pedir commit/pull explicitamente
+- Pareamento WhatsApp no terminal (`integrator whatsapp pair`), como Google (`integrator login`); Hermes não faz QR
+- Se `~/.hermes/config.yaml` já aponta para este repo: não refazer `integrator hermes setup` — `uv sync` + `/reload-mcp` basta
 
 ## Learned Workspace Facts
 
@@ -89,4 +91,6 @@ Antes de dar por concluído, verificar e alinhar:
 - `/reload-mcp` no Hermes pode parecer lento (discovery de plugins, `mcp_reload_confirm`); o integrator sozinho sobe em ~1s
 - Schemas MCP: inline de `$ref`/`$defs` antes de expor tools (evita `PointerToNowhere` no Hermes)
 - Diagnóstico Hermes+integrador: `~/.hermes/logs/mcp-stderr.log`, `agent.log`; `uv run integrator logs --failures`
-- WhatsApp: neonize via `bridges/whatsapp-neonize` + CLI `integrator whatsapp …` (ver `docs/WHATSAPP.md`)
+- WhatsApp (MVP): **neonize** em worker isolado `bridges/whatsapp-neonize/` (protobuf 7.x; venv principal fica em protobuf 6 por `langchain-google-community`); sessão `data/whatsapp/`; ver `docs/WHATSAPP.md`
+- Hermes: **um** `mcp_servers.langchain-integrator` stdio — 12 tools Google + 6 `whatsapp_*`; sem segundo MCP nem Evolution HTTP no MVP
+- `find_whatsapp_chats` sem `query` lista chats recentes (fallback para `list_chats`; evita erro quando o modelo omite filtro)

@@ -60,20 +60,26 @@ def _base_metadata() -> list[dict[str, Any]]:
         },
         {
             "name": "find_whatsapp_chats",
-            "description": "Busca chats por nome ou trecho do id/número.",
+            "description": (
+                "Busca chats por nome ou trecho do id/número. "
+                "Sem query, equivale a list_whatsapp_chats (útil para filtrar chats vazios "
+                "pela prévia da última mensagem)."
+            ),
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Texto para buscar em nome ou chat_id.",
+                        "description": (
+                            "Texto para buscar em nome ou chat_id. "
+                            "Opcional: omitir lista os chats recentes."
+                        ),
                     },
                     "limit": {
                         "type": "integer",
                         "description": "Máximo de resultados (padrão 20).",
                     },
                 },
-                "required": ["query"],
             },
         },
         {
@@ -203,13 +209,17 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
         elif name == "list_whatsapp_chats":
             result = session.list_chats(limit=int(args.get("limit", 30)))
         elif name == "find_whatsapp_chats":
-            query = str(args.get("query", "")).strip()
+            query = str(
+                args.get("query")
+                or args.get("q")
+                or args.get("search")
+                or ""
+            ).strip()
+            limit = int(args.get("limit", 20))
             if not query:
-                raise ToolPolicyError("[integrator] Parâmetro 'query' é obrigatório.")
-            result = session.find_chats(
-                query=query,
-                limit=int(args.get("limit", 20)),
-            )
+                result = session.list_chats(limit=limit)
+            else:
+                result = session.find_chats(query=query, limit=limit)
         elif name == "get_whatsapp_messages":
             chat_id = str(args.get("chat_id", "")).strip()
             if not chat_id:

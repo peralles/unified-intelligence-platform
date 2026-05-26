@@ -46,6 +46,27 @@ def test_get_whatsapp_connection_status_mock(mock_get: MagicMock) -> None:
 
 
 @patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_find_whatsapp_chats_without_query_lists(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.list_chats.return_value = [
+        {
+            "chat_id": "5511888888888@s.whatsapp.net",
+            "name": "Vazio",
+            "unread_count": 0,
+            "last_message_preview": "",
+            "is_group": False,
+        }
+    ]
+    mock_get.return_value = session
+
+    out = invoke_tool("find_whatsapp_chats", {"limit": 10})
+    data = json.loads(out)
+    assert data[0]["name"] == "Vazio"
+    session.list_chats.assert_called_once_with(limit=10)
+    session.find_chats.assert_not_called()
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
 def test_list_whatsapp_chats_mock(mock_get: MagicMock) -> None:
     session = MagicMock()
     session.list_chats.return_value = [

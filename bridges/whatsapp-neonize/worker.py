@@ -123,11 +123,17 @@ class NeonizeWorker:
 
     def _register_handlers(self) -> None:
         @self.client.event(ConnectedEv)
-        def on_connected(_client: NewClient, evt: ConnectedEv) -> None:
+        def on_connected(client: NewClient, _evt: ConnectedEv) -> None:
             with self.state.lock:
                 self.state.state = "connected"
-                if evt.Device and evt.Device.PushName:
-                    self.state.push_name = evt.Device.PushName
+            try:
+                me = client.get_me()
+                push = getattr(me, "Pushname", None) or getattr(me, "pushname", None)
+                if push:
+                    with self.state.lock:
+                        self.state.push_name = str(push)
+            except Exception:
+                pass
 
         @self.client.event(DisconnectedEv)
         def on_disconnected(_client: NewClient, _evt: DisconnectedEv) -> None:
@@ -444,7 +450,7 @@ class NeonizeWorker:
         else:
             raise WorkerError("Informe chat_id ou number.")
 
-        resp = self.client.send_message(jid, text=text)
+        resp = self.client.send_message(jid, text)
         return {
             "message_id": resp.ID,
             "timestamp": int(resp.Timestamp),
