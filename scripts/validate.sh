@@ -31,6 +31,7 @@ assert get_confirm_required_tools() == frozenset({
     'send_gmail_message',
     'delete_calendar_event',
     'send_whatsapp_text',
+    'delete_whatsapp_messages',
 })
 from integrator.accounts.registry import validate_account_id
 assert validate_account_id('Profissional') == 'profissional'

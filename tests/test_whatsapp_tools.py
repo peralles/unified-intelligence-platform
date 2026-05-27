@@ -87,6 +87,45 @@ def test_list_whatsapp_chats_mock(mock_get: MagicMock) -> None:
 
 def test_confirm_required_includes_whatsapp_send():
     assert "send_whatsapp_text" in get_confirm_required_tools()
+    assert "delete_whatsapp_messages" in get_confirm_required_tools()
+
+
+def test_delete_whatsapp_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "delete_whatsapp_messages",
+            {
+                "chat_id": "5511999999999@s.whatsapp.net",
+                "message_ids": ["ABC123"],
+            },
+        )
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_delete_whatsapp_messages_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.delete_messages.return_value = {
+        "chat_id": "5511999999999@s.whatsapp.net",
+        "deleted": ["ABC123"],
+        "failed": [],
+        "deleted_count": 1,
+    }
+    mock_get.return_value = session
+
+    out = invoke_tool(
+        "delete_whatsapp_messages",
+        {
+            "confirm": True,
+            "chat_id": "5511999999999@s.whatsapp.net",
+            "message_ids": ["ABC123"],
+        },
+    )
+    data = json.loads(out)
+    assert data["deleted_count"] == 1
+    session.delete_messages.assert_called_once_with(
+        chat_id="5511999999999@s.whatsapp.net",
+        message_ids=["ABC123"],
+    )
 
 
 @patch("integrator.whatsapp.bridge_client.subprocess.Popen")

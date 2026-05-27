@@ -19,7 +19,7 @@ Resumo das escolhas já documentadas em `docs/PLANO_LANGCHAIN_HERMES.md` e `READ
 
 ## Superfície de tools
 
-- **12 tools** Google LangChain + **6 tools** WhatsApp (`whatsapp_*`) via agregador `integrator/providers/tools.py`
+- **12 tools** Google LangChain + **7 tools** WhatsApp (`whatsapp_*`) via agregador `integrator/providers/tools.py`
 - Extensão futura: padrão `ToolProvider` para outros OAuth (Slack, Notion, etc.)
 
 ## WhatsApp (neonize)
@@ -27,7 +27,7 @@ Resumo das escolhas já documentadas em `docs/PLANO_LANGCHAIN_HERMES.md` e `READ
 - Backend: **neonize** (Whatsmeow in-process no worker), não Evolution HTTP no MVP
 - `neonize` exige **protobuf ≥7**; `langchain-google-community` fixa **protobuf &lt;7** no mesmo venv — worker isolado em `bridges/whatsapp-neonize/` (subprocesso JSON stdin/stdout)
 - Sessão: `data/whatsapp/` (gitignored); QR só em `integrator whatsapp pair`
-- `send_whatsapp_text` exige `confirm: true` (mesma política Fase 2)
+- `send_whatsapp_text` e `delete_whatsapp_messages` exigem `confirm: true` (mesma política Fase 2)
 - Hermes: **mesmo** `mcp_servers.langchain-integrator` stdio; sem segunda entrada MCP
 
 ## Segurança (Fase 2)

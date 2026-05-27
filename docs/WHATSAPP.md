@@ -1,6 +1,6 @@
 # WhatsApp no integrator (Hermes)
 
-Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.com/krypton-byte/neonize)), exposta como **6 tools MCP** no mesmo servidor que Gmail/Calendar.
+Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.com/krypton-byte/neonize)), exposta como **7 tools MCP** no mesmo servidor que Gmail/Calendar.
 
 ## Arquitetura
 
@@ -11,7 +11,7 @@ Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.co
 ```
 Hermes ──stdio──► integrator serve ──► providers/tools.py
                               ├── google_tools (12)
-                              └── whatsapp_tools (6) ──► bridge_client ──► worker.py (neonize)
+                              └── whatsapp_tools (7) ──► bridge_client ──► worker.py (neonize)
 ```
 
 ## Pré-requisitos (macOS)
@@ -60,7 +60,7 @@ Mesmo padrão do integrator (`data/logs/`):
 
 Diagnóstico: `integrator logs --failures`
 
-## Tools MCP (6)
+## Tools MCP (7)
 
 | Tool | Confirmação |
 |------|-------------|
@@ -69,9 +69,17 @@ Diagnóstico: `integrator logs --failures`
 | `find_whatsapp_chats` | não |
 | `get_whatsapp_messages` | não |
 | `send_whatsapp_text` | **`confirm: true`** |
+| `delete_whatsapp_messages` | **`confirm: true`** |
 | `mark_whatsapp_read` | não |
 
-Total com Google: **18 tools** (12 + 6).
+Total com Google: **19 tools** (12 + 7).
+
+### Apagar mensagens
+
+- `delete_whatsapp_messages` usa `revoke_message` do neonize (**apagar para todos**).
+- Só funciona para **mensagens enviadas por você** (`from_me`); IDs vêm de `get_whatsapp_messages`.
+- WhatsApp impõe janela de tempo (~48 h) e outras regras; falhas parciais aparecem em `failed` na resposta JSON.
+- Não suporta “apagar só para mim” mensagens de terceiros (fluxo `send_app_state` do WhatsApp).
 
 ## Variáveis de ambiente
 
@@ -87,7 +95,7 @@ Ver `config/integrator.example.env`.
 
 - QR e credenciais **nunca** em argumentos de tool.
 - Auditoria sem corpo de mensagem (metadados + hash de `chat_id`).
-- `send_whatsapp_text` na denylist/allowlist como as tools Google.
+- `send_whatsapp_text` e `delete_whatsapp_messages` na denylist/allowlist como as tools Google.
 - Uso não oficial do WhatsApp Web — risco de banimento; assumido uso pessoal.
 
 ## Trilha B (Evolution API) — opcional

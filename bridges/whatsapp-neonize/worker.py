@@ -487,6 +487,67 @@ class NeonizeWorker:
                 entry.unread_count = 0
         return {"marked": len(ids)}
 
+    def delete_messages(
+        self,
+        *,
+        chat_id: str,
+        message_ids: list[str],
+    ) -> dict[str, Any]:
+        """Revoke (delete for everyone) messages you sent. WhatsApp API limits apply."""
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        ids = [str(mid).strip() for mid in message_ids if str(mid).strip()]
+        if not ids:
+            raise WorkerError("Informe pelo menos um message_id.")
+
+        chat_jid = self._jid_from_chat_id(chat_id)
+        me = self.client.get_me()
+        my_jid = me.JID if me and me.JID else chat_jid
+
+        with self.state.lock:
+            by_id = {m.message_id: m for m in self.state.messages.get(chat_id, [])}
+
+        deleted: list[str] = []
+        failed: list[dict[str, str]] = []
+
+        for mid in ids:
+            stored = by_id.get(mid)
+            if stored is not None and not stored.from_me:
+                failed.append(
+                    {
+                        "message_id": mid,
+                        "error": (
+                            "Só é possível apagar para todos mensagens enviadas por você. "
+                            "Mensagens de terceiros exigem outro fluxo (não suportado aqui)."
+                        ),
+                    }
+                )
+                continue
+
+            try:
+                self.client.revoke_message(chat_jid, my_jid, mid)
+            except Exception as exc:
+                failed.append({"message_id": mid, "error": str(exc)})
+                continue
+
+            deleted.append(mid)
+            with self.state.lock:
+                bucket = self.state.messages.get(chat_id, [])
+                self.state.messages[chat_id] = [
+                    m for m in bucket if m.message_id != mid
+                ]
+                if stored and stored.last_message_preview:
+                    entry = self.state.chats.get(chat_id)
+                    if entry and entry.last_message_preview == stored.text[:200]:
+                        entry.last_message_preview = ""
+
+        return {
+            "chat_id": chat_id,
+            "deleted": deleted,
+            "failed": failed,
+            "deleted_count": len(deleted),
+        }
+
     def handle(self, method: str, params: dict[str, Any]) -> Any:
         if method == "ping":
             return {"pong": True}
@@ -522,6 +583,14 @@ class NeonizeWorker:
             return self.mark_read(
                 chat_id=str(params["chat_id"]),
                 message_ids=params.get("message_ids"),
+            )
+        if method == "delete_messages":
+            raw_ids = params.get("message_ids")
+            if not isinstance(raw_ids, list):
+                raise WorkerError("message_ids deve ser uma lista.")
+            return self.delete_messages(
+                chat_id=str(params["chat_id"]),
+                message_ids=[str(i) for i in raw_ids],
             )
         if method == "shutdown":
             return self.shutdown()

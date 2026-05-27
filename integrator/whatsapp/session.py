@@ -103,6 +103,18 @@ class WhatsAppSession:
             {"chat_id": chat_id, "message_ids": message_ids},
         )
 
+    def delete_messages(
+        self,
+        *,
+        chat_id: str,
+        message_ids: list[str],
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "delete_messages",
+            {"chat_id": chat_id, "message_ids": message_ids},
+        )
+
     def shutdown(self) -> None:
         if self._started:
             try:

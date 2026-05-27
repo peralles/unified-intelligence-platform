@@ -17,7 +17,7 @@ CLI única, focada em **poucos comandos** e suporte a **várias contas Google** 
 | `integrator whatsapp pair` | Parear ou reconfigurar (QR no terminal) |
 | `integrator whatsapp remove` | Apagar sessão local (`-y` sem confirmação) |
 | `integrator whatsapp disconnect` | Encerrar worker em memória (sem apagar sessão) |
-| `integrator tools` | Listar 18 tools MCP (12 Google + 6 WhatsApp) |
+| `integrator tools` | Listar 19 tools MCP (12 Google + 7 WhatsApp) |
 | `integrator hermes doctor` | Pré-requisitos Hermes + integrador |
 | `integrator hermes setup` | Gravar `mcp_servers` em `~/.hermes/config.yaml` |
 | `integrator serve` | Servidor MCP stdio (Hermes inicia o processo) |

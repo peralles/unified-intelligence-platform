@@ -28,7 +28,7 @@ Seguir o que já existe em `integrator/` e `tests/`.
 ## Testes
 
 - `pytest`, `asyncio_mode = auto` (`pyproject.toml`)
-- Assert de 18 tools (12 Google + 6 WhatsApp) e tools com confirmação nos smokes de `scripts/validate.sh`
+- Assert de 19 tools (12 Google + 7 WhatsApp) e tools com confirmação nos smokes de `scripts/validate.sh`
 - Performance: budgets em `tests/test_performance.py` e smoke no validate.sh
 
 ## Logging

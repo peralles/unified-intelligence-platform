@@ -37,8 +37,8 @@ Antes de dar por concluído, verificar e alinhar:
 
 - Settings: prefixo env `INTEGRATOR_*` — ver `integrator/config.py`, `config/integrator.example.env`
 - Account IDs: `^[a-z][a-z0-9_-]{0,31}$`; entrada normalizada com `.strip().lower()`
-- Superfície MCP: **12 tools** Google (Gmail + Calendar) + **6 tools** WhatsApp (`whatsapp_*`); agregador `integrator/providers/tools.py`; `validate.sh` asserta 18 total
-- Confirmação: `send_gmail_message`, `delete_calendar_event` e `send_whatsapp_text` exigem `"confirm": true` nos args
+- Superfície MCP: **12 tools** Google (Gmail + Calendar) + **7 tools** WhatsApp (`whatsapp_*`); agregador `integrator/providers/tools.py`; `validate.sh` asserta 19 total
+- Confirmação: `send_gmail_message`, `delete_calendar_event`, `send_whatsapp_text` e `delete_whatsapp_messages` exigem `"confirm": true` nos args
 - Erros MCP: prefixo `[integrator]` em `integrator/mcp/server.py`
 - Nunca commitar `credentials/`, `data/`, `.env`; tokens fora do contexto do LLM
 - Código em inglês; docs/CLI em português — seguir estilo existente no módulo tocado

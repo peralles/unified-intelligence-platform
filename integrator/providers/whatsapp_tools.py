@@ -26,6 +26,7 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "find_whatsapp_chats",
     "get_whatsapp_messages",
     "send_whatsapp_text",
+    "delete_whatsapp_messages",
     "mark_whatsapp_read",
 })
 
@@ -123,6 +124,27 @@ def _base_metadata() -> list[dict[str, Any]]:
                     },
                 },
                 "required": ["text"],
+            },
+        },
+        {
+            "name": "delete_whatsapp_messages",
+            "description": (
+                "Apaga mensagens enviadas por você no chat (revogar para todos), "
+                "usando message_id de get_whatsapp_messages. "
+                "Não remove mensagens de terceiros. Limite de tempo do WhatsApp pode aplicar. "
+                "Ação irreversível — requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do chat."},
+                    "message_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "IDs das mensagens a apagar (suas).",
+                    },
+                },
+                "required": ["chat_id", "message_ids"],
             },
         },
         {
@@ -248,6 +270,25 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
                 text=text,
                 chat_id=str(chat_id) if chat_id else None,
                 number=str(number) if number else None,
+            )
+        elif name == "delete_whatsapp_messages":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            raw_ids = args.get("message_ids")
+            if not isinstance(raw_ids, list) or not raw_ids:
+                raise ToolPolicyError(
+                    "[integrator] Parâmetro 'message_ids' (lista não vazia) é obrigatório."
+                )
+            message_ids = [str(i).strip() for i in raw_ids if str(i).strip()]
+            if not message_ids:
+                raise ToolPolicyError(
+                    "[integrator] Parâmetro 'message_ids' (lista não vazia) é obrigatório."
+                )
+            result = session.delete_messages(
+                chat_id=chat_id,
+                message_ids=message_ids,
             )
         elif name == "mark_whatsapp_read":
             chat_id = str(args.get("chat_id", "")).strip()
