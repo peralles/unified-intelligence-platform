@@ -1,6 +1,6 @@
 # WhatsApp no integrator (Hermes)
 
-Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.com/krypton-byte/neonize)), exposta como **9 tools MCP** no mesmo servidor que Gmail/Calendar.
+Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.com/krypton-byte/neonize)), exposta como **17 tools MCP** no mesmo servidor que Gmail/Calendar.
 
 ## Arquitetura
 
@@ -11,7 +11,7 @@ Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.co
 ```
 Hermes ──stdio──► integrator serve ──► providers/tools.py
                               ├── google_tools (12)
-                              └── whatsapp_tools (9) ──► bridge_client ──► worker.py (neonize)
+                              └── whatsapp_tools (17) ──► bridge_client ──► worker.py (neonize)
 ```
 
 ## Pré-requisitos (macOS)
@@ -60,21 +60,21 @@ Mesmo padrão do integrator (`data/logs/`):
 
 Diagnóstico: `integrator logs --failures`
 
-## Tools MCP (9)
+## Tools MCP (17)
 
 | Tool | Confirmação |
 |------|-------------|
 | `get_whatsapp_connection_status` | não |
-| `list_whatsapp_chats` | não |
-| `find_whatsapp_chats` | não |
-| `get_whatsapp_messages` | não |
-| `sync_whatsapp_chat_history` | não |
-| `send_whatsapp_text` | **`confirm: true`** |
-| `delete_whatsapp_messages` | **`confirm: true`** |
-| `delete_whatsapp_messages_for_me` | **`confirm: true`** |
-| `mark_whatsapp_read` | não |
+| `list_whatsapp_chats` / `find_whatsapp_chats` | não |
+| `get_whatsapp_messages` / `sync_whatsapp_chat_history` / `search_whatsapp_messages` | não |
+| `get_whatsapp_group_info` | não |
+| `whatsapp_reply_text` / `send_whatsapp_text` / `send_whatsapp_image` | **`confirm: true`** |
+| `whatsapp_react_message` | não |
+| `edit_whatsapp_text` | **`confirm: true`** |
+| `delete_whatsapp_messages` / `delete_whatsapp_messages_for_me` | **`confirm: true`** |
+| `archive_whatsapp_chat` / `pin_whatsapp_chat` / `mark_whatsapp_read` | não |
 
-Total com Google: **21 tools** (12 + 9).
+Total com Google: **31 tools** (12 LangChain + 2 Gmail extra + 17 WhatsApp).
 
 ### Apagar mensagens
 

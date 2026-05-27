@@ -8,7 +8,7 @@ echo "==> uv sync"
 uv sync --all-extras
 
 echo "==> ruff"
-uv run ruff check integrator tests
+uv run ruff check integrator tests bridges/whatsapp-neonize/worker.py
 
 echo "==> pytest"
 uv run pytest -q --tb=short
@@ -16,6 +16,7 @@ uv run pytest -q --tb=short
 echo "==> import smoke"
 uv run python -c "
 from integrator.providers.tools import (
+    GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
     WHATSAPP_TOOL_COUNT,
@@ -26,17 +27,29 @@ from integrator.security.policy import get_confirm_required_tools
 meta = list_all_tool_metadata()
 google = list_google_tool_metadata()
 assert len(google) == GOOGLE_TOOL_COUNT == 12, len(google)
-assert len(meta) == TOTAL_TOOL_COUNT == GOOGLE_TOOL_COUNT + WHATSAPP_TOOL_COUNT, len(meta)
-assert get_confirm_required_tools() == frozenset({
+expected_total = GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + WHATSAPP_TOOL_COUNT
+assert len(meta) == TOTAL_TOOL_COUNT == expected_total, (len(meta), expected_total)
+confirm = get_confirm_required_tools()
+for required in (
     'send_gmail_message',
+    'reply_gmail_message',
+    'modify_gmail_labels',
     'delete_calendar_event',
     'send_whatsapp_text',
+    'whatsapp_reply_text',
+    'send_whatsapp_image',
+    'edit_whatsapp_text',
     'delete_whatsapp_messages',
     'delete_whatsapp_messages_for_me',
-})
+):
+    assert required in confirm, required
 from integrator.accounts.registry import validate_account_id
 assert validate_account_id('Profissional') == 'profissional'
-print('OK:', len(meta), 'tools (', GOOGLE_TOOL_COUNT, 'Google +', WHATSAPP_TOOL_COUNT, 'WhatsApp)')
+print(
+    'OK:', len(meta), 'tools (',
+    GOOGLE_TOOL_COUNT, 'Google +', GMAIL_EXTRA_TOOL_COUNT, 'Gmail extra +',
+    WHATSAPP_TOOL_COUNT, 'WhatsApp)',
+)
 "
 
 echo "==> MCP handlers smoke"
