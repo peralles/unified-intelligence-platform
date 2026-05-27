@@ -48,6 +48,11 @@ for required in (
     'send_whatsapp_sticker',
     'send_whatsapp_contact',
     'trash_gmail_message',
+    'send_whatsapp_poll',
+    'send_whatsapp_album',
+    'update_whatsapp_blocklist',
+    'leave_whatsapp_group',
+    'restore_gmail_message',
 ):
     assert required in confirm, required
 from integrator.accounts.registry import validate_account_id

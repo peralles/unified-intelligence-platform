@@ -15,6 +15,9 @@ GMAIL_EXTRA_TOOL_NAMES = frozenset({
     "get_gmail_attachment",
     "trash_gmail_message",
     "star_gmail_message",
+    "mark_gmail_read",
+    "mark_gmail_unread",
+    "restore_gmail_message",
 })
 
 
@@ -118,6 +121,35 @@ def list_gmail_extra_tool_metadata() -> list[dict[str, Any]]:
                         "description": "true=estrelar, false=remover (padrão true).",
                     },
                 },
+                "required": ["message_id"],
+            },
+        },
+        {
+            "name": "mark_gmail_read",
+            "description": "Remove label UNREAD (marca como lido).",
+            "input_schema": {
+                "type": "object",
+                "properties": {"message_id": {"type": "string"}},
+                "required": ["message_id"],
+            },
+        },
+        {
+            "name": "mark_gmail_unread",
+            "description": "Adiciona label UNREAD.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"message_id": {"type": "string"}},
+                "required": ["message_id"],
+            },
+        },
+        {
+            "name": "restore_gmail_message",
+            "description": (
+                "Restaura da lixeira para a caixa de entrada. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {"message_id": {"type": "string"}},
                 "required": ["message_id"],
             },
         },
@@ -323,6 +355,58 @@ def invoke_gmail_extra_tool(
             "message_id": message_id,
             "label_ids": result.get("labelIds", []),
             "starred": starred,
+        }
+
+    if name == "mark_gmail_read":
+        message_id = str(args.get("message_id", "")).strip()
+        if not message_id:
+            raise ValueError("message_id é obrigatório")
+        result = (
+            service.users()
+            .messages()
+            .modify(userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]})
+            .execute()
+        )
+        return {
+            "message_id": message_id,
+            "label_ids": result.get("labelIds", []),
+            "read": True,
+        }
+
+    if name == "mark_gmail_unread":
+        message_id = str(args.get("message_id", "")).strip()
+        if not message_id:
+            raise ValueError("message_id é obrigatório")
+        result = (
+            service.users()
+            .messages()
+            .modify(userId="me", id=message_id, body={"addLabelIds": ["UNREAD"]})
+            .execute()
+        )
+        return {
+            "message_id": message_id,
+            "label_ids": result.get("labelIds", []),
+            "read": False,
+        }
+
+    if name == "restore_gmail_message":
+        message_id = str(args.get("message_id", "")).strip()
+        if not message_id:
+            raise ValueError("message_id é obrigatório")
+        result = (
+            service.users()
+            .messages()
+            .modify(
+                userId="me",
+                id=message_id,
+                body={"removeLabelIds": ["TRASH"], "addLabelIds": ["INBOX"]},
+            )
+            .execute()
+        )
+        return {
+            "message_id": message_id,
+            "label_ids": result.get("labelIds", []),
+            "restored": True,
         }
 
     raise KeyError(f"Tool Gmail extra desconhecida: {name}")
