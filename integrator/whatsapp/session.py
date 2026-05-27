@@ -132,6 +132,20 @@ class WhatsAppSession:
             },
         )
 
+    def set_chat_archived(self, *, chat_id: str, archived: bool) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "set_chat_archived",
+            {"chat_id": chat_id, "archived": archived},
+        )
+
+    def set_chat_pinned(self, *, chat_id: str, pinned: bool) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "set_chat_pinned",
+            {"chat_id": chat_id, "pinned": pinned},
+        )
+
     def react_message(
         self,
         *,

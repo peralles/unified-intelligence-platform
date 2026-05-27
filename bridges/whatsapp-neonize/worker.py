@@ -761,6 +761,20 @@ class NeonizeWorker:
             "emoji": reaction,
         }
 
+    def set_chat_archived(self, *, chat_id: str, archived: bool) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        jid = self._jid_from_chat_id(chat_id)
+        self.client.put_archived(jid, archived)
+        return {"chat_id": chat_id, "archived": archived}
+
+    def set_chat_pinned(self, *, chat_id: str, pinned: bool) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        jid = self._jid_from_chat_id(chat_id)
+        self.client.put_pinned(jid, pinned)
+        return {"chat_id": chat_id, "pinned": pinned}
+
     def mark_read(self, *, chat_id: str, message_ids: list[str] | None = None) -> dict[str, Any]:
         if not self.client.is_logged_in:
             raise WorkerError("WhatsApp não conectado.")
@@ -903,6 +917,16 @@ class NeonizeWorker:
                 chat_id=str(params["chat_id"]),
                 message_id=str(params["message_id"]),
                 emoji=str(params["emoji"]),
+            )
+        if method == "set_chat_archived":
+            return self.set_chat_archived(
+                chat_id=str(params["chat_id"]),
+                archived=bool(params.get("archived", True)),
+            )
+        if method == "set_chat_pinned":
+            return self.set_chat_pinned(
+                chat_id=str(params["chat_id"]),
+                pinned=bool(params.get("pinned", True)),
             )
         if method == "mark_read":
             return self.mark_read(

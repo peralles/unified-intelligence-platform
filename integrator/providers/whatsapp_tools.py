@@ -31,6 +31,8 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "sync_whatsapp_chat_history",
     "whatsapp_reply_text",
     "whatsapp_react_message",
+    "archive_whatsapp_chat",
+    "pin_whatsapp_chat",
     "mark_whatsapp_read",
 })
 
@@ -198,6 +200,36 @@ def _base_metadata() -> list[dict[str, Any]]:
                     "emoji": {"type": "string", "description": "Emoji da reação."},
                 },
                 "required": ["chat_id", "message_id", "emoji"],
+            },
+        },
+        {
+            "name": "archive_whatsapp_chat",
+            "description": "Arquiva ou desarquiva um chat no WhatsApp.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do chat."},
+                    "archived": {
+                        "type": "boolean",
+                        "description": "true=arquivar, false=desarquivar (padrão true).",
+                    },
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "pin_whatsapp_chat",
+            "description": "Fixa ou desfixa um chat no topo.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do chat."},
+                    "pinned": {
+                        "type": "boolean",
+                        "description": "true=fixar, false=desfixar (padrão true).",
+                    },
+                },
+                "required": ["chat_id"],
             },
         },
         {
@@ -452,6 +484,24 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
             result = session.delete_messages(
                 chat_id=chat_id,
                 message_ids=message_ids,
+            )
+        elif name == "archive_whatsapp_chat":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.set_chat_archived(
+                chat_id=chat_id,
+                archived=bool(args.get("archived", True)),
+            )
+        elif name == "pin_whatsapp_chat":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.set_chat_pinned(
+                chat_id=chat_id,
+                pinned=bool(args.get("pinned", True)),
             )
         elif name == "delete_whatsapp_messages_for_me":
             chat_id = str(args.get("chat_id", "")).strip()
