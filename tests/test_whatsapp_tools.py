@@ -55,6 +55,26 @@ def test_send_document_requires_confirm():
         )
 
 
+def test_send_video_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "send_whatsapp_video",
+            {"file_path": "/tmp/x.mp4", "number": "5511999999999"},
+        )
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_list_whatsapp_groups_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.list_joined_groups.return_value = [
+        {"chat_id": "120@g.us", "name": "Time", "participant_count": 5}
+    ]
+    mock_get.return_value = session
+    out = invoke_tool("list_whatsapp_groups", {"limit": 10})
+    data = json.loads(out)
+    assert data[0]["name"] == "Time"
+
+
 @patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
 def test_get_whatsapp_connection_status_mock(mock_get: MagicMock) -> None:
     session = MagicMock()

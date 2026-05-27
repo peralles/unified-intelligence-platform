@@ -42,6 +42,12 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "send_whatsapp_document",
     "send_whatsapp_audio",
     "forward_whatsapp_message",
+    "send_whatsapp_video",
+    "send_whatsapp_sticker",
+    "send_whatsapp_contact",
+    "list_whatsapp_groups",
+    "get_whatsapp_profile_picture",
+    "send_whatsapp_typing",
 })
 
 _GOOGLE_TOOL_COUNT = 12
@@ -456,6 +462,107 @@ def _base_metadata() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "send_whatsapp_video",
+            "description": (
+                "Envia vídeo por caminho local. view_once e gif_playback opcionais. "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "caption": {"type": "string"},
+                    "view_once": {"type": "boolean"},
+                    "gif_playback": {
+                        "type": "boolean",
+                        "description": "Reproduzir como GIF no chat.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "send_whatsapp_sticker",
+            "description": (
+                "Envia figurinha (WebP) por caminho local. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "send_whatsapp_contact",
+            "description": (
+                "Compartilha cartão de contato (nome + número). Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "contact_name": {"type": "string"},
+                    "contact_number": {
+                        "type": "string",
+                        "description": "Número com DDI (só dígitos).",
+                    },
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string", "description": "Destino se não usar chat_id."},
+                },
+                "required": ["contact_name", "contact_number"],
+            },
+        },
+        {
+            "name": "list_whatsapp_groups",
+            "description": "Lista grupos dos quais você participa (id, nome, participantes).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Máximo (padrão 50)."},
+                },
+            },
+        },
+        {
+            "name": "get_whatsapp_profile_picture",
+            "description": (
+                "URL e metadados da foto de perfil de um chat/contato (não baixa o arquivo)."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do contato ou grupo."},
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "send_whatsapp_typing",
+            "description": (
+                "Indica digitando ou pausa (composing true/false). "
+                "Use com moderação — não spammar presença."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                    "composing": {
+                        "type": "boolean",
+                        "description": "true=digitando, false=pausado (padrão true).",
+                    },
+                    "media": {
+                        "type": "string",
+                        "description": "text ou audio (padrão text).",
+                    },
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
             "name": "mark_whatsapp_read",
             "description": "Marca mensagens recentes do chat como lidas.",
             "input_schema": {
@@ -821,6 +928,82 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
                 target_chat_id=str(target_chat_id) if target_chat_id else None,
                 target_number=str(target_number) if target_number else None,
                 include_prefix=bool(args.get("include_prefix", True)),
+            )
+        elif name == "send_whatsapp_video":
+            file_path = str(args.get("file_path", "")).strip()
+            if not file_path:
+                raise ToolPolicyError("[integrator] Parâmetro 'file_path' é obrigatório.")
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar vídeo."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_video(
+                file_path=file_path,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                caption=str(args["caption"]) if args.get("caption") else None,
+                view_once=bool(args.get("view_once", False)),
+                gif_playback=bool(args.get("gif_playback", False)),
+            )
+        elif name == "send_whatsapp_sticker":
+            file_path = str(args.get("file_path", "")).strip()
+            if not file_path:
+                raise ToolPolicyError("[integrator] Parâmetro 'file_path' é obrigatório.")
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar figurinha."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_sticker(
+                file_path=file_path,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+            )
+        elif name == "send_whatsapp_contact":
+            contact_name = str(args.get("contact_name", "")).strip()
+            contact_number = str(args.get("contact_number", "")).strip()
+            if not contact_name or not contact_number:
+                raise ToolPolicyError(
+                    "[integrator] contact_name e contact_number são obrigatórios."
+                )
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar contato."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_contact(
+                contact_name=contact_name,
+                contact_number=contact_number,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+            )
+        elif name == "list_whatsapp_groups":
+            result = session.list_joined_groups(limit=int(args.get("limit", 50)))
+        elif name == "get_whatsapp_profile_picture":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.get_profile_picture(chat_id=chat_id)
+        elif name == "send_whatsapp_typing":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.send_chat_presence(
+                chat_id=chat_id,
+                composing=bool(args.get("composing", True)),
+                media=str(args.get("media", "text")),
             )
         else:
             _finish(success=False, error_kind="unknown_tool")

@@ -225,6 +225,87 @@ class WhatsAppSession:
             payload["mute_hours"] = mute_hours
         return self._bridge.call("set_chat_muted", payload)
 
+    def send_video(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+        view_once: bool = False,
+        gif_playback: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_video",
+            {
+                "file_path": file_path,
+                "chat_id": chat_id,
+                "number": number,
+                "caption": caption,
+                "view_once": view_once,
+                "gif_playback": gif_playback,
+            },
+        )
+
+    def send_sticker(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_sticker",
+            {
+                "file_path": file_path,
+                "chat_id": chat_id,
+                "number": number,
+            },
+        )
+
+    def send_contact(
+        self,
+        *,
+        contact_name: str,
+        contact_number: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_contact",
+            {
+                "contact_name": contact_name,
+                "contact_number": contact_number,
+                "chat_id": chat_id,
+                "number": number,
+            },
+        )
+
+    def list_joined_groups(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        self.ensure_background_connection()
+        result = self._bridge.call("list_joined_groups", {"limit": limit})
+        return list(result or [])
+
+    def get_profile_picture(self, *, chat_id: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("get_profile_picture", {"chat_id": chat_id})
+
+    def send_chat_presence(
+        self,
+        *,
+        chat_id: str,
+        composing: bool = True,
+        media: str = "text",
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_chat_presence",
+            {"chat_id": chat_id, "composing": composing, "media": media},
+        )
+
     def search_messages(
         self,
         *,

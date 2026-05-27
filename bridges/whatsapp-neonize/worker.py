@@ -916,6 +916,141 @@ class NeonizeWorker:
         }
         return sent
 
+    def send_video(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+        view_once: bool = False,
+        gif_playback: bool = False,
+    ) -> dict[str, Any]:
+        path = Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise WorkerError(f"Arquivo não encontrado: {path}")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_video(
+            jid,
+            str(path),
+            caption=caption or "",
+            viewonce=view_once,
+            gifplayback=gif_playback,
+        )
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "file": str(path),
+        }
+
+    def send_sticker(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+    ) -> dict[str, Any]:
+        path = Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise WorkerError(f"Arquivo não encontrado: {path}")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_sticker(jid, str(path))
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "file": str(path),
+        }
+
+    def send_contact(
+        self,
+        *,
+        contact_name: str,
+        contact_number: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+    ) -> dict[str, Any]:
+        name = contact_name.strip()
+        digits = "".join(ch for ch in contact_number if ch.isdigit())
+        if not name:
+            raise WorkerError("contact_name é obrigatório.")
+        if not digits:
+            raise WorkerError("contact_number inválido.")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_contact(jid, name, digits)
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "contact_name": name,
+            "contact_number": digits,
+        }
+
+    def list_joined_groups(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        groups = self.client.get_joined_groups()
+        out: list[dict[str, Any]] = []
+        for g in groups:
+            jid = getattr(g, "JID", None)
+            chat_id = Jid2String(jid) if jid is not None else ""
+            if not chat_id:
+                continue
+            participants = getattr(g, "Participants", None)
+            count = len(participants) if participants is not None else 0
+            out.append(
+                {
+                    "chat_id": chat_id,
+                    "name": str(getattr(g, "GroupName", "") or ""),
+                    "participant_count": count,
+                }
+            )
+            if len(out) >= limit:
+                break
+        return out
+
+    def get_profile_picture(self, *, chat_id: str) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        jid = self._jid_from_chat_id(chat_id)
+        info = self.client.get_profile_picture(jid)
+        return {
+            "chat_id": chat_id,
+            "url": str(getattr(info, "URL", "") or ""),
+            "picture_id": str(getattr(info, "ID", "") or ""),
+            "type": str(getattr(info, "Type", "") or ""),
+        }
+
+    def send_chat_presence(
+        self,
+        *,
+        chat_id: str,
+        composing: bool = True,
+        media: str = "text",
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        from neonize.utils.enum import ChatPresence, ChatPresenceMedia
+
+        jid = self._jid_from_chat_id(chat_id)
+        state = (
+            ChatPresence.CHAT_PRESENCE_COMPOSING
+            if composing
+            else ChatPresence.CHAT_PRESENCE_PAUSED
+        )
+        presence_media = (
+            ChatPresenceMedia.CHAT_PRESENCE_MEDIA_AUDIO
+            if str(media).lower() in ("audio", "voice", "ptt")
+            else ChatPresenceMedia.CHAT_PRESENCE_MEDIA_TEXT
+        )
+        self.client.send_chat_presence(jid, state, presence_media)
+        return {
+            "chat_id": chat_id,
+            "composing": composing,
+            "media": "audio" if presence_media == ChatPresenceMedia.CHAT_PRESENCE_MEDIA_AUDIO else "text",
+        }
+
     def set_chat_muted(
         self,
         *,
@@ -1261,6 +1396,38 @@ class NeonizeWorker:
                 chat_id=str(params["chat_id"]),
                 mute_hours=params.get("mute_hours"),
                 unmute=bool(params.get("unmute", False)),
+            )
+        if method == "send_video":
+            return self.send_video(
+                file_path=str(params["file_path"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                caption=params.get("caption"),
+                view_once=bool(params.get("view_once", False)),
+                gif_playback=bool(params.get("gif_playback", False)),
+            )
+        if method == "send_sticker":
+            return self.send_sticker(
+                file_path=str(params["file_path"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+            )
+        if method == "send_contact":
+            return self.send_contact(
+                contact_name=str(params["contact_name"]),
+                contact_number=str(params["contact_number"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+            )
+        if method == "list_joined_groups":
+            return self.list_joined_groups(limit=int(params.get("limit", 50)))
+        if method == "get_profile_picture":
+            return self.get_profile_picture(chat_id=str(params["chat_id"]))
+        if method == "send_chat_presence":
+            return self.send_chat_presence(
+                chat_id=str(params["chat_id"]),
+                composing=bool(params.get("composing", True)),
+                media=str(params.get("media", "text")),
             )
         if method == "shutdown":
             return self.shutdown()
