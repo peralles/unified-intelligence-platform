@@ -60,22 +60,24 @@ Mesmo padrão do integrator (`data/logs/`):
 
 Diagnóstico: `integrator logs --failures`
 
-## Tools MCP (21)
+## Tools MCP (27)
 
 | Tool | Confirmação |
 |------|-------------|
 | `get_whatsapp_connection_status` | não |
-| `list_whatsapp_chats` / `find_whatsapp_chats` | não |
+| `list_whatsapp_chats` / `find_whatsapp_chats` / `list_whatsapp_groups` | não |
 | `get_whatsapp_messages` / `sync_whatsapp_chat_history` / `search_whatsapp_messages` | não |
-| `get_whatsapp_group_info` | não |
+| `get_whatsapp_group_info` / `get_whatsapp_profile_picture` | não |
 | `whatsapp_reply_text` / `send_whatsapp_text` / `send_whatsapp_image` | **`confirm: true`** |
-| `send_whatsapp_document` / `send_whatsapp_audio` / `forward_whatsapp_message` | **`confirm: true`** |
+| `send_whatsapp_document` / `send_whatsapp_audio` / `send_whatsapp_video` / `send_whatsapp_sticker` | **`confirm: true`** |
+| `send_whatsapp_contact` / `forward_whatsapp_message` | **`confirm: true`** |
 | `whatsapp_react_message` | não |
 | `edit_whatsapp_text` | **`confirm: true`** |
 | `delete_whatsapp_messages` / `delete_whatsapp_messages_for_me` | **`confirm: true`** |
 | `archive_whatsapp_chat` / `pin_whatsapp_chat` / `mark_whatsapp_read` / `mute_whatsapp_chat` | não |
+| `send_whatsapp_typing` | não (usar com moderação) |
 
-Total com Google: **37 tools** (12 LangChain + 4 Gmail extra + 21 WhatsApp).
+Total com Google: **45 tools** (12 LangChain + 6 Gmail extra + 27 WhatsApp).
 
 ### Cache persistente
 

@@ -1,6 +1,14 @@
 # Plano de implementação — operações Hermes (ordem de velocidade)
 
-**Status:** concluído em `main` (37 tools MCP — lote 2: mute, documento/áudio, forward, anexos Gmail, cache SQLite).
+**Status:** lote 3 em branch (45 tools — vídeo/sticker/contato, grupos, perfil, typing, lixeira/estrela Gmail).
+
+## Fase 4 — Lote 3 (mídia e Gmail)
+
+| # | Tools | Status |
+|---|-------|--------|
+| 8 | `send_whatsapp_video`, `send_whatsapp_sticker`, `send_whatsapp_contact` | ✅ |
+| 9 | `list_whatsapp_groups`, `get_whatsapp_profile_picture`, `send_whatsapp_typing` | ✅ |
+| 10 | `trash_gmail_message`, `star_gmail_message` | ✅ |
 
 ## Fase 1 — WhatsApp
 
