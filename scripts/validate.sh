@@ -44,6 +44,10 @@ for required in (
     'send_whatsapp_document',
     'send_whatsapp_audio',
     'forward_whatsapp_message',
+    'send_whatsapp_video',
+    'send_whatsapp_sticker',
+    'send_whatsapp_contact',
+    'trash_gmail_message',
 ):
     assert required in confirm, required
 from integrator.accounts.registry import validate_account_id

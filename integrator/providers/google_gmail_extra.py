@@ -13,6 +13,8 @@ GMAIL_EXTRA_TOOL_NAMES = frozenset({
     "reply_gmail_message",
     "list_gmail_attachments",
     "get_gmail_attachment",
+    "trash_gmail_message",
+    "star_gmail_message",
 })
 
 
@@ -89,6 +91,34 @@ def list_gmail_extra_tool_metadata() -> list[dict[str, Any]]:
                     },
                 },
                 "required": ["message_id", "attachment_id", "output_path"],
+            },
+        },
+        {
+            "name": "trash_gmail_message",
+            "description": (
+                "Move mensagem para a lixeira (TRASH + remove INBOX). Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string"},
+                },
+                "required": ["message_id"],
+            },
+        },
+        {
+            "name": "star_gmail_message",
+            "description": "Marca ou desmarca estrela (label STARRED).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string"},
+                    "starred": {
+                        "type": "boolean",
+                        "description": "true=estrelar, false=remover (padrão true).",
+                    },
+                },
+                "required": ["message_id"],
             },
         },
     ]
@@ -251,6 +281,48 @@ def invoke_gmail_extra_tool(
             "attachment_id": attachment_id,
             "output_path": str(dest),
             "size": len(raw),
+        }
+
+    if name == "trash_gmail_message":
+        message_id = str(args.get("message_id", "")).strip()
+        if not message_id:
+            raise ValueError("message_id é obrigatório")
+        result = (
+            service.users()
+            .messages()
+            .modify(
+                userId="me",
+                id=message_id,
+                body={"addLabelIds": ["TRASH"], "removeLabelIds": ["INBOX"]},
+            )
+            .execute()
+        )
+        return {
+            "message_id": message_id,
+            "label_ids": result.get("labelIds", []),
+            "trashed": True,
+        }
+
+    if name == "star_gmail_message":
+        message_id = str(args.get("message_id", "")).strip()
+        if not message_id:
+            raise ValueError("message_id é obrigatório")
+        starred = bool(args.get("starred", True))
+        body = (
+            {"addLabelIds": ["STARRED"]}
+            if starred
+            else {"removeLabelIds": ["STARRED"]}
+        )
+        result = (
+            service.users()
+            .messages()
+            .modify(userId="me", id=message_id, body=body)
+            .execute()
+        )
+        return {
+            "message_id": message_id,
+            "label_ids": result.get("labelIds", []),
+            "starred": starred,
         }
 
     raise KeyError(f"Tool Gmail extra desconhecida: {name}")

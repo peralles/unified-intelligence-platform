@@ -109,3 +109,25 @@ def test_get_gmail_attachment_writes_file(
     )
     assert dest.read_bytes() == b"hello"
     assert result["size"] == 5
+
+
+def test_trash_gmail_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool("trash_gmail_message", {"message_id": "m1"})
+
+
+@patch("integrator.providers.google_gmail_extra._gmail_service")
+def test_star_gmail_message(mock_service_fn: MagicMock) -> None:
+    service = MagicMock()
+    mock_service_fn.return_value = service
+    service.users.return_value.messages.return_value.modify.return_value.execute.return_value = {
+        "labelIds": ["STARRED", "INBOX"]
+    }
+    from integrator.providers.google_gmail_extra import invoke_gmail_extra_tool
+
+    result = invoke_gmail_extra_tool(
+        "star_gmail_message",
+        "pessoal",
+        {"message_id": "m1", "starred": True},
+    )
+    assert result["starred"] is True
