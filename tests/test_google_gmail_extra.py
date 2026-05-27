@@ -48,3 +48,64 @@ def test_modify_gmail_labels_routes_to_extra(
 def test_reply_gmail_requires_confirm():
     with pytest.raises(ConfirmationRequiredError):
         invoke_tool("reply_gmail_message", {"message_id": "x", "body": "hi"})
+
+
+@patch("integrator.providers.google_gmail_extra._gmail_service")
+@patch("integrator.accounts.registry.resolve_account_id", return_value="pessoal")
+def test_list_gmail_attachments(
+    _mock_account: MagicMock,
+    mock_service_fn: MagicMock,
+) -> None:
+    service = MagicMock()
+    mock_service_fn.return_value = service
+    service.users.return_value.messages.return_value.get.return_value.execute.return_value = {
+        "payload": {
+            "parts": [
+                {
+                    "filename": "doc.pdf",
+                    "mimeType": "application/pdf",
+                    "body": {"attachmentId": "att-1", "size": 1024},
+                }
+            ]
+        }
+    }
+    from integrator.providers.google_gmail_extra import invoke_gmail_extra_tool
+
+    result = invoke_gmail_extra_tool(
+        "list_gmail_attachments",
+        "pessoal",
+        {"message_id": "msg1"},
+    )
+    assert result["count"] == 1
+    assert result["attachments"][0]["attachment_id"] == "att-1"
+
+
+@patch("integrator.providers.google_gmail_extra._gmail_service")
+@patch("integrator.accounts.registry.resolve_account_id", return_value="pessoal")
+def test_get_gmail_attachment_writes_file(
+    _mock_account: MagicMock,
+    mock_service_fn: MagicMock,
+    tmp_path,
+) -> None:
+    service = MagicMock()
+    mock_service_fn.return_value = service
+    import base64
+
+    payload = base64.urlsafe_b64encode(b"hello").decode("ascii")
+    service.users.return_value.messages.return_value.attachments.return_value.get.return_value.execute.return_value = {
+        "data": payload
+    }
+    dest = tmp_path / "out.bin"
+    from integrator.providers.google_gmail_extra import invoke_gmail_extra_tool
+
+    result = invoke_gmail_extra_tool(
+        "get_gmail_attachment",
+        "pessoal",
+        {
+            "message_id": "msg1",
+            "attachment_id": "att-1",
+            "output_path": str(dest),
+        },
+    )
+    assert dest.read_bytes() == b"hello"
+    assert result["size"] == 5
