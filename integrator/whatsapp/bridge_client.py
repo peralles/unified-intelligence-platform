@@ -76,6 +76,9 @@ class WhatsAppBridgeClient:
         env["INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT"] = str(
             settings.whatsapp_max_cached_messages_per_chat
         )
+        env["INTEGRATOR_WHATSAPP_PERSIST_CACHE"] = (
+            "true" if settings.whatsapp_persist_cache else "false"
+        )
         cmd = [
             "uv",
             "run",

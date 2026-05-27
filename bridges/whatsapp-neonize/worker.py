@@ -121,7 +121,56 @@ class NeonizeWorker:
         self.state = SessionState()
         self._connect_thread: threading.Thread | None = None
         self._pairing = False
+        self._cache_store: Any = None
+        if os.environ.get("INTEGRATOR_WHATSAPP_PERSIST_CACHE", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            from cache_store import MessageCacheStore
+
+            self._cache_store = MessageCacheStore(session_dir / "message_cache.db")
+            self._hydrate_cache_from_store()
         self._register_handlers()
+
+    def _max_cached_per_chat(self) -> int:
+        return int(os.environ.get("INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT", "5000"))
+
+    def _hydrate_cache_from_store(self) -> None:
+        if self._cache_store is None:
+            return
+        max_c = self._max_cached_per_chat()
+        buckets = self._cache_store.load_into_buckets(max_per_chat=max_c)
+        with self.state.lock:
+            for chat_id, rows in buckets.items():
+                bucket = self.state.messages.setdefault(chat_id, [])
+                known = {m.message_id for m in bucket}
+                for row in rows:
+                    if row.message_id in known:
+                        continue
+                    bucket.append(
+                        StoredMessage(
+                            message_id=row.message_id,
+                            chat_id=row.chat_id,
+                            sender_id=row.sender_id,
+                            text=row.text,
+                            timestamp=row.timestamp,
+                            from_me=row.from_me,
+                            raw_proto_b64=row.raw_proto_b64,
+                        )
+                    )
+                bucket.sort(key=lambda m: m.timestamp)
+                if len(bucket) > max_c:
+                    self.state.messages[chat_id] = bucket[-max_c:]
+
+    def _persist_cached_message(self, msg: StoredMessage) -> None:
+        if self._cache_store is None:
+            return
+        try:
+            self._cache_store.upsert(msg)
+            self._cache_store.prune_chat(msg.chat_id, keep=self._max_cached_per_chat())
+        except Exception as exc:
+            logging.getLogger("whatsapp.cache").warning("cache persist failed: %s", exc)
 
     def _register_handlers(self) -> None:
         @self.client.event(ConnectedEv)
@@ -221,8 +270,10 @@ class NeonizeWorker:
                 max_cached = int(
                     os.environ.get("INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT", "5000")
                 )
+                max_cached = self._max_cached_per_chat()
                 if len(bucket) > max_cached:
                     self.state.messages[chat_id] = bucket[-max_cached:]
+            self._persist_cached_message(msg)
 
             entry = self.state.chats.get(chat_id)
             if entry is None:
@@ -451,6 +502,23 @@ class NeonizeWorker:
         quoted = NeonizeMessage()
         quoted.ParseFromString(base64.b64decode(stored.raw_proto_b64))
         return quoted
+
+    def _resolve_dest_jid(
+        self,
+        *,
+        chat_id: str | None,
+        number: str | None,
+    ) -> Any:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        if chat_id:
+            return self._jid_from_chat_id(chat_id)
+        if number:
+            digits = "".join(ch for ch in number if ch.isdigit())
+            if not digits:
+                raise WorkerError("Número inválido.")
+            return build_jid(digits)
+        raise WorkerError("Informe chat_id ou number.")
 
     @staticmethod
     def _jid_from_chat_id(chat_id: str) -> Any:
@@ -696,16 +764,7 @@ class NeonizeWorker:
         chat_id: str | None = None,
         number: str | None = None,
     ) -> dict[str, Any]:
-        if not self.client.is_logged_in:
-            raise WorkerError("WhatsApp não conectado. Rode pareamento antes.")
-        if chat_id:
-            jid = self._jid_from_chat_id(chat_id)
-        elif number:
-            digits = "".join(ch for ch in number if ch.isdigit())
-            jid = build_jid(digits)
-        else:
-            raise WorkerError("Informe chat_id ou number.")
-
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
         resp = self.client.send_message(jid, text)
         return {
             "message_id": resp.ID,
@@ -769,18 +828,10 @@ class NeonizeWorker:
         number: str | None = None,
         caption: str | None = None,
     ) -> dict[str, Any]:
-        if not self.client.is_logged_in:
-            raise WorkerError("WhatsApp não conectado.")
         path = Path(file_path).expanduser().resolve()
         if not path.is_file():
             raise WorkerError(f"Arquivo não encontrado: {path}")
-        if chat_id:
-            jid = self._jid_from_chat_id(chat_id)
-        elif number:
-            digits = "".join(ch for ch in number if ch.isdigit())
-            jid = build_jid(digits)
-        else:
-            raise WorkerError("Informe chat_id ou number.")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
         img_msg = self.client.build_image_message(str(path), caption=caption or "")
         resp = self.client.send_message(jid, img_msg)
         return {
@@ -788,6 +839,105 @@ class NeonizeWorker:
             "timestamp": int(resp.Timestamp),
             "chat_id": Jid2String(jid),
             "file": str(path),
+        }
+
+    def send_document(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+        filename: str | None = None,
+    ) -> dict[str, Any]:
+        path = Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise WorkerError(f"Arquivo não encontrado: {path}")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_document(
+            jid,
+            str(path),
+            caption=caption or "",
+            filename=filename or path.name,
+        )
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "file": str(path),
+        }
+
+    def send_audio(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        voice_note: bool = False,
+    ) -> dict[str, Any]:
+        path = Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise WorkerError(f"Arquivo não encontrado: {path}")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_audio(jid, str(path), ptt=voice_note)
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "file": str(path),
+            "voice_note": voice_note,
+        }
+
+    def forward_message(
+        self,
+        *,
+        source_chat_id: str,
+        message_id: str,
+        target_chat_id: str | None = None,
+        target_number: str | None = None,
+        include_prefix: bool = True,
+    ) -> dict[str, Any]:
+        stored = self._lookup_stored_message(source_chat_id, message_id)
+        body = stored.text.strip()
+        if not body:
+            raise WorkerError(
+                "Mensagem sem texto em cache. Encaminhamento de mídia pura ainda não suportado."
+            )
+        if include_prefix and not body.startswith("↪"):
+            body = f"↪️ {body}"
+        sent = self.send_text(
+            text=body,
+            chat_id=target_chat_id,
+            number=target_number,
+        )
+        sent["forwarded_from"] = {
+            "chat_id": source_chat_id,
+            "message_id": message_id,
+        }
+        return sent
+
+    def set_chat_muted(
+        self,
+        *,
+        chat_id: str,
+        mute_hours: int | None = 8,
+        unmute: bool = False,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        from datetime import timedelta
+
+        jid = self._jid_from_chat_id(chat_id)
+        if unmute:
+            until = timedelta(seconds=0)
+        else:
+            hours = 8 if mute_hours is None else int(mute_hours)
+            until = timedelta(hours=max(1, hours))
+        self.client.put_muted_until(jid, until)
+        return {
+            "chat_id": chat_id,
+            "muted": not unmute,
+            "mute_hours": None if unmute else max(1, int(mute_hours or 8)),
         }
 
     def search_messages(
@@ -859,6 +1009,7 @@ class NeonizeWorker:
         resp = self.client.edit_message(chat_jid, message_id, new_msg)
         with self.state.lock:
             stored.text = body
+        self._persist_cached_message(stored)
         return {
             "message_id": message_id,
             "chat_id": chat_id,
@@ -1081,6 +1232,35 @@ class NeonizeWorker:
                 from_me=params.get("from_me"),
                 delete_media=bool(params.get("delete_media", False)),
                 entries=entries,
+            )
+        if method == "send_document":
+            return self.send_document(
+                file_path=str(params["file_path"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                caption=params.get("caption"),
+                filename=params.get("filename"),
+            )
+        if method == "send_audio":
+            return self.send_audio(
+                file_path=str(params["file_path"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                voice_note=bool(params.get("voice_note", False)),
+            )
+        if method == "forward_message":
+            return self.forward_message(
+                source_chat_id=str(params["source_chat_id"]),
+                message_id=str(params["message_id"]),
+                target_chat_id=params.get("target_chat_id"),
+                target_number=params.get("target_number"),
+                include_prefix=bool(params.get("include_prefix", True)),
+            )
+        if method == "set_chat_muted":
+            return self.set_chat_muted(
+                chat_id=str(params["chat_id"]),
+                mute_hours=params.get("mute_hours"),
+                unmute=bool(params.get("unmute", False)),
             )
         if method == "shutdown":
             return self.shutdown()
