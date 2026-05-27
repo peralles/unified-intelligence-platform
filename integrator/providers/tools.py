@@ -25,7 +25,11 @@ def list_all_tool_metadata() -> list[dict[str, Any]]:
     return tools
 
 
+def is_whatsapp_tool(name: str) -> bool:
+    return name in WHATSAPP_TOOL_NAMES
+
+
 def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
-    if name in WHATSAPP_TOOL_NAMES or name.startswith("whatsapp_"):
+    if is_whatsapp_tool(name):
         return invoke_whatsapp_tool(name, arguments)
     return invoke_google_tool(name, arguments)

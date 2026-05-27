@@ -6,6 +6,7 @@ Protocol: one JSON object per line on stdin/stdout.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -95,6 +96,7 @@ class StoredMessage:
     text: str
     timestamp: int
     from_me: bool
+    raw_proto_b64: str = ""
 
 
 @dataclass
@@ -198,6 +200,7 @@ class NeonizeWorker:
             text = extract_text(evt.Message) or ""
             preview = text[:200]
             ts = int(info.Timestamp or time.time())
+            raw_b64 = base64.b64encode(evt.SerializeToString()).decode("ascii")
             msg = StoredMessage(
                 message_id=info.ID,
                 chat_id=chat_id,
@@ -205,6 +208,7 @@ class NeonizeWorker:
                 text=text,
                 timestamp=ts,
                 from_me=bool(source.IsFromMe),
+                raw_proto_b64=raw_b64,
             )
         except Exception:
             return
@@ -427,6 +431,26 @@ class NeonizeWorker:
                 }
             )
         return out
+
+    def _lookup_stored_message(self, chat_id: str, message_id: str) -> StoredMessage:
+        with self.state.lock:
+            for m in self.state.messages.get(chat_id, []):
+                if m.message_id == message_id:
+                    return m
+        raise WorkerError(
+            f"Mensagem {message_id} não está em cache. "
+            "Use get_whatsapp_messages ou sync_whatsapp_chat_history."
+        )
+
+    def _load_quoted_neonize_message(self, stored: StoredMessage) -> NeonizeMessage:
+        if not stored.raw_proto_b64:
+            raise WorkerError(
+                "Mensagem sem metadados para reply/reação. "
+                "Receba-a de novo ou sincronize o histórico do chat."
+            )
+        quoted = NeonizeMessage()
+        quoted.ParseFromString(base64.b64decode(stored.raw_proto_b64))
+        return quoted
 
     @staticmethod
     def _jid_from_chat_id(chat_id: str) -> Any:
@@ -689,6 +713,54 @@ class NeonizeWorker:
             "chat_id": Jid2String(jid),
         }
 
+    def reply_text(
+        self,
+        *,
+        chat_id: str,
+        reply_to_message_id: str,
+        text: str,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        body = text.strip()
+        if not body:
+            raise WorkerError("Texto da resposta vazio.")
+        stored = self._lookup_stored_message(chat_id, reply_to_message_id)
+        quoted = self._load_quoted_neonize_message(stored)
+        chat_jid = self._jid_from_chat_id(chat_id)
+        resp = self.client.reply_message(body, quoted, to=chat_jid)
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": chat_id,
+            "reply_to_message_id": reply_to_message_id,
+        }
+
+    def react_message(
+        self,
+        *,
+        chat_id: str,
+        message_id: str,
+        emoji: str,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        reaction = emoji.strip()
+        if not reaction:
+            raise WorkerError("Emoji/reação vazio.")
+        stored = self._lookup_stored_message(chat_id, message_id)
+        chat_jid = self._jid_from_chat_id(chat_id)
+        sender_jid = self._jid_from_chat_id(stored.sender_id)
+        react_msg = self.client.build_reaction(
+            chat_jid, sender_jid, message_id, reaction
+        )
+        self.client.send_message(chat_jid, react_msg)
+        return {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "emoji": reaction,
+        }
+
     def mark_read(self, *, chat_id: str, message_ids: list[str] | None = None) -> dict[str, Any]:
         if not self.client.is_logged_in:
             raise WorkerError("WhatsApp não conectado.")
@@ -819,6 +891,18 @@ class NeonizeWorker:
                 text=str(params["text"]),
                 chat_id=params.get("chat_id"),
                 number=params.get("number"),
+            )
+        if method == "reply_text":
+            return self.reply_text(
+                chat_id=str(params["chat_id"]),
+                reply_to_message_id=str(params["reply_to_message_id"]),
+                text=str(params["text"]),
+            )
+        if method == "react_message":
+            return self.react_message(
+                chat_id=str(params["chat_id"]),
+                message_id=str(params["message_id"]),
+                emoji=str(params["emoji"]),
             )
         if method == "mark_read":
             return self.mark_read(

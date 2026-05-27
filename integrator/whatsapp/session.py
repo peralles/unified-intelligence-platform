@@ -115,6 +115,40 @@ class WhatsAppSession:
             {"text": text, "chat_id": chat_id, "number": number},
         )
 
+    def reply_text(
+        self,
+        *,
+        chat_id: str,
+        reply_to_message_id: str,
+        text: str,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "reply_text",
+            {
+                "chat_id": chat_id,
+                "reply_to_message_id": reply_to_message_id,
+                "text": text,
+            },
+        )
+
+    def react_message(
+        self,
+        *,
+        chat_id: str,
+        message_id: str,
+        emoji: str,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "react_message",
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "emoji": emoji,
+            },
+        )
+
     def mark_read(
         self,
         *,

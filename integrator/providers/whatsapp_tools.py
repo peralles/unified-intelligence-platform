@@ -29,6 +29,8 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "delete_whatsapp_messages",
     "delete_whatsapp_messages_for_me",
     "sync_whatsapp_chat_history",
+    "whatsapp_reply_text",
+    "whatsapp_react_message",
     "mark_whatsapp_read",
 })
 
@@ -161,6 +163,41 @@ def _base_metadata() -> list[dict[str, Any]]:
                     },
                 },
                 "required": ["text"],
+            },
+        },
+        {
+            "name": "whatsapp_reply_text",
+            "description": (
+                "Responde citando uma mensagem (message_id de get_whatsapp_messages). "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do chat."},
+                    "reply_to_message_id": {
+                        "type": "string",
+                        "description": "ID da mensagem a citar.",
+                    },
+                    "text": {"type": "string", "description": "Texto da resposta."},
+                },
+                "required": ["chat_id", "reply_to_message_id", "text"],
+            },
+        },
+        {
+            "name": "whatsapp_react_message",
+            "description": (
+                "Reage a uma mensagem com emoji (ex: 👍). "
+                "message_id deve estar em cache."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do chat."},
+                    "message_id": {"type": "string", "description": "ID da mensagem."},
+                    "emoji": {"type": "string", "description": "Emoji da reação."},
+                },
+                "required": ["chat_id", "message_id", "emoji"],
             },
         },
         {
@@ -368,6 +405,34 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
                 text=text,
                 chat_id=str(chat_id) if chat_id else None,
                 number=str(number) if number else None,
+            )
+        elif name == "whatsapp_reply_text":
+            chat_id = str(args.get("chat_id", "")).strip()
+            reply_id = str(args.get("reply_to_message_id", "")).strip()
+            text = str(args.get("text", "")).strip()
+            if not chat_id or not reply_id or not text:
+                raise ToolPolicyError(
+                    "[integrator] chat_id, reply_to_message_id e text são obrigatórios."
+                )
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.reply_text(
+                chat_id=chat_id,
+                reply_to_message_id=reply_id,
+                text=text,
+            )
+        elif name == "whatsapp_react_message":
+            chat_id = str(args.get("chat_id", "")).strip()
+            message_id = str(args.get("message_id", "")).strip()
+            emoji = str(args.get("emoji", "")).strip()
+            if not chat_id or not message_id or not emoji:
+                raise ToolPolicyError(
+                    "[integrator] chat_id, message_id e emoji são obrigatórios."
+                )
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.react_message(
+                chat_id=chat_id,
+                message_id=message_id,
+                emoji=emoji,
             )
         elif name == "delete_whatsapp_messages":
             chat_id = str(args.get("chat_id", "")).strip()

@@ -12,6 +12,7 @@ DEFAULT_CONFIRM_REQUIRED = frozenset({
     "send_whatsapp_text",
     "delete_whatsapp_messages",
     "delete_whatsapp_messages_for_me",
+    "whatsapp_reply_text",
 })
 
 

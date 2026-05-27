@@ -87,6 +87,7 @@ def test_list_whatsapp_chats_mock(mock_get: MagicMock) -> None:
 
 def test_confirm_required_includes_whatsapp_send():
     assert "send_whatsapp_text" in get_confirm_required_tools()
+    assert "whatsapp_reply_text" in get_confirm_required_tools()
     assert "delete_whatsapp_messages" in get_confirm_required_tools()
     assert "delete_whatsapp_messages_for_me" in get_confirm_required_tools()
 
@@ -126,6 +127,37 @@ def test_delete_whatsapp_messages_for_me_mock(mock_get: MagicMock) -> None:
     session.delete_messages_for_me.assert_called_once()
     call_kw = session.delete_messages_for_me.call_args.kwargs
     assert call_kw["before_timestamp"] == 1700000000
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_reply_whatsapp_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.reply_text.return_value = {"message_id": "R1", "chat_id": "c@s.whatsapp.net"}
+    mock_get.return_value = session
+
+    out = invoke_tool(
+        "whatsapp_reply_text",
+        {
+            "confirm": True,
+            "chat_id": "c@s.whatsapp.net",
+            "reply_to_message_id": "M1",
+            "text": "ok",
+        },
+    )
+    assert json.loads(out)["message_id"] == "R1"
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_react_whatsapp_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.react_message.return_value = {"emoji": "👍"}
+    mock_get.return_value = session
+
+    out = invoke_tool(
+        "whatsapp_react_message",
+        {"chat_id": "c@s.whatsapp.net", "message_id": "M1", "emoji": "👍"},
+    )
+    assert json.loads(out)["emoji"] == "👍"
 
 
 @patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
