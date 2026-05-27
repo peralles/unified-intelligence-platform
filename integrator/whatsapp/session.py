@@ -132,6 +132,56 @@ class WhatsAppSession:
             },
         )
 
+    def send_image(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_image",
+            {
+                "file_path": file_path,
+                "chat_id": chat_id,
+                "number": number,
+                "caption": caption,
+            },
+        )
+
+    def search_messages(
+        self,
+        *,
+        query: str,
+        chat_id: str | None = None,
+        limit: int = 30,
+    ) -> list[dict[str, Any]]:
+        self.ensure_background_connection()
+        result = self._bridge.call(
+            "search_messages",
+            {"query": query, "chat_id": chat_id, "limit": limit},
+        )
+        return list(result or [])
+
+    def get_group_info(self, *, chat_id: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("get_group_info", {"chat_id": chat_id})
+
+    def edit_text(
+        self,
+        *,
+        chat_id: str,
+        message_id: str,
+        text: str,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "edit_text",
+            {"chat_id": chat_id, "message_id": message_id, "text": text},
+        )
+
     def set_chat_archived(self, *, chat_id: str, archived: bool) -> dict[str, Any]:
         self.ensure_background_connection()
         return self._bridge.call(

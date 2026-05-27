@@ -761,6 +761,110 @@ class NeonizeWorker:
             "emoji": reaction,
         }
 
+    def send_image(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        path = Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise WorkerError(f"Arquivo não encontrado: {path}")
+        if chat_id:
+            jid = self._jid_from_chat_id(chat_id)
+        elif number:
+            digits = "".join(ch for ch in number if ch.isdigit())
+            jid = build_jid(digits)
+        else:
+            raise WorkerError("Informe chat_id ou number.")
+        img_msg = self.client.build_image_message(str(path), caption=caption or "")
+        resp = self.client.send_message(jid, img_msg)
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "file": str(path),
+        }
+
+    def search_messages(
+        self,
+        *,
+        query: str,
+        chat_id: str | None = None,
+        limit: int = 30,
+    ) -> list[dict[str, Any]]:
+        q = query.strip().lower()
+        if not q:
+            return []
+        results: list[dict[str, Any]] = []
+        with self.state.lock:
+            chat_ids = [chat_id] if chat_id else list(self.state.messages.keys())
+            for cid in chat_ids:
+                if not cid:
+                    continue
+                for m in self.state.messages.get(cid, []):
+                    if q in m.text.lower():
+                        results.append(
+                            {
+                                "message_id": m.message_id,
+                                "chat_id": m.chat_id,
+                                "sender_id": m.sender_id,
+                                "text": m.text[:800],
+                                "timestamp": m.timestamp,
+                                "from_me": m.from_me,
+                            }
+                        )
+        results.sort(key=lambda r: r["timestamp"], reverse=True)
+        return results[:limit]
+
+    def get_group_info(self, *, chat_id: str) -> dict[str, Any]:
+        if "@g.us" not in chat_id:
+            raise WorkerError("chat_id não é um grupo (@g.us).")
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        jid = self._jid_from_chat_id(chat_id)
+        info = self.client.get_group_info(jid)
+        name = getattr(info, "Name", None) or getattr(info, "name", "") or ""
+        participants = getattr(info, "Participants", None) or getattr(info, "participants", [])
+        count = len(participants) if participants is not None else 0
+        return {
+            "chat_id": chat_id,
+            "name": str(name),
+            "participant_count": count,
+        }
+
+    def edit_text(
+        self,
+        *,
+        chat_id: str,
+        message_id: str,
+        text: str,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        body = text.strip()
+        if not body:
+            raise WorkerError("Texto vazio.")
+        stored = self._lookup_stored_message(chat_id, message_id)
+        if not stored.from_me:
+            raise WorkerError("Só é possível editar mensagens enviadas por você.")
+        from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import Message
+
+        chat_jid = self._jid_from_chat_id(chat_id)
+        new_msg = Message(conversation=body)
+        resp = self.client.edit_message(chat_jid, message_id, new_msg)
+        with self.state.lock:
+            stored.text = body
+        return {
+            "message_id": message_id,
+            "chat_id": chat_id,
+            "timestamp": int(resp.Timestamp),
+        }
+
     def set_chat_archived(self, *, chat_id: str, archived: bool) -> dict[str, Any]:
         if not self.client.is_logged_in:
             raise WorkerError("WhatsApp não conectado.")
@@ -917,6 +1021,27 @@ class NeonizeWorker:
                 chat_id=str(params["chat_id"]),
                 message_id=str(params["message_id"]),
                 emoji=str(params["emoji"]),
+            )
+        if method == "send_image":
+            return self.send_image(
+                file_path=str(params["file_path"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                caption=params.get("caption"),
+            )
+        if method == "search_messages":
+            return self.search_messages(
+                query=str(params.get("query", "")),
+                chat_id=params.get("chat_id"),
+                limit=int(params.get("limit", 30)),
+            )
+        if method == "get_group_info":
+            return self.get_group_info(chat_id=str(params["chat_id"]))
+        if method == "edit_text":
+            return self.edit_text(
+                chat_id=str(params["chat_id"]),
+                message_id=str(params["message_id"]),
+                text=str(params["text"]),
             )
         if method == "set_chat_archived":
             return self.set_chat_archived(

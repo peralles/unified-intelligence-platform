@@ -33,6 +33,10 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "whatsapp_react_message",
     "archive_whatsapp_chat",
     "pin_whatsapp_chat",
+    "send_whatsapp_image",
+    "search_whatsapp_messages",
+    "get_whatsapp_group_info",
+    "edit_whatsapp_text",
     "mark_whatsapp_read",
 })
 
@@ -200,6 +204,70 @@ def _base_metadata() -> list[dict[str, Any]]:
                     "emoji": {"type": "string", "description": "Emoji da reação."},
                 },
                 "required": ["chat_id", "message_id", "emoji"],
+            },
+        },
+        {
+            "name": "send_whatsapp_image",
+            "description": (
+                "Envia imagem por caminho local absoluto no disco. "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Caminho absoluto do arquivo de imagem.",
+                    },
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "caption": {"type": "string"},
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "search_whatsapp_messages",
+            "description": (
+                "Busca texto nas mensagens em cache (opcionalmente por chat_id)."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Texto a buscar."},
+                    "chat_id": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "get_whatsapp_group_info",
+            "description": "Metadados de grupo WhatsApp (nome, participantes).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {
+                        "type": "string",
+                        "description": "JID do grupo (@g.us).",
+                    },
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "edit_whatsapp_text",
+            "description": (
+                "Edita mensagem de texto enviada por você. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                    "message_id": {"type": "string"},
+                    "text": {"type": "string", "description": "Novo texto."},
+                },
+                "required": ["chat_id", "message_id", "text"],
             },
         },
         {
@@ -484,6 +552,54 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
             result = session.delete_messages(
                 chat_id=chat_id,
                 message_ids=message_ids,
+            )
+        elif name == "send_whatsapp_image":
+            file_path = str(args.get("file_path", "")).strip()
+            if not file_path:
+                raise ToolPolicyError("[integrator] Parâmetro 'file_path' é obrigatório.")
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar imagem."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_image(
+                file_path=file_path,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                caption=str(args["caption"]) if args.get("caption") else None,
+            )
+        elif name == "search_whatsapp_messages":
+            query = str(args.get("query", "")).strip()
+            if not query:
+                raise ToolPolicyError("[integrator] Parâmetro 'query' é obrigatório.")
+            chat_id = args.get("chat_id")
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.search_messages(
+                query=query,
+                chat_id=str(chat_id) if chat_id else None,
+                limit=int(args.get("limit", 30)),
+            )
+        elif name == "get_whatsapp_group_info":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.get_group_info(chat_id=chat_id)
+        elif name == "edit_whatsapp_text":
+            chat_id = str(args.get("chat_id", "")).strip()
+            message_id = str(args.get("message_id", "")).strip()
+            text = str(args.get("text", "")).strip()
+            if not chat_id or not message_id or not text:
+                raise ToolPolicyError(
+                    "[integrator] chat_id, message_id e text são obrigatórios."
+                )
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.edit_text(
+                chat_id=chat_id, message_id=message_id, text=text
             )
         elif name == "archive_whatsapp_chat":
             chat_id = str(args.get("chat_id", "")).strip()
