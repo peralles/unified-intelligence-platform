@@ -1,6 +1,6 @@
 # Plano de implementação — operações Hermes (ordem de velocidade)
 
-**Status:** concluído em `main` (31 tools MCP).
+**Status:** concluído em `main` (37 tools MCP — lote 2: mute, documento/áudio, forward, anexos Gmail, cache SQLite).
 
 ## Fase 1 — WhatsApp
 

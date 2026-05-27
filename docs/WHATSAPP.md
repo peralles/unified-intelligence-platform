@@ -60,7 +60,7 @@ Mesmo padrão do integrator (`data/logs/`):
 
 Diagnóstico: `integrator logs --failures`
 
-## Tools MCP (17)
+## Tools MCP (21)
 
 | Tool | Confirmação |
 |------|-------------|
@@ -69,12 +69,21 @@ Diagnóstico: `integrator logs --failures`
 | `get_whatsapp_messages` / `sync_whatsapp_chat_history` / `search_whatsapp_messages` | não |
 | `get_whatsapp_group_info` | não |
 | `whatsapp_reply_text` / `send_whatsapp_text` / `send_whatsapp_image` | **`confirm: true`** |
+| `send_whatsapp_document` / `send_whatsapp_audio` / `forward_whatsapp_message` | **`confirm: true`** |
 | `whatsapp_react_message` | não |
 | `edit_whatsapp_text` | **`confirm: true`** |
 | `delete_whatsapp_messages` / `delete_whatsapp_messages_for_me` | **`confirm: true`** |
-| `archive_whatsapp_chat` / `pin_whatsapp_chat` / `mark_whatsapp_read` | não |
+| `archive_whatsapp_chat` / `pin_whatsapp_chat` / `mark_whatsapp_read` / `mute_whatsapp_chat` | não |
 
-Total com Google: **31 tools** (12 LangChain + 2 Gmail extra + 17 WhatsApp).
+Total com Google: **37 tools** (12 LangChain + 4 Gmail extra + 21 WhatsApp).
+
+### Cache persistente
+
+Com `INTEGRATOR_WHATSAPP_PERSIST_CACHE=true` (padrão), o worker grava mensagens em `data/whatsapp/message_cache.db` (SQLite). Reply, reação e encaminhamento de texto dependem do cache — após reiniciar o worker, mensagens antigas continuam disponíveis se já foram ingeridas.
+
+### Encaminhar mensagens
+
+`forward_whatsapp_message` reenvia **texto** do cache (prefixo `↪️` opcional). Mídia pura ainda não é suportada.
 
 ### Apagar mensagens
 
@@ -99,6 +108,7 @@ Total com Google: **31 tools** (12 LangChain + 2 Gmail extra + 17 WhatsApp).
 | `INTEGRATOR_WHATSAPP_SESSION_DIR` | `data/whatsapp` | Diretório da sessão |
 | `INTEGRATOR_WHATSAPP_MAX_MESSAGE_CHARS` | `800` | Truncagem em respostas |
 | `INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT` | `5000` | Mensagens por chat no worker |
+| `INTEGRATOR_WHATSAPP_PERSIST_CACHE` | `true` | SQLite `message_cache.db` na sessão |
 
 Ver `config/integrator.example.env`.
 

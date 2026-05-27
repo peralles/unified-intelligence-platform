@@ -41,6 +41,9 @@ for required in (
     'edit_whatsapp_text',
     'delete_whatsapp_messages',
     'delete_whatsapp_messages_for_me',
+    'send_whatsapp_document',
+    'send_whatsapp_audio',
+    'forward_whatsapp_message',
 ):
     assert required in confirm, required
 from integrator.accounts.registry import validate_account_id
