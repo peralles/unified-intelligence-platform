@@ -214,8 +214,11 @@ class NeonizeWorker:
             if not any(m.message_id == msg.message_id for m in bucket):
                 bucket.append(msg)
                 bucket.sort(key=lambda m: m.timestamp)
-                if len(bucket) > 500:
-                    self.state.messages[chat_id] = bucket[-500:]
+                max_cached = int(
+                    os.environ.get("INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT", "5000")
+                )
+                if len(bucket) > max_cached:
+                    self.state.messages[chat_id] = bucket[-max_cached:]
 
             entry = self.state.chats.get(chat_id)
             if entry is None:
@@ -395,9 +398,18 @@ class NeonizeWorker:
         chat_id: str,
         limit: int = 30,
         max_chars: int = 800,
+        before_timestamp: int | None = None,
+        after_timestamp: int | None = None,
+        from_me: bool | None = None,
     ) -> list[dict[str, Any]]:
         with self.state.lock:
             bucket = list(self.state.messages.get(chat_id, []))
+        if before_timestamp is not None:
+            bucket = [m for m in bucket if m.timestamp < before_timestamp]
+        if after_timestamp is not None:
+            bucket = [m for m in bucket if m.timestamp > after_timestamp]
+        if from_me is not None:
+            bucket = [m for m in bucket if m.from_me is from_me]
         bucket.sort(key=lambda m: m.timestamp, reverse=True)
         out: list[dict[str, Any]] = []
         for m in bucket[:limit]:
@@ -432,6 +444,226 @@ class NeonizeWorker:
             Integrator=0,
             IsEmpty=False,
         )
+
+    @staticmethod
+    def _sender_index_token(chat_jid: Any, sender_jid: Any) -> str:
+        """Index token for delete-for-me mutations (see neonize issue #106)."""
+        sender_str = Jid2String(sender_jid)
+        if "@g.us" not in Jid2String(chat_jid) and chat_jid.User == sender_jid.User:
+            return "0"
+        return sender_str
+
+    def _delete_one_for_me(
+        self,
+        *,
+        chat_id: str,
+        message_id: str,
+        sender_id: str,
+        from_me: bool,
+        timestamp: int,
+        delete_media: bool = False,
+    ) -> None:
+        from neonize.proto import Neonize_pb2 as neonize_proto
+        from neonize.proto.waSyncAction import WAWebProtobufSyncAction_pb2 as sync_action
+
+        chat_jid = self._jid_from_chat_id(chat_id)
+        sender_jid = self._jid_from_chat_id(sender_id)
+        target_jid = Jid2String(chat_jid)
+        sender_token = self._sender_index_token(chat_jid, sender_jid)
+        is_from_me = "1" if from_me else "0"
+        ts = int(timestamp)
+        if ts < 10_000_000_000:
+            ts *= 1000
+
+        mutation = neonize_proto.MutationInfo(
+            Index=["0", target_jid, message_id, is_from_me, sender_token],
+            Version=2,
+            Value=sync_action.SyncActionValue(
+                deleteMessageForMeAction=sync_action.DeleteMessageForMeAction(
+                    deleteMedia=delete_media,
+                    messageTimestamp=ts,
+                ),
+            ),
+        )
+        patch = neonize_proto.PatchInfo(
+            Timestamp=int(time.time()),
+            Type=neonize_proto.PatchInfo.REGULAR_HIGH,
+            Mutations=[mutation],
+        )
+        self.client.send_app_state(patch)
+
+    def delete_messages_for_me(
+        self,
+        *,
+        chat_id: str,
+        message_ids: list[str] | None = None,
+        before_timestamp: int | None = None,
+        after_timestamp: int | None = None,
+        from_me: bool | None = None,
+        delete_media: bool = False,
+        entries: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Remove messages from this linked device only (including others' messages)."""
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+
+        targets: list[tuple[str, str, bool, int]] = []
+
+        if entries:
+            for raw in entries:
+                if not isinstance(raw, dict):
+                    continue
+                mid = str(raw.get("message_id", "")).strip()
+                sid = str(raw.get("sender_id", "")).strip()
+                if not mid or not sid:
+                    continue
+                targets.append(
+                    (
+                        mid,
+                        sid,
+                        bool(raw.get("from_me", False)),
+                        int(raw.get("timestamp") or time.time()),
+                    )
+                )
+
+        with self.state.lock:
+            by_id = {m.message_id: m for m in self.state.messages.get(chat_id, [])}
+
+        if message_ids:
+            for mid in message_ids:
+                mid = str(mid).strip()
+                if not mid or any(t[0] == mid for t in targets):
+                    continue
+                stored = by_id.get(mid)
+                if stored is not None:
+                    targets.append(
+                        (stored.message_id, stored.sender_id, stored.from_me, stored.timestamp)
+                    )
+                else:
+                    targets.append((mid, "", False, int(time.time())))
+
+        if before_timestamp is not None or after_timestamp is not None or from_me is not None:
+            with self.state.lock:
+                bucket = list(self.state.messages.get(chat_id, []))
+            for m in bucket:
+                if before_timestamp is not None and m.timestamp >= before_timestamp:
+                    continue
+                if after_timestamp is not None and m.timestamp <= after_timestamp:
+                    continue
+                if from_me is not None and m.from_me is not from_me:
+                    continue
+                if not any(t[0] == m.message_id for t in targets):
+                    targets.append(
+                        (m.message_id, m.sender_id, m.from_me, m.timestamp)
+                    )
+
+        if not targets:
+            raise WorkerError(
+                "Nenhuma mensagem para apagar. Informe message_ids, entries ou filtros "
+                "de timestamp com mensagens já em cache (use sync_whatsapp_chat_history)."
+            )
+
+        deleted: list[str] = []
+        failed: list[dict[str, str]] = []
+
+        for mid, sender_id, is_from_me, ts in targets:
+            if not sender_id:
+                failed.append(
+                    {
+                        "message_id": mid,
+                        "error": (
+                            "Metadados ausentes (sender_id). Use get_whatsapp_messages ou "
+                            "passe entries com sender_id e from_me."
+                        ),
+                    }
+                )
+                continue
+            try:
+                self._delete_one_for_me(
+                    chat_id=chat_id,
+                    message_id=mid,
+                    sender_id=sender_id,
+                    from_me=is_from_me,
+                    timestamp=ts,
+                    delete_media=delete_media,
+                )
+            except Exception as exc:
+                failed.append({"message_id": mid, "error": str(exc)})
+                continue
+            deleted.append(mid)
+            with self.state.lock:
+                bucket = self.state.messages.get(chat_id, [])
+                self.state.messages[chat_id] = [
+                    m for m in bucket if m.message_id != mid
+                ]
+
+        return {
+            "chat_id": chat_id,
+            "mode": "for_me",
+            "deleted": deleted,
+            "failed": failed,
+            "deleted_count": len(deleted),
+            "cache_remaining": len(self.state.messages.get(chat_id, [])),
+        }
+
+    def request_chat_history(
+        self,
+        *,
+        chat_id: str,
+        count: int = 50,
+        wait_s: float = 25.0,
+    ) -> dict[str, Any]:
+        """Ask WhatsApp for older messages (fills in-memory cache via HistorySync/events)."""
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        with self.state.lock:
+            before_count = len(self.state.messages.get(chat_id, []))
+            bucket = list(self.state.messages.get(chat_id, []))
+        if not bucket:
+            return {
+                "chat_id": chat_id,
+                "requested": False,
+                "cache_before": 0,
+                "cache_after": 0,
+                "added": 0,
+                "hint": (
+                    "Sem mensagens em cache para este chat. Após pair, aguarde HistorySync "
+                    "ou envie/receba uma mensagem no chat antes de pedir histórico antigo."
+                ),
+            }
+        oldest = min(bucket, key=lambda m: m.timestamp)
+        from neonize.builder import build_history_sync_request
+        from neonize.proto.Neonize_pb2 import MessageInfo
+
+        chat_jid = self._jid_from_chat_id(chat_id)
+        sender_jid = self._jid_from_chat_id(oldest.sender_id)
+        info = MessageInfo(ID=oldest.message_id, Timestamp=oldest.timestamp)
+        info.MessageSource.Chat.CopyFrom(chat_jid)
+        info.MessageSource.Sender.CopyFrom(sender_jid)
+        info.MessageSource.IsFromMe = oldest.from_me
+        req = build_history_sync_request(info, count)
+        try:
+            self.client.send_message(chat_jid, req)
+        except Exception as exc:
+            raise WorkerError(f"Falha ao pedir histórico: {exc}") from exc
+
+        deadline = time.time() + wait_s
+        after_count = before_count
+        while time.time() < deadline:
+            time.sleep(0.5)
+            with self.state.lock:
+                after_count = len(self.state.messages.get(chat_id, []))
+            if after_count > before_count:
+                break
+
+        return {
+            "chat_id": chat_id,
+            "requested": True,
+            "cache_before": before_count,
+            "cache_after": after_count,
+            "added": max(0, after_count - before_count),
+            "oldest_timestamp_used": oldest.timestamp,
+        }
 
     def send_text(
         self,
@@ -536,7 +768,7 @@ class NeonizeWorker:
                 self.state.messages[chat_id] = [
                     m for m in bucket if m.message_id != mid
                 ]
-                if stored and stored.last_message_preview:
+                if stored:
                     entry = self.state.chats.get(chat_id)
                     if entry and entry.last_message_preview == stored.text[:200]:
                         entry.last_message_preview = ""
@@ -572,6 +804,15 @@ class NeonizeWorker:
                 chat_id=str(params["chat_id"]),
                 limit=int(params.get("limit", 30)),
                 max_chars=int(params.get("max_chars", 800)),
+                before_timestamp=params.get("before_timestamp"),
+                after_timestamp=params.get("after_timestamp"),
+                from_me=params.get("from_me"),
+            )
+        if method == "request_chat_history":
+            return self.request_chat_history(
+                chat_id=str(params["chat_id"]),
+                count=int(params.get("count", 50)),
+                wait_s=float(params.get("wait_s", 25)),
             )
         if method == "send_text":
             return self.send_text(
@@ -591,6 +832,22 @@ class NeonizeWorker:
             return self.delete_messages(
                 chat_id=str(params["chat_id"]),
                 message_ids=[str(i) for i in raw_ids],
+            )
+        if method == "delete_messages_for_me":
+            raw_ids = params.get("message_ids")
+            message_ids = (
+                [str(i) for i in raw_ids] if isinstance(raw_ids, list) else None
+            )
+            raw_entries = params.get("entries")
+            entries = raw_entries if isinstance(raw_entries, list) else None
+            return self.delete_messages_for_me(
+                chat_id=str(params["chat_id"]),
+                message_ids=message_ids,
+                before_timestamp=params.get("before_timestamp"),
+                after_timestamp=params.get("after_timestamp"),
+                from_me=params.get("from_me"),
+                delete_media=bool(params.get("delete_media", False)),
+                entries=entries,
             )
         if method == "shutdown":
             return self.shutdown()

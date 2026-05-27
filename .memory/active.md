@@ -4,7 +4,7 @@
 
 ## Estado
 
-- MVP: MCP stdio, 12 Google + 7 WhatsApp (neonize bridge, incl. delete_whatsapp_messages), multi-conta Google, Fase 2 (policy, confirm, audit)
+- MVP: MCP stdio, 12 Google + 9 WhatsApp (delete for me + sync histórico), multi-conta Google, Fase 2
 - CLI WhatsApp: `status` (rápido + `--live`), `configure`, `pair`, `remove`, `disconnect`; checklist em AGENTS.md
 - Entrada amigável: `./setup.sh` + `Makefile` (delegam à CLI)
 - Auto-config Hermes: `integrator init` / `integrator hermes setup` (stdio padrão)

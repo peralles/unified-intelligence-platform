@@ -73,6 +73,9 @@ class WhatsAppBridgeClient:
         from integrator.whatsapp.session_store import WHATSAPP_CLIENT_NAME
 
         env["INTEGRATOR_WHATSAPP_CLIENT_NAME"] = WHATSAPP_CLIENT_NAME
+        env["INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT"] = str(
+            settings.whatsapp_max_cached_messages_per_chat
+        )
         cmd = [
             "uv",
             "run",

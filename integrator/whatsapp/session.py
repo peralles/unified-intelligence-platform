@@ -69,14 +69,38 @@ class WhatsAppSession:
         chat_id: str,
         limit: int = 30,
         max_chars: int | None = None,
+        before_timestamp: int | None = None,
+        after_timestamp: int | None = None,
+        from_me: bool | None = None,
     ) -> list[dict[str, Any]]:
         self.ensure_background_connection()
         max_c = max_chars if max_chars is not None else settings.whatsapp_max_message_chars
-        result = self._bridge.call(
-            "get_messages",
-            {"chat_id": chat_id, "limit": limit, "max_chars": max_c},
-        )
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "limit": limit,
+            "max_chars": max_c,
+        }
+        if before_timestamp is not None:
+            payload["before_timestamp"] = before_timestamp
+        if after_timestamp is not None:
+            payload["after_timestamp"] = after_timestamp
+        if from_me is not None:
+            payload["from_me"] = from_me
+        result = self._bridge.call("get_messages", payload)
         return list(result or [])
+
+    def request_chat_history(
+        self,
+        *,
+        chat_id: str,
+        count: int = 50,
+        wait_s: float = 25.0,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "request_chat_history",
+            {"chat_id": chat_id, "count": count, "wait_s": wait_s},
+        )
 
     def send_text(
         self,
@@ -114,6 +138,34 @@ class WhatsAppSession:
             "delete_messages",
             {"chat_id": chat_id, "message_ids": message_ids},
         )
+
+    def delete_messages_for_me(
+        self,
+        *,
+        chat_id: str,
+        message_ids: list[str] | None = None,
+        before_timestamp: int | None = None,
+        after_timestamp: int | None = None,
+        from_me: bool | None = None,
+        delete_media: bool = False,
+        entries: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "delete_media": delete_media,
+        }
+        if message_ids is not None:
+            payload["message_ids"] = message_ids
+        if before_timestamp is not None:
+            payload["before_timestamp"] = before_timestamp
+        if after_timestamp is not None:
+            payload["after_timestamp"] = after_timestamp
+        if from_me is not None:
+            payload["from_me"] = from_me
+        if entries is not None:
+            payload["entries"] = entries
+        return self._bridge.call("delete_messages_for_me", payload)
 
     def shutdown(self) -> None:
         if self._started:

@@ -88,6 +88,62 @@ def test_list_whatsapp_chats_mock(mock_get: MagicMock) -> None:
 def test_confirm_required_includes_whatsapp_send():
     assert "send_whatsapp_text" in get_confirm_required_tools()
     assert "delete_whatsapp_messages" in get_confirm_required_tools()
+    assert "delete_whatsapp_messages_for_me" in get_confirm_required_tools()
+
+
+def test_delete_for_me_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "delete_whatsapp_messages_for_me",
+            {
+                "chat_id": "5511999999999@s.whatsapp.net",
+                "message_ids": ["X"],
+            },
+        )
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_delete_whatsapp_messages_for_me_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.delete_messages_for_me.return_value = {
+        "mode": "for_me",
+        "deleted": ["X"],
+        "failed": [],
+        "deleted_count": 1,
+    }
+    mock_get.return_value = session
+
+    out = invoke_tool(
+        "delete_whatsapp_messages_for_me",
+        {
+            "confirm": True,
+            "chat_id": "5511999999999@s.whatsapp.net",
+            "before_timestamp": 1700000000,
+        },
+    )
+    data = json.loads(out)
+    assert data["deleted_count"] == 1
+    session.delete_messages_for_me.assert_called_once()
+    call_kw = session.delete_messages_for_me.call_args.kwargs
+    assert call_kw["before_timestamp"] == 1700000000
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_sync_whatsapp_chat_history_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.request_chat_history.return_value = {
+        "requested": True,
+        "added": 12,
+        "cache_after": 40,
+    }
+    mock_get.return_value = session
+
+    out = invoke_tool(
+        "sync_whatsapp_chat_history",
+        {"chat_id": "5511999999999@s.whatsapp.net", "count": 100},
+    )
+    data = json.loads(out)
+    assert data["added"] == 12
 
 
 def test_delete_whatsapp_requires_confirm():

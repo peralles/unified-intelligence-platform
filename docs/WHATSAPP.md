@@ -1,6 +1,6 @@
 # WhatsApp no integrator (Hermes)
 
-Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.com/krypton-byte/neonize)), exposta como **7 tools MCP** no mesmo servidor que Gmail/Calendar.
+Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.com/krypton-byte/neonize)), exposta como **9 tools MCP** no mesmo servidor que Gmail/Calendar.
 
 ## Arquitetura
 
@@ -11,7 +11,7 @@ Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.co
 ```
 Hermes ──stdio──► integrator serve ──► providers/tools.py
                               ├── google_tools (12)
-                              └── whatsapp_tools (7) ──► bridge_client ──► worker.py (neonize)
+                              └── whatsapp_tools (9) ──► bridge_client ──► worker.py (neonize)
 ```
 
 ## Pré-requisitos (macOS)
@@ -60,7 +60,7 @@ Mesmo padrão do integrator (`data/logs/`):
 
 Diagnóstico: `integrator logs --failures`
 
-## Tools MCP (7)
+## Tools MCP (9)
 
 | Tool | Confirmação |
 |------|-------------|
@@ -68,18 +68,28 @@ Diagnóstico: `integrator logs --failures`
 | `list_whatsapp_chats` | não |
 | `find_whatsapp_chats` | não |
 | `get_whatsapp_messages` | não |
+| `sync_whatsapp_chat_history` | não |
 | `send_whatsapp_text` | **`confirm: true`** |
 | `delete_whatsapp_messages` | **`confirm: true`** |
+| `delete_whatsapp_messages_for_me` | **`confirm: true`** |
 | `mark_whatsapp_read` | não |
 
-Total com Google: **19 tools** (12 + 7).
+Total com Google: **21 tools** (12 + 9).
 
 ### Apagar mensagens
 
-- `delete_whatsapp_messages` usa `revoke_message` do neonize (**apagar para todos**).
-- Só funciona para **mensagens enviadas por você** (`from_me`); IDs vêm de `get_whatsapp_messages`.
-- WhatsApp impõe janela de tempo (~48 h) e outras regras; falhas parciais aparecem em `failed` na resposta JSON.
-- Não suporta “apagar só para mim” mensagens de terceiros (fluxo `send_app_state` do WhatsApp).
+**Mensagens de outras pessoas ou antigas (1–2 anos):** use `delete_whatsapp_messages_for_me` (apaga **só no seu dispositivo** ligado ao integrador).
+
+1. `integrator whatsapp pair` e mantenha o worker conectado.
+2. `sync_whatsapp_chat_history` no chat (repita para ir mais atrás).
+3. `get_whatsapp_messages` com `before_timestamp` / `limit` para listar IDs.
+4. `delete_whatsapp_messages_for_me` com `message_ids` ou `before_timestamp` em lote + `confirm: true`.
+
+**Suas mensagens recentes para todos:** `delete_whatsapp_messages` (`revoke_message`, ~48 h, só `from_me`).
+
+- Cache local até `INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT` (padrão 5000) por chat.
+- Mensagens só existem no MCP se já foram sincronizadas (HistorySync / eventos / `sync_whatsapp_chat_history`).
+- Falhas parciais em `failed` na resposta JSON.
 
 ## Variáveis de ambiente
 
@@ -88,6 +98,7 @@ Total com Google: **19 tools** (12 + 7).
 | `INTEGRATOR_WHATSAPP_ENABLED` | `true` | `false` expõe só Google no MCP |
 | `INTEGRATOR_WHATSAPP_SESSION_DIR` | `data/whatsapp` | Diretório da sessão |
 | `INTEGRATOR_WHATSAPP_MAX_MESSAGE_CHARS` | `800` | Truncagem em respostas |
+| `INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT` | `5000` | Mensagens por chat no worker |
 
 Ver `config/integrator.example.env`.
 
@@ -95,7 +106,7 @@ Ver `config/integrator.example.env`.
 
 - QR e credenciais **nunca** em argumentos de tool.
 - Auditoria sem corpo de mensagem (metadados + hash de `chat_id`).
-- `send_whatsapp_text` e `delete_whatsapp_messages` na denylist/allowlist como as tools Google.
+- Tools destrutivas WhatsApp na denylist/allowlist como as tools Google.
 - Uso não oficial do WhatsApp Web — risco de banimento; assumido uso pessoal.
 
 ## Trilha B (Evolution API) — opcional

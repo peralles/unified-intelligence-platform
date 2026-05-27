@@ -11,6 +11,7 @@ DEFAULT_CONFIRM_REQUIRED = frozenset({
     "delete_calendar_event",
     "send_whatsapp_text",
     "delete_whatsapp_messages",
+    "delete_whatsapp_messages_for_me",
 })
 
 

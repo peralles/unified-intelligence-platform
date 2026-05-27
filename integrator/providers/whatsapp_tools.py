@@ -27,6 +27,8 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "get_whatsapp_messages",
     "send_whatsapp_text",
     "delete_whatsapp_messages",
+    "delete_whatsapp_messages_for_me",
+    "sync_whatsapp_chat_history",
     "mark_whatsapp_read",
 })
 
@@ -86,8 +88,9 @@ def _base_metadata() -> list[dict[str, Any]]:
         {
             "name": "get_whatsapp_messages",
             "description": (
-                "Mensagens recentes de um chat (texto truncado). "
-                "Histórico depende de sync/eventos após conectar."
+                "Mensagens de um chat em cache (texto truncado). "
+                "Use sync_whatsapp_chat_history para puxar mensagens mais antigas. "
+                "Filtros before_timestamp/after_timestamp (Unix segundos) para limpeza em lote."
             ),
             "input_schema": {
                 "type": "object",
@@ -99,6 +102,40 @@ def _base_metadata() -> list[dict[str, Any]]:
                     "limit": {
                         "type": "integer",
                         "description": "Máximo de mensagens (padrão 30).",
+                    },
+                    "before_timestamp": {
+                        "type": "integer",
+                        "description": "Só mensagens anteriores a este Unix timestamp.",
+                    },
+                    "after_timestamp": {
+                        "type": "integer",
+                        "description": "Só mensagens posteriores a este Unix timestamp.",
+                    },
+                    "from_me": {
+                        "type": "boolean",
+                        "description": "true=só suas; false=só de outros.",
+                    },
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "sync_whatsapp_chat_history",
+            "description": (
+                "Pede ao WhatsApp mensagens mais antigas do chat (preenche cache local). "
+                "Requer ao menos uma mensagem já em cache; repita para ir mais atrás no tempo."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do chat."},
+                    "count": {
+                        "type": "integer",
+                        "description": "Quantidade pedida ao servidor (padrão 50).",
+                    },
+                    "wait_s": {
+                        "type": "number",
+                        "description": "Segundos aguardando novas mensagens no cache (padrão 25).",
                     },
                 },
                 "required": ["chat_id"],
@@ -127,12 +164,57 @@ def _base_metadata() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "delete_whatsapp_messages_for_me",
+            "description": (
+                "Apaga mensagens só neste dispositivo (inclui mensagens de outras pessoas). "
+                "Use message_ids de get_whatsapp_messages ou filtros before_timestamp para lote. "
+                "Não apaga para os outros no WhatsApp deles. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do chat."},
+                    "message_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "IDs específicos (opcional se usar filtros de tempo).",
+                    },
+                    "before_timestamp": {
+                        "type": "integer",
+                        "description": (
+                            "Apaga em cache todas com timestamp < este valor (Unix segundos)."
+                        ),
+                    },
+                    "after_timestamp": {
+                        "type": "integer",
+                        "description": "Combinar com before_timestamp para faixa de datas.",
+                    },
+                    "from_me": {
+                        "type": "boolean",
+                        "description": "Limitar a suas mensagens ou só de terceiros.",
+                    },
+                    "delete_media": {
+                        "type": "boolean",
+                        "description": "Também remover mídia local associada.",
+                    },
+                    "entries": {
+                        "type": "array",
+                        "description": (
+                            "Metadados explícitos se a mensagem não estiver em cache: "
+                            "message_id, sender_id, from_me, timestamp."
+                        ),
+                        "items": {"type": "object"},
+                    },
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
             "name": "delete_whatsapp_messages",
             "description": (
-                "Apaga mensagens enviadas por você no chat (revogar para todos), "
-                "usando message_id de get_whatsapp_messages. "
-                "Não remove mensagens de terceiros. Limite de tempo do WhatsApp pode aplicar. "
-                "Ação irreversível — requer confirm=true."
+                "Revoga para todos — só mensagens enviadas por você (não use para mensagens de terceiros; "
+                "use delete_whatsapp_messages_for_me). Limite de tempo do WhatsApp pode aplicar. "
+                "Requer confirm=true."
             ),
             "input_schema": {
                 "type": "object",
@@ -247,9 +329,25 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
             if not chat_id:
                 raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
             chat_hint = _hash_chat_id(chat_id)
+            before_ts = args.get("before_timestamp")
+            after_ts = args.get("after_timestamp")
+            from_me_arg = args.get("from_me")
             result = session.get_messages(
                 chat_id=chat_id,
                 limit=int(args.get("limit", 30)),
+                before_timestamp=int(before_ts) if before_ts is not None else None,
+                after_timestamp=int(after_ts) if after_ts is not None else None,
+                from_me=bool(from_me_arg) if from_me_arg is not None else None,
+            )
+        elif name == "sync_whatsapp_chat_history":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.request_chat_history(
+                chat_id=chat_id,
+                count=int(args.get("count", 50)),
+                wait_s=float(args.get("wait_s", 25)),
             )
         elif name == "send_whatsapp_text":
             text = str(args.get("text", "")).strip()
@@ -289,6 +387,39 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
             result = session.delete_messages(
                 chat_id=chat_id,
                 message_ids=message_ids,
+            )
+        elif name == "delete_whatsapp_messages_for_me":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            raw_ids = args.get("message_ids")
+            message_ids = None
+            if isinstance(raw_ids, list) and raw_ids:
+                message_ids = [str(i).strip() for i in raw_ids if str(i).strip()]
+            before_ts = args.get("before_timestamp")
+            after_ts = args.get("after_timestamp")
+            from_me_arg = args.get("from_me")
+            raw_entries = args.get("entries")
+            entries = raw_entries if isinstance(raw_entries, list) else None
+            if (
+                not message_ids
+                and before_ts is None
+                and after_ts is None
+                and not entries
+            ):
+                raise ToolPolicyError(
+                    "[integrator] Informe message_ids, before_timestamp/after_timestamp "
+                    "ou entries."
+                )
+            result = session.delete_messages_for_me(
+                chat_id=chat_id,
+                message_ids=message_ids,
+                before_timestamp=int(before_ts) if before_ts is not None else None,
+                after_timestamp=int(after_ts) if after_ts is not None else None,
+                from_me=bool(from_me_arg) if from_me_arg is not None else None,
+                delete_media=bool(args.get("delete_media", False)),
+                entries=entries,
             )
         elif name == "mark_whatsapp_read":
             chat_id = str(args.get("chat_id", "")).strip()
