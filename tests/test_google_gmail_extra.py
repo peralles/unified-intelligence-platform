@@ -111,6 +111,24 @@ def test_get_gmail_attachment_writes_file(
     assert result["size"] == 5
 
 
+def test_send_gmail_draft_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool("send_gmail_draft", {"draft_id": "d1"})
+
+
+@patch("integrator.providers.google_gmail_extra._gmail_service")
+def test_list_gmail_labels(mock_service_fn: MagicMock) -> None:
+    service = MagicMock()
+    mock_service_fn.return_value = service
+    service.users.return_value.labels.return_value.list.return_value.execute.return_value = {
+        "labels": [{"id": "INBOX", "name": "INBOX", "type": "system"}]
+    }
+    from integrator.providers.google_gmail_extra import invoke_gmail_extra_tool
+
+    result = invoke_gmail_extra_tool("list_gmail_labels", "pessoal", {})
+    assert result["count"] == 1
+
+
 def test_restore_gmail_requires_confirm():
     with pytest.raises(ConfirmationRequiredError):
         invoke_tool("restore_gmail_message", {"message_id": "m1"})

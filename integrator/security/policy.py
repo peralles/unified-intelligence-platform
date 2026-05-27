@@ -28,6 +28,9 @@ DEFAULT_CONFIRM_REQUIRED = frozenset({
     "update_whatsapp_blocklist",
     "leave_whatsapp_group",
     "restore_gmail_message",
+    "vote_whatsapp_poll",
+    "join_whatsapp_group_link",
+    "send_gmail_draft",
     "edit_whatsapp_text",
 })
 

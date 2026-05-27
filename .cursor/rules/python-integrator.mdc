@@ -14,7 +14,7 @@ alwaysApply: false
 
 ## Domínio
 
-- **54 tools** MCP (12 Google + 9 Gmail extra + 33 WhatsApp) — alterar lista exige testes e `scripts/validate.sh`
+- **60 tools** MCP (12 Google + 12 Gmail extra + 36 WhatsApp) — alterar lista exige testes e `scripts/validate.sh`
 - Account IDs: `^[a-z][a-z0-9_-]{0,31}$`, normalizar com `.strip().lower()`
 - Erros MCP: prefixo `[integrator]` em [integrator/mcp/server.py](integrator/mcp/server.py)
 - Confirmação: `send_gmail_message`, `delete_calendar_event` → `confirm: true` ([integrator/security/policy.py](integrator/security/policy.py))

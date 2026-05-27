@@ -55,6 +55,26 @@ def test_send_document_requires_confirm():
         )
 
 
+def test_vote_poll_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "vote_whatsapp_poll",
+            {
+                "chat_id": "5511@s.whatsapp.net",
+                "poll_message_id": "p1",
+                "selected_options": ["Sim"],
+            },
+        )
+
+
+def test_join_group_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "join_whatsapp_group_link",
+            {"invite_link": "https://chat.whatsapp.com/AbCdEf"},
+        )
+
+
 def test_leave_group_requires_confirm():
     with pytest.raises(ConfirmationRequiredError):
         invoke_tool("leave_whatsapp_group", {"chat_id": "120@g.us"})

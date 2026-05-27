@@ -18,6 +18,9 @@ GMAIL_EXTRA_TOOL_NAMES = frozenset({
     "mark_gmail_read",
     "mark_gmail_unread",
     "restore_gmail_message",
+    "list_gmail_labels",
+    "create_gmail_draft_api",
+    "send_gmail_draft",
 })
 
 
@@ -151,6 +154,37 @@ def list_gmail_extra_tool_metadata() -> list[dict[str, Any]]:
                 "type": "object",
                 "properties": {"message_id": {"type": "string"}},
                 "required": ["message_id"],
+            },
+        },
+        {
+            "name": "list_gmail_labels",
+            "description": "Lista labels Gmail (id, nome, tipo).",
+            "input_schema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "create_gmail_draft_api",
+            "description": (
+                "Cria rascunho Gmail (não envia). Retorna draft_id e message_id."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "to": {"type": "string"},
+                    "subject": {"type": "string"},
+                    "body": {"type": "string"},
+                },
+                "required": ["to", "subject", "body"],
+            },
+        },
+        {
+            "name": "send_gmail_draft",
+            "description": "Envia rascunho existente pelo draft_id. Requer confirm=true.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "draft_id": {"type": "string"},
+                },
+                "required": ["draft_id"],
             },
         },
     ]
@@ -407,6 +441,68 @@ def invoke_gmail_extra_tool(
             "message_id": message_id,
             "label_ids": result.get("labelIds", []),
             "restored": True,
+        }
+
+    if name == "list_gmail_labels":
+        labels: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while True:
+            req = service.users().labels().list(userId="me")
+            if page_token:
+                req = req.pageToken(page_token)
+            resp = req.execute()
+            for lab in resp.get("labels", []):
+                labels.append(
+                    {
+                        "id": lab.get("id"),
+                        "name": lab.get("name"),
+                        "type": lab.get("type"),
+                    }
+                )
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+        return {"labels": labels, "count": len(labels)}
+
+    if name == "create_gmail_draft_api":
+        to_addr = str(args.get("to", "")).strip()
+        subject = str(args.get("subject", "")).strip()
+        body_text = str(args.get("body", "")).strip()
+        if not to_addr or not subject or not body_text:
+            raise ValueError("to, subject e body são obrigatórios")
+        mime = MIMEText(body_text)
+        mime["to"] = to_addr
+        mime["subject"] = subject
+        raw = base64.urlsafe_b64encode(mime.as_bytes()).decode("ascii")
+        draft = (
+            service.users()
+            .drafts()
+            .create(userId="me", body={"message": {"raw": raw}})
+            .execute()
+        )
+        msg = draft.get("message", {})
+        return {
+            "draft_id": draft.get("id"),
+            "message_id": msg.get("id"),
+            "to": to_addr,
+            "subject": subject,
+        }
+
+    if name == "send_gmail_draft":
+        draft_id = str(args.get("draft_id", "")).strip()
+        if not draft_id:
+            raise ValueError("draft_id é obrigatório")
+        sent = (
+            service.users()
+            .drafts()
+            .send(userId="me", body={"id": draft_id})
+            .execute()
+        )
+        return {
+            "draft_id": draft_id,
+            "id": sent.get("id"),
+            "thread_id": sent.get("threadId"),
+            "label_ids": sent.get("labelIds", []),
         }
 
     raise KeyError(f"Tool Gmail extra desconhecida: {name}")

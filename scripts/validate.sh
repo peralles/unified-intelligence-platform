@@ -53,6 +53,9 @@ for required in (
     'update_whatsapp_blocklist',
     'leave_whatsapp_group',
     'restore_gmail_message',
+    'vote_whatsapp_poll',
+    'join_whatsapp_group_link',
+    'send_gmail_draft',
 ):
     assert required in confirm, required
 from integrator.accounts.registry import validate_account_id

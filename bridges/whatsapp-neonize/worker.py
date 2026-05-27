@@ -1172,6 +1172,79 @@ class NeonizeWorker:
             self.state.messages.pop(chat_id, None)
         return {"chat_id": chat_id, "left": True}
 
+    @staticmethod
+    def _parse_group_invite_code(invite_link: str) -> str:
+        link = invite_link.strip()
+        if "chat.whatsapp.com/" in link:
+            return link.rstrip("/").split("/")[-1].split("?")[0]
+        return link
+
+    def join_group_link(self, *, invite_link: str) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        code = self._parse_group_invite_code(invite_link)
+        if not code:
+            raise WorkerError("invite_link ou código inválido.")
+        jid = self.client.join_group_with_link(code)
+        chat_id = Jid2String(jid)
+        return {"chat_id": chat_id, "invite_code": code}
+
+    def vote_poll(
+        self,
+        *,
+        chat_id: str,
+        poll_message_id: str,
+        selected_options: list[str],
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        opts = [str(o).strip() for o in selected_options if str(o).strip()]
+        if not opts:
+            raise WorkerError("selected_options deve ter pelo menos uma opção.")
+        stored = self._lookup_stored_message(chat_id, poll_message_id)
+        neonize_msg = self._load_quoted_neonize_message(stored)
+        poll_info = neonize_msg.Info
+        chat_jid = self._jid_from_chat_id(chat_id)
+        vote_msg = self.client.build_poll_vote(poll_info, opts)
+        resp = self.client.send_message(chat_jid, vote_msg)
+        return {
+            "message_id": resp.ID,
+            "chat_id": chat_id,
+            "poll_message_id": poll_message_id,
+            "selected_options": opts,
+        }
+
+    def get_user_info(
+        self,
+        *,
+        chat_ids: list[str] | None = None,
+        chat_id: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        ids = list(chat_ids or [])
+        if chat_id:
+            ids.append(chat_id)
+        ids = [c.strip() for c in ids if c and str(c).strip()]
+        if not ids:
+            raise WorkerError("Informe chat_id ou chat_ids.")
+        jids = [self._jid_from_chat_id(c) for c in ids]
+        entries = self.client.get_user_info(*jids)
+        users: list[dict[str, Any]] = []
+        for entry in entries:
+            jid = getattr(entry, "JID", None)
+            chat_id_str = Jid2String(jid) if jid is not None else ""
+            ui = getattr(entry, "UserInfo", None)
+            users.append(
+                {
+                    "chat_id": chat_id_str,
+                    "verified_name": str(getattr(ui, "VerifiedName", "") or "") if ui else "",
+                    "status": str(getattr(ui, "Status", "") or "") if ui else "",
+                    "picture_id": str(getattr(ui, "PictureID", "") or "") if ui else "",
+                }
+            )
+        return {"users": users, "count": len(users)}
+
     def set_chat_muted(
         self,
         *,
@@ -1586,6 +1659,24 @@ class NeonizeWorker:
             )
         if method == "leave_group":
             return self.leave_group(chat_id=str(params["chat_id"]))
+        if method == "join_group_link":
+            return self.join_group_link(invite_link=str(params["invite_link"]))
+        if method == "vote_poll":
+            raw_opts = params.get("selected_options")
+            if not isinstance(raw_opts, list):
+                raise WorkerError("selected_options deve ser uma lista.")
+            return self.vote_poll(
+                chat_id=str(params["chat_id"]),
+                poll_message_id=str(params["poll_message_id"]),
+                selected_options=[str(o) for o in raw_opts],
+            )
+        if method == "get_user_info":
+            raw_ids = params.get("chat_ids")
+            chat_ids = [str(i) for i in raw_ids] if isinstance(raw_ids, list) else None
+            return self.get_user_info(
+                chat_ids=chat_ids,
+                chat_id=params.get("chat_id"),
+            )
         if method == "shutdown":
             return self.shutdown()
         raise WorkerError(f"Método desconhecido: {method}")

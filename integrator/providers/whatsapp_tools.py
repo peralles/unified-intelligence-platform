@@ -54,6 +54,9 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "update_whatsapp_blocklist",
     "get_whatsapp_group_invite_link",
     "leave_whatsapp_group",
+    "vote_whatsapp_poll",
+    "join_whatsapp_group_link",
+    "get_whatsapp_user_info",
 })
 
 _GOOGLE_TOOL_COUNT = 12
@@ -658,6 +661,58 @@ def _base_metadata() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "vote_whatsapp_poll",
+            "description": (
+                "Vota em enquete existente (poll_message_id em cache + selected_options). "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                    "poll_message_id": {"type": "string"},
+                    "selected_options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Texto exato da(s) opção(ões) escolhida(s).",
+                    },
+                },
+                "required": ["chat_id", "poll_message_id", "selected_options"],
+            },
+        },
+        {
+            "name": "join_whatsapp_group_link",
+            "description": (
+                "Entra em grupo via link chat.whatsapp.com/... ou código. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "invite_link": {
+                        "type": "string",
+                        "description": "URL completa ou código do convite.",
+                    },
+                },
+                "required": ["invite_link"],
+            },
+        },
+        {
+            "name": "get_whatsapp_user_info",
+            "description": (
+                "Status/nome verificado de um ou mais contatos (chat_id ou chat_ids)."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                    "chat_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+            },
+        },
+        {
             "name": "mark_whatsapp_read",
             "description": "Marca mensagens recentes do chat como lidas.",
             "input_schema": {
@@ -1175,6 +1230,47 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
                 raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
             chat_hint = _hash_chat_id(chat_id)
             result = session.leave_group(chat_id=chat_id)
+        elif name == "vote_whatsapp_poll":
+            chat_id = str(args.get("chat_id", "")).strip()
+            poll_id = str(args.get("poll_message_id", "")).strip()
+            raw_opts = args.get("selected_options")
+            if not chat_id or not poll_id:
+                raise ToolPolicyError(
+                    "[integrator] chat_id e poll_message_id são obrigatórios."
+                )
+            if not isinstance(raw_opts, list) or not raw_opts:
+                raise ToolPolicyError(
+                    "[integrator] selected_options deve ser lista não vazia."
+                )
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.vote_poll(
+                chat_id=chat_id,
+                poll_message_id=poll_id,
+                selected_options=[str(o) for o in raw_opts],
+            )
+        elif name == "join_whatsapp_group_link":
+            invite_link = str(args.get("invite_link", "")).strip()
+            if not invite_link:
+                raise ToolPolicyError("[integrator] invite_link é obrigatório.")
+            result = session.join_group_link(invite_link=invite_link)
+        elif name == "get_whatsapp_user_info":
+            chat_id = args.get("chat_id")
+            raw_ids = args.get("chat_ids")
+            chat_ids = (
+                [str(i).strip() for i in raw_ids if str(i).strip()]
+                if isinstance(raw_ids, list)
+                else None
+            )
+            if not chat_id and not chat_ids:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou chat_ids."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.get_user_info(
+                chat_ids=chat_ids,
+                chat_id=str(chat_id).strip() if chat_id else None,
+            )
         else:
             _finish(success=False, error_kind="unknown_tool")
             raise KeyError(f"Tool WhatsApp desconhecida: {name}")

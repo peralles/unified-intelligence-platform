@@ -379,6 +379,41 @@ class WhatsAppSession:
         self.ensure_background_connection()
         return self._bridge.call("leave_group", {"chat_id": chat_id})
 
+    def join_group_link(self, *, invite_link: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("join_group_link", {"invite_link": invite_link})
+
+    def vote_poll(
+        self,
+        *,
+        chat_id: str,
+        poll_message_id: str,
+        selected_options: list[str],
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "vote_poll",
+            {
+                "chat_id": chat_id,
+                "poll_message_id": poll_message_id,
+                "selected_options": selected_options,
+            },
+        )
+
+    def get_user_info(
+        self,
+        *,
+        chat_ids: list[str] | None = None,
+        chat_id: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        payload: dict[str, Any] = {}
+        if chat_ids is not None:
+            payload["chat_ids"] = chat_ids
+        if chat_id is not None:
+            payload["chat_id"] = chat_id
+        return self._bridge.call("get_user_info", payload)
+
     def search_messages(
         self,
         *,
