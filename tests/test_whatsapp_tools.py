@@ -55,6 +55,33 @@ def test_send_document_requires_confirm():
         )
 
 
+def test_leave_group_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool("leave_whatsapp_group", {"chat_id": "120@g.us"})
+
+
+def test_send_poll_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "send_whatsapp_poll",
+            {
+                "question": "Q?",
+                "options": ["a", "b"],
+                "number": "5511999999999",
+            },
+        )
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_get_blocklist_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.get_blocklist.return_value = {"blocked": ["5511@s.whatsapp.net"], "count": 1}
+    mock_get.return_value = session
+    out = invoke_tool("get_whatsapp_blocklist", {})
+    data = json.loads(out)
+    assert data["count"] == 1
+
+
 def test_send_video_requires_confirm():
     with pytest.raises(ConfirmationRequiredError):
         invoke_tool(

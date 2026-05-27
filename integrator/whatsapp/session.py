@@ -306,6 +306,79 @@ class WhatsAppSession:
             {"chat_id": chat_id, "composing": composing, "media": media},
         )
 
+    def send_poll(
+        self,
+        *,
+        question: str,
+        options: list[str],
+        chat_id: str | None = None,
+        number: str | None = None,
+        allow_multiple: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_poll",
+            {
+                "question": question,
+                "options": options,
+                "chat_id": chat_id,
+                "number": number,
+                "allow_multiple": allow_multiple,
+            },
+        )
+
+    def send_album(
+        self,
+        *,
+        file_paths: list[str],
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_album",
+            {
+                "file_paths": file_paths,
+                "chat_id": chat_id,
+                "number": number,
+                "caption": caption,
+            },
+        )
+
+    def get_blocklist(self) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("get_blocklist", {})
+
+    def update_blocklist(
+        self,
+        *,
+        chat_id: str | None = None,
+        number: str | None = None,
+        block: bool = True,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "update_blocklist",
+            {"chat_id": chat_id, "number": number, "block": block},
+        )
+
+    def get_group_invite_link(
+        self,
+        *,
+        chat_id: str,
+        revoke: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "get_group_invite_link",
+            {"chat_id": chat_id, "revoke": revoke},
+        )
+
+    def leave_group(self, *, chat_id: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("leave_group", {"chat_id": chat_id})
+
     def search_messages(
         self,
         *,

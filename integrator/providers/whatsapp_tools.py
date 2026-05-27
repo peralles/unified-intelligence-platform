@@ -48,6 +48,12 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "list_whatsapp_groups",
     "get_whatsapp_profile_picture",
     "send_whatsapp_typing",
+    "send_whatsapp_poll",
+    "send_whatsapp_album",
+    "get_whatsapp_blocklist",
+    "update_whatsapp_blocklist",
+    "get_whatsapp_group_invite_link",
+    "leave_whatsapp_group",
 })
 
 _GOOGLE_TOOL_COUNT = 12
@@ -563,6 +569,95 @@ def _base_metadata() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "send_whatsapp_poll",
+            "description": (
+                "Cria enquete no chat (question + options, mín. 2). "
+                "allow_multiple para voto múltiplo. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string"},
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "allow_multiple": {"type": "boolean"},
+                },
+                "required": ["question", "options"],
+            },
+        },
+        {
+            "name": "send_whatsapp_album",
+            "description": (
+                "Envia álbum de imagens/vídeos (lista de caminhos locais). "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Caminhos absolutos (2+ arquivos).",
+                    },
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "caption": {"type": "string"},
+                },
+                "required": ["file_paths"],
+            },
+        },
+        {
+            "name": "get_whatsapp_blocklist",
+            "description": "Lista JIDs/contatos bloqueados.",
+            "input_schema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "update_whatsapp_blocklist",
+            "description": (
+                "Bloqueia ou desbloqueia contato (block true/false). Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "block": {
+                        "type": "boolean",
+                        "description": "true=bloquear, false=desbloquear (padrão true).",
+                    },
+                },
+            },
+        },
+        {
+            "name": "get_whatsapp_group_invite_link",
+            "description": (
+                "Obtém link de convite do grupo. revoke=true invalida link anterior."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID @g.us"},
+                    "revoke": {"type": "boolean"},
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "leave_whatsapp_group",
+            "description": "Sai do grupo WhatsApp. Requer confirm=true.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID @g.us"},
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
             "name": "mark_whatsapp_read",
             "description": "Marca mensagens recentes do chat como lidas.",
             "input_schema": {
@@ -1005,6 +1100,81 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
                 composing=bool(args.get("composing", True)),
                 media=str(args.get("media", "text")),
             )
+        elif name == "send_whatsapp_poll":
+            question = str(args.get("question", "")).strip()
+            raw_opts = args.get("options")
+            if not question:
+                raise ToolPolicyError("[integrator] Parâmetro 'question' é obrigatório.")
+            if not isinstance(raw_opts, list) or len(raw_opts) < 2:
+                raise ToolPolicyError(
+                    "[integrator] options deve ser lista com pelo menos 2 itens."
+                )
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar enquete."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_poll(
+                question=question,
+                options=[str(o) for o in raw_opts],
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                allow_multiple=bool(args.get("allow_multiple", False)),
+            )
+        elif name == "send_whatsapp_album":
+            raw_paths = args.get("file_paths")
+            if not isinstance(raw_paths, list) or len(raw_paths) < 2:
+                raise ToolPolicyError(
+                    "[integrator] file_paths deve ter pelo menos 2 arquivos."
+                )
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar álbum."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_album(
+                file_paths=[str(p) for p in raw_paths],
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                caption=str(args["caption"]) if args.get("caption") else None,
+            )
+        elif name == "get_whatsapp_blocklist":
+            result = session.get_blocklist()
+        elif name == "update_whatsapp_blocklist":
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para bloquear/desbloquear."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.update_blocklist(
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                block=bool(args.get("block", True)),
+            )
+        elif name == "get_whatsapp_group_invite_link":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.get_group_invite_link(
+                chat_id=chat_id,
+                revoke=bool(args.get("revoke", False)),
+            )
+        elif name == "leave_whatsapp_group":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.leave_group(chat_id=chat_id)
         else:
             _finish(success=False, error_kind="unknown_tool")
             raise KeyError(f"Tool WhatsApp desconhecida: {name}")

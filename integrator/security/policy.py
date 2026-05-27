@@ -23,6 +23,11 @@ DEFAULT_CONFIRM_REQUIRED = frozenset({
     "send_whatsapp_sticker",
     "send_whatsapp_contact",
     "trash_gmail_message",
+    "send_whatsapp_poll",
+    "send_whatsapp_album",
+    "update_whatsapp_blocklist",
+    "leave_whatsapp_group",
+    "restore_gmail_message",
     "edit_whatsapp_text",
 })
 

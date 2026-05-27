@@ -1,6 +1,6 @@
 # Plano de implementação — operações Hermes (ordem de velocidade)
 
-**Status:** lote 3 em branch (45 tools — vídeo/sticker/contato, grupos, perfil, typing, lixeira/estrela Gmail).
+**Status:** lote 4 em branch (54 tools).
 
 ## Fase 4 — Lote 3 (mídia e Gmail)
 
@@ -9,6 +9,15 @@
 | 8 | `send_whatsapp_video`, `send_whatsapp_sticker`, `send_whatsapp_contact` | ✅ |
 | 9 | `list_whatsapp_groups`, `get_whatsapp_profile_picture`, `send_whatsapp_typing` | ✅ |
 | 10 | `trash_gmail_message`, `star_gmail_message` | ✅ |
+
+## Fase 5 — Lote 4 (enquete, álbum, bloqueio, grupo)
+
+| # | Tools | Status |
+|---|-------|--------|
+| 11 | `send_whatsapp_poll`, `send_whatsapp_album` | ✅ |
+| 12 | `get_whatsapp_blocklist`, `update_whatsapp_blocklist` | ✅ |
+| 13 | `get_whatsapp_group_invite_link`, `leave_whatsapp_group` | ✅ |
+| 14 | `mark_gmail_read`, `mark_gmail_unread`, `restore_gmail_message` | ✅ |
 
 ## Fase 1 — WhatsApp
 

@@ -4,7 +4,7 @@
 
 ## Estado
 
-- MVP: MCP stdio, 12 Google + 6 Gmail extra + 27 WhatsApp (lote 3: vídeo/sticker/contato, grupos, typing, trash/star), multi-conta Google, Fase 2
+- MVP: MCP stdio, 12 Google + 9 Gmail extra + 33 WhatsApp (lote 4: poll, álbum, blocklist, invite/leave, read/unread/restore Gmail), Fase 2
 - CLI WhatsApp: `status` (rápido + `--live`), `configure`, `pair`, `remove`, `disconnect`; checklist em AGENTS.md
 - Entrada amigável: `./setup.sh` + `Makefile` (delegam à CLI)
 - Auto-config Hermes: `integrator init` / `integrator hermes setup` (stdio padrão)

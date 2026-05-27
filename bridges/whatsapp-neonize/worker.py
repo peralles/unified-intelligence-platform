@@ -1051,6 +1051,127 @@ class NeonizeWorker:
             "media": "audio" if presence_media == ChatPresenceMedia.CHAT_PRESENCE_MEDIA_AUDIO else "text",
         }
 
+    def send_poll(
+        self,
+        *,
+        question: str,
+        options: list[str],
+        chat_id: str | None = None,
+        number: str | None = None,
+        allow_multiple: bool = False,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        title = question.strip()
+        opts = [str(o).strip() for o in options if str(o).strip()]
+        if not title:
+            raise WorkerError("question é obrigatória.")
+        if len(opts) < 2:
+            raise WorkerError("Informe pelo menos 2 options.")
+        from neonize.utils.enum import VoteType
+
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        vote_type = VoteType.MULTIPLE if allow_multiple else VoteType.SINGLE
+        poll_msg = self.client.build_poll_vote_creation(title, opts, vote_type)
+        resp = self.client.send_message(jid, poll_msg)
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "question": title,
+            "options": opts,
+        }
+
+    def send_album(
+        self,
+        *,
+        file_paths: list[str],
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+    ) -> dict[str, Any]:
+        if not file_paths:
+            raise WorkerError("file_paths deve ser uma lista não vazia.")
+        paths: list[str] = []
+        for raw in file_paths:
+            path = Path(str(raw)).expanduser().resolve()
+            if not path.is_file():
+                raise WorkerError(f"Arquivo não encontrado: {path}")
+            paths.append(str(path))
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        result = self.client.send_album(jid, paths, caption=caption or "")
+        sent: list[dict[str, Any]] = []
+        if isinstance(result, (list, tuple)):
+            for item in result:
+                if hasattr(item, "ID"):
+                    sent.append(
+                        {
+                            "message_id": item.ID,
+                            "timestamp": int(getattr(item, "Timestamp", 0)),
+                        }
+                    )
+        return {
+            "chat_id": Jid2String(jid),
+            "files": paths,
+            "sent": sent,
+            "count": len(sent),
+        }
+
+    def get_blocklist(self) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        bl = self.client.get_blocklist()
+        jids = getattr(bl, "JIDs", None) or []
+        blocked: list[str] = []
+        for entry in jids:
+            blocked.append(Jid2String(entry))
+        return {"blocked": blocked, "count": len(blocked)}
+
+    def update_blocklist(
+        self,
+        *,
+        chat_id: str | None = None,
+        number: str | None = None,
+        block: bool = True,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        from neonize.utils.enum import BlocklistAction
+
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        action = BlocklistAction.BLOCK if block else BlocklistAction.UNBLOCK
+        self.client.update_blocklist(jid, action)
+        return {
+            "chat_id": Jid2String(jid),
+            "blocked": block,
+        }
+
+    def get_group_invite_link(
+        self,
+        *,
+        chat_id: str,
+        revoke: bool = False,
+    ) -> dict[str, Any]:
+        if "@g.us" not in chat_id:
+            raise WorkerError("chat_id deve ser um grupo (@g.us).")
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        jid = self._jid_from_chat_id(chat_id)
+        link = self.client.get_group_invite_link(jid, revoke=revoke)
+        return {"chat_id": chat_id, "invite_link": str(link), "revoked_previous": revoke}
+
+    def leave_group(self, *, chat_id: str) -> dict[str, Any]:
+        if "@g.us" not in chat_id:
+            raise WorkerError("chat_id deve ser um grupo (@g.us).")
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        jid = self._jid_from_chat_id(chat_id)
+        self.client.leave_group(jid)
+        with self.state.lock:
+            self.state.chats.pop(chat_id, None)
+            self.state.messages.pop(chat_id, None)
+        return {"chat_id": chat_id, "left": True}
+
     def set_chat_muted(
         self,
         *,
@@ -1429,6 +1550,42 @@ class NeonizeWorker:
                 composing=bool(params.get("composing", True)),
                 media=str(params.get("media", "text")),
             )
+        if method == "send_poll":
+            raw_opts = params.get("options")
+            if not isinstance(raw_opts, list):
+                raise WorkerError("options deve ser uma lista.")
+            return self.send_poll(
+                question=str(params["question"]),
+                options=[str(o) for o in raw_opts],
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                allow_multiple=bool(params.get("allow_multiple", False)),
+            )
+        if method == "send_album":
+            raw_paths = params.get("file_paths")
+            if not isinstance(raw_paths, list):
+                raise WorkerError("file_paths deve ser uma lista.")
+            return self.send_album(
+                file_paths=[str(p) for p in raw_paths],
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                caption=params.get("caption"),
+            )
+        if method == "get_blocklist":
+            return self.get_blocklist()
+        if method == "update_blocklist":
+            return self.update_blocklist(
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                block=bool(params.get("block", True)),
+            )
+        if method == "get_group_invite_link":
+            return self.get_group_invite_link(
+                chat_id=str(params["chat_id"]),
+                revoke=bool(params.get("revoke", False)),
+            )
+        if method == "leave_group":
+            return self.leave_group(chat_id=str(params["chat_id"]))
         if method == "shutdown":
             return self.shutdown()
         raise WorkerError(f"Método desconhecido: {method}")
