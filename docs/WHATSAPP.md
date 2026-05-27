@@ -60,7 +60,7 @@ Mesmo padrão do integrator (`data/logs/`):
 
 Diagnóstico: `integrator logs --failures`
 
-## Tools MCP (36)
+## Tools MCP (39)
 
 | Tool | Confirmação |
 |------|-------------|
@@ -75,14 +75,16 @@ Diagnóstico: `integrator logs --failures`
 | `update_whatsapp_blocklist` / `leave_whatsapp_group` | **`confirm: true`** |
 | `get_whatsapp_blocklist` / `get_whatsapp_group_invite_link` | não |
 | `vote_whatsapp_poll` / `join_whatsapp_group_link` | **`confirm: true`** |
-| `get_whatsapp_user_info` | não |
+| `get_whatsapp_user_info` / `preview_whatsapp_group_link` | não |
+| `clear_whatsapp_chat_cache` | não (só cache local) |
+| `leave_whatsapp_group_and_purge` | **`confirm: true`** |
 | `whatsapp_react_message` | não |
 | `edit_whatsapp_text` | **`confirm: true`** |
 | `delete_whatsapp_messages` / `delete_whatsapp_messages_for_me` | **`confirm: true`** |
 | `archive_whatsapp_chat` / `pin_whatsapp_chat` / `mark_whatsapp_read` / `mute_whatsapp_chat` | não |
 | `send_whatsapp_typing` | não (usar com moderação) |
 
-Total com Google: **60 tools** (12 LangChain + 12 Gmail extra + 36 WhatsApp).
+Total com Google: **65 tools** (12 LangChain + 13 Gmail extra + 1 Calendar extra + 39 WhatsApp).
 
 ### Cache persistente
 

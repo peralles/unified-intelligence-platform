@@ -37,7 +37,7 @@ Antes de dar por concluído, verificar e alinhar:
 
 - Settings: prefixo env `INTEGRATOR_*` — ver `integrator/config.py`, `config/integrator.example.env`
 - Account IDs: `^[a-z][a-z0-9_-]{0,31}$`; entrada normalizada com `.strip().lower()`
-- Superfície MCP: **12** Google (LangChain) + **12** Gmail extra + **36** WhatsApp; `validate.sh` asserta **60** total
+- Superfície MCP: **12** Google (LangChain) + **13** Gmail extra + **1** Calendar extra + **39** WhatsApp; `validate.sh` asserta **65** total
 - Confirmação: envio/edição/apagar (Gmail e WhatsApp) — ver `get_confirm_required_tools()` em `integrator/security/policy.py`
 - Erros MCP: prefixo `[integrator]` em `integrator/mcp/server.py`
 - Nunca commitar `credentials/`, `data/`, `.env`; tokens fora do contexto do LLM

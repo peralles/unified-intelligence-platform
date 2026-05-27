@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from integrator.providers.tools import (
+    CALENDAR_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
@@ -17,7 +18,12 @@ from integrator.security.policy import ConfirmationRequiredError, get_confirm_re
 
 
 def test_total_tool_count():
-    assert TOTAL_TOOL_COUNT == GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + WHATSAPP_TOOL_COUNT
+    assert TOTAL_TOOL_COUNT == (
+        GOOGLE_TOOL_COUNT
+        + GMAIL_EXTRA_TOOL_COUNT
+        + CALENDAR_EXTRA_TOOL_COUNT
+        + WHATSAPP_TOOL_COUNT
+    )
     assert len(list_all_tool_metadata()) == TOTAL_TOOL_COUNT
 
 
@@ -109,6 +115,14 @@ def test_get_gmail_attachment_writes_file(
     )
     assert dest.read_bytes() == b"hello"
     assert result["size"] == 5
+
+
+def test_batch_modify_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "batch_modify_gmail_labels",
+            {"message_ids": ["m1"], "add_labels": ["STARRED"]},
+        )
 
 
 def test_send_gmail_draft_requires_confirm():

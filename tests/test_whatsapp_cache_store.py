@@ -47,3 +47,11 @@ def test_cache_store_upsert_and_reload(tmp_path: Path) -> None:
     assert "5511@s.whatsapp.net" in buckets
     assert buckets["5511@s.whatsapp.net"][0].message_id == "m1"
     assert buckets["5511@s.whatsapp.net"][0].text == "oi"
+
+    store3 = MessageCacheStore(db)
+    store3.delete_chat("5511@s.whatsapp.net")
+    store3.close()
+    store4 = MessageCacheStore(db)
+    buckets2 = store4.load_into_buckets(max_per_chat=10)
+    store4.close()
+    assert "5511@s.whatsapp.net" not in buckets2

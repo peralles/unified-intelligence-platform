@@ -21,6 +21,7 @@ GMAIL_EXTRA_TOOL_NAMES = frozenset({
     "list_gmail_labels",
     "create_gmail_draft_api",
     "send_gmail_draft",
+    "batch_modify_gmail_labels",
 })
 
 
@@ -185,6 +186,31 @@ def list_gmail_extra_tool_metadata() -> list[dict[str, Any]]:
                     "draft_id": {"type": "string"},
                 },
                 "required": ["draft_id"],
+            },
+        },
+        {
+            "name": "batch_modify_gmail_labels",
+            "description": (
+                "Altera labels em lote (até 1000 message_ids). "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "message_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "add_labels": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "remove_labels": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["message_ids"],
             },
         },
     ]
@@ -503,6 +529,27 @@ def invoke_gmail_extra_tool(
             "id": sent.get("id"),
             "thread_id": sent.get("threadId"),
             "label_ids": sent.get("labelIds", []),
+        }
+
+    if name == "batch_modify_gmail_labels":
+        raw_ids = args.get("message_ids")
+        if not isinstance(raw_ids, list) or not raw_ids:
+            raise ValueError("message_ids deve ser lista não vazia")
+        message_ids = [str(i).strip() for i in raw_ids if str(i).strip()][:1000]
+        body: dict[str, Any] = {"ids": message_ids}
+        add_labels = args.get("add_labels")
+        remove_labels = args.get("remove_labels")
+        if isinstance(add_labels, list) and add_labels:
+            body["addLabelIds"] = [str(x) for x in add_labels]
+        if isinstance(remove_labels, list) and remove_labels:
+            body["removeLabelIds"] = [str(x) for x in remove_labels]
+        if "addLabelIds" not in body and "removeLabelIds" not in body:
+            raise ValueError("Informe add_labels e/ou remove_labels")
+        service.users().messages().batchModify(userId="me", body=body).execute()
+        return {
+            "message_ids_count": len(message_ids),
+            "add_labels": body.get("addLabelIds"),
+            "remove_labels": body.get("removeLabelIds"),
         }
 
     raise KeyError(f"Tool Gmail extra desconhecida: {name}")

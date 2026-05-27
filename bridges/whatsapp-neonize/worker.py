@@ -1189,6 +1189,62 @@ class NeonizeWorker:
         chat_id = Jid2String(jid)
         return {"chat_id": chat_id, "invite_code": code}
 
+    def preview_group_from_link(self, *, invite_link: str) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        code = self._parse_group_invite_code(invite_link)
+        if not code:
+            raise WorkerError("invite_link ou código inválido.")
+        info = self.client.get_group_info_from_link(code)
+        jid = getattr(info, "JID", None)
+        chat_id = Jid2String(jid) if jid is not None else ""
+        participants = getattr(info, "Participants", None)
+        count = len(participants) if participants is not None else 0
+        return {
+            "invite_code": code,
+            "chat_id": chat_id,
+            "name": str(getattr(info, "GroupName", "") or ""),
+            "participant_count": count,
+        }
+
+    def clear_chat_local_cache(self, *, chat_id: str) -> dict[str, Any]:
+        removed = 0
+        with self.state.lock:
+            removed = len(self.state.messages.pop(chat_id, []))
+            self.state.chats.pop(chat_id, None)
+        if self._cache_store is not None:
+            try:
+                self._cache_store.delete_chat(chat_id)
+            except Exception as exc:
+                logging.getLogger("whatsapp.cache").warning(
+                    "cache delete_chat failed: %s", exc
+                )
+        return {"chat_id": chat_id, "removed_from_cache": removed}
+
+    def leave_group_and_purge(
+        self,
+        *,
+        chat_id: str,
+        delete_media: bool = False,
+    ) -> dict[str, Any]:
+        if "@g.us" not in chat_id:
+            raise WorkerError("chat_id deve ser um grupo (@g.us).")
+        purge_result: dict[str, Any] | None = None
+        with self.state.lock:
+            ids = [m.message_id for m in self.state.messages.get(chat_id, [])]
+        if ids:
+            purge_result = self.delete_messages_for_me(
+                chat_id=chat_id,
+                message_ids=ids,
+                delete_media=delete_media,
+            )
+        left = self.leave_group(chat_id=chat_id)
+        return {
+            "chat_id": chat_id,
+            "left": left.get("left", True),
+            "purge": purge_result or {"deleted_count": 0, "deleted": []},
+        }
+
     def vote_poll(
         self,
         *,
@@ -1661,6 +1717,15 @@ class NeonizeWorker:
             return self.leave_group(chat_id=str(params["chat_id"]))
         if method == "join_group_link":
             return self.join_group_link(invite_link=str(params["invite_link"]))
+        if method == "preview_group_from_link":
+            return self.preview_group_from_link(invite_link=str(params["invite_link"]))
+        if method == "clear_chat_local_cache":
+            return self.clear_chat_local_cache(chat_id=str(params["chat_id"]))
+        if method == "leave_group_and_purge":
+            return self.leave_group_and_purge(
+                chat_id=str(params["chat_id"]),
+                delete_media=bool(params.get("delete_media", False)),
+            )
         if method == "vote_poll":
             raw_opts = params.get("selected_options")
             if not isinstance(raw_opts, list):

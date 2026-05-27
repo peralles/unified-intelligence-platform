@@ -31,6 +31,8 @@ DEFAULT_CONFIRM_REQUIRED = frozenset({
     "vote_whatsapp_poll",
     "join_whatsapp_group_link",
     "send_gmail_draft",
+    "batch_modify_gmail_labels",
+    "leave_whatsapp_group_and_purge",
     "edit_whatsapp_text",
 })
 

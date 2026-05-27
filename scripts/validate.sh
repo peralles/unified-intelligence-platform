@@ -16,6 +16,7 @@ uv run pytest -q --tb=short
 echo "==> import smoke"
 uv run python -c "
 from integrator.providers.tools import (
+    CALENDAR_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
@@ -27,7 +28,12 @@ from integrator.security.policy import get_confirm_required_tools
 meta = list_all_tool_metadata()
 google = list_google_tool_metadata()
 assert len(google) == GOOGLE_TOOL_COUNT == 12, len(google)
-expected_total = GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + WHATSAPP_TOOL_COUNT
+expected_total = (
+    GOOGLE_TOOL_COUNT
+    + GMAIL_EXTRA_TOOL_COUNT
+    + CALENDAR_EXTRA_TOOL_COUNT
+    + WHATSAPP_TOOL_COUNT
+)
 assert len(meta) == TOTAL_TOOL_COUNT == expected_total, (len(meta), expected_total)
 confirm = get_confirm_required_tools()
 for required in (
@@ -56,6 +62,8 @@ for required in (
     'vote_whatsapp_poll',
     'join_whatsapp_group_link',
     'send_gmail_draft',
+    'batch_modify_gmail_labels',
+    'leave_whatsapp_group_and_purge',
 ):
     assert required in confirm, required
 from integrator.accounts.registry import validate_account_id
@@ -63,7 +71,7 @@ assert validate_account_id('Profissional') == 'profissional'
 print(
     'OK:', len(meta), 'tools (',
     GOOGLE_TOOL_COUNT, 'Google +', GMAIL_EXTRA_TOOL_COUNT, 'Gmail extra +',
-    WHATSAPP_TOOL_COUNT, 'WhatsApp)',
+    CALENDAR_EXTRA_TOOL_COUNT, 'Calendar extra +', WHATSAPP_TOOL_COUNT, 'WhatsApp)',
 )
 "
 

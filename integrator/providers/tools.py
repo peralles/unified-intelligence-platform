@@ -4,6 +4,11 @@ from typing import Any
 
 from integrator.auth.google_oauth import GoogleAuthError
 from integrator.config import settings
+from integrator.providers.google_calendar_extra import (
+    CALENDAR_EXTRA_TOOL_NAMES,
+    invoke_calendar_extra_tool,
+    list_calendar_extra_tool_metadata,
+)
 from integrator.providers.google_gmail_extra import (
     GMAIL_EXTRA_TOOL_NAMES,
     invoke_gmail_extra_tool,
@@ -21,8 +26,14 @@ from integrator.providers.whatsapp_tools import (
 
 GOOGLE_TOOL_COUNT = 12
 GMAIL_EXTRA_TOOL_COUNT = len(GMAIL_EXTRA_TOOL_NAMES)
+CALENDAR_EXTRA_TOOL_COUNT = len(CALENDAR_EXTRA_TOOL_NAMES)
 WHATSAPP_TOOL_COUNT = len(WHATSAPP_TOOL_NAMES)
-TOTAL_TOOL_COUNT = GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + WHATSAPP_TOOL_COUNT
+TOTAL_TOOL_COUNT = (
+    GOOGLE_TOOL_COUNT
+    + GMAIL_EXTRA_TOOL_COUNT
+    + CALENDAR_EXTRA_TOOL_COUNT
+    + WHATSAPP_TOOL_COUNT
+)
 
 
 def list_all_tool_metadata() -> list[dict[str, Any]]:
@@ -31,6 +42,7 @@ def list_all_tool_metadata() -> list[dict[str, Any]]:
     tools = [
         *list_google_tool_metadata(),
         *filter_tool_metadata(list_gmail_extra_tool_metadata()),
+        *filter_tool_metadata(list_calendar_extra_tool_metadata()),
     ]
     if settings.whatsapp_enabled:
         tools = [*tools, *list_whatsapp_tool_metadata()]
@@ -41,7 +53,12 @@ def is_whatsapp_tool(name: str) -> bool:
     return name in WHATSAPP_TOOL_NAMES
 
 
-def _invoke_gmail_extra_tool(name: str, arguments: dict[str, Any] | None) -> str:
+def _invoke_google_extra_tool(
+    name: str,
+    arguments: dict[str, Any] | None,
+    *,
+    invoke_fn: Any,
+) -> str:
     import json
 
     from integrator.accounts.registry import resolve_account_id
@@ -58,10 +75,16 @@ def _invoke_gmail_extra_tool(name: str, arguments: dict[str, Any] | None) -> str
     args, explicit_account = strip_control_args(arguments)
     account_id = resolve_account_id(explicit_account)
     try:
-        result = invoke_gmail_extra_tool(name, account_id, args)
+        result = invoke_fn(name, account_id, args)
     except GoogleAuthError as exc:
         raise ToolPolicyError(f"[integrator] Autenticação necessária: {exc}") from exc
     return json.dumps(result, ensure_ascii=False, default=str)
+
+
+def _invoke_gmail_extra_tool(name: str, arguments: dict[str, Any] | None) -> str:
+    return _invoke_google_extra_tool(
+        name, arguments, invoke_fn=invoke_gmail_extra_tool
+    )
 
 
 def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
@@ -69,4 +92,8 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None) -> str:
         return invoke_whatsapp_tool(name, arguments)
     if name in GMAIL_EXTRA_TOOL_NAMES:
         return _invoke_gmail_extra_tool(name, arguments)
+    if name in CALENDAR_EXTRA_TOOL_NAMES:
+        return _invoke_google_extra_tool(
+            name, arguments, invoke_fn=invoke_calendar_extra_tool
+        )
     return invoke_google_tool(name, arguments)

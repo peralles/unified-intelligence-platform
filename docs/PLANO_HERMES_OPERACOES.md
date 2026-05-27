@@ -1,6 +1,6 @@
 # Plano de implementação — operações Hermes (ordem de velocidade)
 
-**Status:** lote 5 em branch (60 tools).
+**Status:** lote 6 em branch (65 tools).
 
 ## Fase 4 — Lote 3 (mídia e Gmail)
 
@@ -25,6 +25,13 @@
 |---|-------|--------|
 | 15 | `vote_whatsapp_poll`, `join_whatsapp_group_link`, `get_whatsapp_user_info` | ✅ |
 | 16 | `list_gmail_labels`, `create_gmail_draft_api`, `send_gmail_draft` | ✅ |
+
+## Fase 7 — Lote 6 (preview grupo, purge, batch Gmail, Calendar range)
+
+| # | Tools | Status |
+|---|-------|--------|
+| 17 | `preview_whatsapp_group_link`, `clear_whatsapp_chat_cache`, `leave_whatsapp_group_and_purge` | ✅ |
+| 18 | `batch_modify_gmail_labels`, `list_calendar_events_range` | ✅ |
 
 ## Fase 1 — WhatsApp
 

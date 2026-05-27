@@ -103,6 +103,10 @@ class MessageCacheStore:
                 buckets[chat_id] = bucket[-max_per_chat:]
         return buckets
 
+    def delete_chat(self, chat_id: str) -> None:
+        self._conn.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
+        self._conn.commit()
+
     def prune_chat(self, chat_id: str, *, keep: int) -> None:
         self._conn.execute(
             """

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from integrator.providers.tools import (
+    CALENDAR_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
@@ -22,7 +23,12 @@ from integrator.security.policy import (
 
 def test_tool_counts():
     meta = list_all_tool_metadata()
-    expected = GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + WHATSAPP_TOOL_COUNT
+    expected = (
+        GOOGLE_TOOL_COUNT
+        + GMAIL_EXTRA_TOOL_COUNT
+        + CALENDAR_EXTRA_TOOL_COUNT
+        + WHATSAPP_TOOL_COUNT
+    )
     assert len(meta) == TOTAL_TOOL_COUNT == expected
     names = {m["name"] for m in meta}
     wa = {m["name"] for m in list_whatsapp_tool_metadata()}
@@ -65,6 +71,11 @@ def test_vote_poll_requires_confirm():
                 "selected_options": ["Sim"],
             },
         )
+
+
+def test_leave_group_and_purge_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool("leave_whatsapp_group_and_purge", {"chat_id": "120@g.us"})
 
 
 def test_join_group_requires_confirm():

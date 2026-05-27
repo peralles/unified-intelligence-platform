@@ -414,6 +414,26 @@ class WhatsAppSession:
             payload["chat_id"] = chat_id
         return self._bridge.call("get_user_info", payload)
 
+    def preview_group_from_link(self, *, invite_link: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("preview_group_from_link", {"invite_link": invite_link})
+
+    def clear_chat_local_cache(self, *, chat_id: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("clear_chat_local_cache", {"chat_id": chat_id})
+
+    def leave_group_and_purge(
+        self,
+        *,
+        chat_id: str,
+        delete_media: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "leave_group_and_purge",
+            {"chat_id": chat_id, "delete_media": delete_media},
+        )
+
     def search_messages(
         self,
         *,

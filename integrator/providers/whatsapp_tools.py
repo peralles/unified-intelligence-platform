@@ -57,6 +57,9 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "vote_whatsapp_poll",
     "join_whatsapp_group_link",
     "get_whatsapp_user_info",
+    "preview_whatsapp_group_link",
+    "clear_whatsapp_chat_cache",
+    "leave_whatsapp_group_and_purge",
 })
 
 _GOOGLE_TOOL_COUNT = 12
@@ -713,6 +716,48 @@ def _base_metadata() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "preview_whatsapp_group_link",
+            "description": (
+                "Pré-visualiza grupo pelo link de convite (sem entrar)."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "invite_link": {"type": "string"},
+                },
+                "required": ["invite_link"],
+            },
+        },
+        {
+            "name": "clear_whatsapp_chat_cache",
+            "description": (
+                "Remove mensagens do cache local (memória + SQLite) deste chat. "
+                "Não apaga no WhatsApp dos outros."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "leave_whatsapp_group_and_purge",
+            "description": (
+                "Sai do grupo, apaga em cache no dispositivo (delete for me) e limpa cache local. "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID @g.us"},
+                    "delete_media": {"type": "boolean"},
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
             "name": "mark_whatsapp_read",
             "description": "Marca mensagens recentes do chat como lidas.",
             "input_schema": {
@@ -1270,6 +1315,26 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
             result = session.get_user_info(
                 chat_ids=chat_ids,
                 chat_id=str(chat_id).strip() if chat_id else None,
+            )
+        elif name == "preview_whatsapp_group_link":
+            invite_link = str(args.get("invite_link", "")).strip()
+            if not invite_link:
+                raise ToolPolicyError("[integrator] invite_link é obrigatório.")
+            result = session.preview_group_from_link(invite_link=invite_link)
+        elif name == "clear_whatsapp_chat_cache":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.clear_chat_local_cache(chat_id=chat_id)
+        elif name == "leave_whatsapp_group_and_purge":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.leave_group_and_purge(
+                chat_id=chat_id,
+                delete_media=bool(args.get("delete_media", False)),
             )
         else:
             _finish(success=False, error_kind="unknown_tool")
