@@ -38,6 +38,10 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "get_whatsapp_group_info",
     "edit_whatsapp_text",
     "mark_whatsapp_read",
+    "mute_whatsapp_chat",
+    "send_whatsapp_document",
+    "send_whatsapp_audio",
+    "forward_whatsapp_message",
 })
 
 _GOOGLE_TOOL_COUNT = 12
@@ -367,6 +371,91 @@ def _base_metadata() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "mute_whatsapp_chat",
+            "description": (
+                "Silencia notificações do chat (padrão 8h) ou reativa com unmute=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do chat."},
+                    "mute_hours": {
+                        "type": "integer",
+                        "description": "Horas de silêncio (mín. 1; padrão 8).",
+                    },
+                    "unmute": {
+                        "type": "boolean",
+                        "description": "true=reativar notificações.",
+                    },
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "send_whatsapp_document",
+            "description": (
+                "Envia documento/arquivo por caminho local absoluto. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Caminho absoluto do arquivo.",
+                    },
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "caption": {"type": "string"},
+                    "filename": {
+                        "type": "string",
+                        "description": "Nome exibido no WhatsApp (padrão: nome do arquivo).",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "send_whatsapp_audio",
+            "description": (
+                "Envia áudio por caminho local. voice_note=true envia como mensagem de voz. "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "voice_note": {
+                        "type": "boolean",
+                        "description": "true = PTT (bolinha de voz).",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "forward_whatsapp_message",
+            "description": (
+                "Reenvia texto de mensagem em cache para outro chat (prefixo ↪️ opcional). "
+                "Mídia pura ainda não suportada. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "source_chat_id": {"type": "string"},
+                    "message_id": {"type": "string"},
+                    "target_chat_id": {"type": "string"},
+                    "target_number": {"type": "string"},
+                    "include_prefix": {
+                        "type": "boolean",
+                        "description": "Adiciona ↪️ antes do texto (padrão true).",
+                    },
+                },
+                "required": ["source_chat_id", "message_id"],
+            },
+        },
+        {
             "name": "mark_whatsapp_read",
             "description": "Marca mensagens recentes do chat como lidas.",
             "input_schema": {
@@ -664,6 +753,75 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
                 else None
             )
             result = session.mark_read(chat_id=chat_id, message_ids=message_ids)
+        elif name == "mute_whatsapp_chat":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            mute_hours = args.get("mute_hours")
+            result = session.set_chat_muted(
+                chat_id=chat_id,
+                mute_hours=int(mute_hours) if mute_hours is not None else None,
+                unmute=bool(args.get("unmute", False)),
+            )
+        elif name == "send_whatsapp_document":
+            file_path = str(args.get("file_path", "")).strip()
+            if not file_path:
+                raise ToolPolicyError("[integrator] Parâmetro 'file_path' é obrigatório.")
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar documento."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_document(
+                file_path=file_path,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                caption=str(args["caption"]) if args.get("caption") else None,
+                filename=str(args["filename"]) if args.get("filename") else None,
+            )
+        elif name == "send_whatsapp_audio":
+            file_path = str(args.get("file_path", "")).strip()
+            if not file_path:
+                raise ToolPolicyError("[integrator] Parâmetro 'file_path' é obrigatório.")
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar áudio."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_audio(
+                file_path=file_path,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                voice_note=bool(args.get("voice_note", False)),
+            )
+        elif name == "forward_whatsapp_message":
+            source_chat_id = str(args.get("source_chat_id", "")).strip()
+            message_id = str(args.get("message_id", "")).strip()
+            if not source_chat_id or not message_id:
+                raise ToolPolicyError(
+                    "[integrator] source_chat_id e message_id são obrigatórios."
+                )
+            target_chat_id = args.get("target_chat_id")
+            target_number = args.get("target_number")
+            if not target_chat_id and not target_number:
+                raise ToolPolicyError(
+                    "[integrator] Informe target_chat_id ou target_number."
+                )
+            chat_hint = _hash_chat_id(source_chat_id)
+            result = session.forward_message(
+                source_chat_id=source_chat_id,
+                message_id=message_id,
+                target_chat_id=str(target_chat_id) if target_chat_id else None,
+                target_number=str(target_number) if target_number else None,
+                include_prefix=bool(args.get("include_prefix", True)),
+            )
         else:
             _finish(success=False, error_kind="unknown_tool")
             raise KeyError(f"Tool WhatsApp desconhecida: {name}")

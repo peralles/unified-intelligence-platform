@@ -35,6 +35,26 @@ def test_send_whatsapp_requires_confirm():
         invoke_tool("send_whatsapp_text", {"text": "oi", "number": "5511999999999"})
 
 
+def test_forward_whatsapp_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "forward_whatsapp_message",
+            {
+                "source_chat_id": "5511@s.whatsapp.net",
+                "message_id": "abc",
+                "target_number": "5511999999999",
+            },
+        )
+
+
+def test_send_document_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "send_whatsapp_document",
+            {"file_path": "/tmp/x.pdf", "number": "5511999999999"},
+        )
+
+
 @patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
 def test_get_whatsapp_connection_status_mock(mock_get: MagicMock) -> None:
     session = MagicMock()

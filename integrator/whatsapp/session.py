@@ -151,6 +151,80 @@ class WhatsAppSession:
             },
         )
 
+    def send_document(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+        filename: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_document",
+            {
+                "file_path": file_path,
+                "chat_id": chat_id,
+                "number": number,
+                "caption": caption,
+                "filename": filename,
+            },
+        )
+
+    def send_audio(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        voice_note: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_audio",
+            {
+                "file_path": file_path,
+                "chat_id": chat_id,
+                "number": number,
+                "voice_note": voice_note,
+            },
+        )
+
+    def forward_message(
+        self,
+        *,
+        source_chat_id: str,
+        message_id: str,
+        target_chat_id: str | None = None,
+        target_number: str | None = None,
+        include_prefix: bool = True,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "forward_message",
+            {
+                "source_chat_id": source_chat_id,
+                "message_id": message_id,
+                "target_chat_id": target_chat_id,
+                "target_number": target_number,
+                "include_prefix": include_prefix,
+            },
+        )
+
+    def set_chat_muted(
+        self,
+        *,
+        chat_id: str,
+        mute_hours: int | None = 8,
+        unmute: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        payload: dict[str, Any] = {"chat_id": chat_id, "unmute": unmute}
+        if mute_hours is not None:
+            payload["mute_hours"] = mute_hours
+        return self._bridge.call("set_chat_muted", payload)
+
     def search_messages(
         self,
         *,
