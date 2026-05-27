@@ -8,11 +8,15 @@ from integrator.config import settings
 # Fase 2: confirmação explícita para ações destrutivas
 DEFAULT_CONFIRM_REQUIRED = frozenset({
     "send_gmail_message",
+    "reply_gmail_message",
+    "modify_gmail_labels",
     "delete_calendar_event",
     "send_whatsapp_text",
     "delete_whatsapp_messages",
     "delete_whatsapp_messages_for_me",
     "whatsapp_reply_text",
+    "send_whatsapp_image",
+    "edit_whatsapp_text",
 })
 
 
