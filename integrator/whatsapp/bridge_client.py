@@ -76,6 +76,19 @@ class WhatsAppBridgeClient:
         env["INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT"] = str(
             settings.whatsapp_max_cached_messages_per_chat
         )
+        # Forward transcription settings so the worker picks them up
+        env["INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE"] = (
+            "true" if settings.whatsapp_auto_transcribe else "false"
+        )
+        env["INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL"] = settings.whatsapp_transcribe_model
+        if settings.whatsapp_transcribe_language:
+            env["INTEGRATOR_WHATSAPP_TRANSCRIBE_LANGUAGE"] = (
+                settings.whatsapp_transcribe_language
+            )
+        env["INTEGRATOR_WHATSAPP_TRANSCRIBE_PREFIX"] = settings.whatsapp_transcribe_prefix
+        env["INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING"] = (
+            "true" if settings.whatsapp_transcribe_only_incoming else "false"
+        )
         cmd = [
             "uv",
             "run",

@@ -38,6 +38,7 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "get_whatsapp_group_info",
     "edit_whatsapp_text",
     "mark_whatsapp_read",
+    "transcribe_whatsapp_audio",
 })
 
 _GOOGLE_TOOL_COUNT = 12
@@ -382,6 +383,37 @@ def _base_metadata() -> list[dict[str, Any]]:
                 "required": ["chat_id"],
             },
         },
+        {
+            "name": "transcribe_whatsapp_audio",
+            "description": (
+                "Transcreve localmente um áudio (nota de voz) do WhatsApp usando mlx-whisper "
+                "(Apple Silicon). Baixa o áudio do CDN do WhatsApp e retorna o texto. "
+                "Requer que a mensagem esteja em cache (use get_whatsapp_messages para obter "
+                "o message_id). Para auto-transcrição de todos os áudios, use "
+                "'integrator whatsapp watch'."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {
+                        "type": "string",
+                        "description": "JID do chat (ex: 5511999999999@s.whatsapp.net).",
+                    },
+                    "message_id": {
+                        "type": "string",
+                        "description": "ID da mensagem de áudio a transcrever.",
+                    },
+                    "reply": {
+                        "type": "boolean",
+                        "description": (
+                            "Se true, envia o texto transcrito como resposta no mesmo chat "
+                            "(padrão false)."
+                        ),
+                    },
+                },
+                "required": ["chat_id", "message_id"],
+            },
+        },
     ]
 
 
@@ -664,6 +696,19 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
                 else None
             )
             result = session.mark_read(chat_id=chat_id, message_ids=message_ids)
+        elif name == "transcribe_whatsapp_audio":
+            chat_id = str(args.get("chat_id", "")).strip()
+            message_id = str(args.get("message_id", "")).strip()
+            if not chat_id or not message_id:
+                raise ToolPolicyError(
+                    "[integrator] 'chat_id' e 'message_id' são obrigatórios."
+                )
+            chat_hint = _hash_chat_id(chat_id)
+            text = session.transcribe_audio(chat_id=chat_id, message_id=message_id)
+            result = {"message_id": message_id, "chat_id": chat_id, "text": text}
+            if args.get("reply") is True and text:
+                session.send_text(text=f"🎙️ {text}", chat_id=chat_id)
+                result["replied"] = True
         else:
             _finish(success=False, error_kind="unknown_tool")
             raise KeyError(f"Tool WhatsApp desconhecida: {name}")

@@ -2,6 +2,8 @@
 JSON-line RPC worker for neonize (isolated venv with protobuf 7.x).
 
 Protocol: one JSON object per line on stdin/stdout.
+Watch mode (INTEGRATOR_WHATSAPP_WATCH_MODE=true): standalone daemon that
+auto-transcribes incoming audio messages without requiring an RPC client.
 """
 
 from __future__ import annotations
@@ -11,8 +13,10 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -97,6 +101,46 @@ class StoredMessage:
     timestamp: int
     from_me: bool
     raw_proto_b64: str = ""
+    is_audio: bool = False
+
+
+class AudioTranscriber:
+    """
+    Local Whisper transcription via mlx-whisper (Apple Silicon) with
+    graceful fallback when the library is not installed.
+    """
+
+    def __init__(self, model_id: str, language: str | None = None) -> None:
+        self.model_id = model_id
+        self.language = language or None
+        self._ready = False
+        self._error: str | None = None
+
+    def _ensure_ready(self) -> None:
+        if self._ready:
+            return
+        try:
+            import mlx_whisper  # noqa: F401
+            self._ready = True
+        except ImportError as exc:
+            self._error = (
+                f"mlx-whisper não instalado no venv do bridge. "
+                f"Execute: cd bridges/whatsapp-neonize && uv add mlx-whisper  ({exc})"
+            )
+            raise RuntimeError(self._error) from exc
+
+    def transcribe(self, audio_path: str) -> str:
+        self._ensure_ready()
+        import mlx_whisper
+
+        result = mlx_whisper.transcribe(
+            audio_path,
+            path_or_hf_repo=self.model_id,
+            language=self.language,
+            verbose=False,
+            fp16=True,
+        )
+        return (result.get("text") or "").strip()
 
 
 @dataclass
@@ -121,6 +165,35 @@ class NeonizeWorker:
         self.state = SessionState()
         self._connect_thread: threading.Thread | None = None
         self._pairing = False
+
+        # Auto-transcription config (from env — set before process start)
+        self._auto_transcribe: bool = os.environ.get(
+            "INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE", ""
+        ).lower() in ("1", "true", "yes")
+        self._transcribe_model: str = os.environ.get(
+            "INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL",
+            "mlx-community/whisper-large-v3-turbo",
+        )
+        self._transcribe_language: str | None = (
+            os.environ.get("INTEGRATOR_WHATSAPP_TRANSCRIBE_LANGUAGE") or None
+        )
+        self._transcribe_prefix: str = os.environ.get(
+            "INTEGRATOR_WHATSAPP_TRANSCRIBE_PREFIX", "🎙️ "
+        )
+        self._transcribe_only_incoming: bool = os.environ.get(
+            "INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING", "true"
+        ).lower() not in ("0", "false", "no")
+
+        self._transcriber: AudioTranscriber | None = None
+        self._transcribe_pool: ThreadPoolExecutor | None = None
+        if self._auto_transcribe:
+            self._transcriber = AudioTranscriber(
+                self._transcribe_model, self._transcribe_language
+            )
+            self._transcribe_pool = ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="wa-transcribe"
+            )
+
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -201,6 +274,19 @@ class NeonizeWorker:
             preview = text[:200]
             ts = int(info.Timestamp or time.time())
             raw_b64 = base64.b64encode(evt.SerializeToString()).decode("ascii")
+
+            # Detect audio (voice notes) and audio document attachments
+            wa_msg = evt.Message
+            is_audio = bool(
+                getattr(wa_msg, "audioMessage", None)
+                and getattr(wa_msg.audioMessage, "url", None)
+            ) or bool(
+                getattr(wa_msg, "documentMessage", None)
+                and str(getattr(wa_msg.documentMessage, "mimetype", "")).startswith(
+                    "audio/"
+                )
+            )
+
             msg = StoredMessage(
                 message_id=info.ID,
                 chat_id=chat_id,
@@ -209,6 +295,7 @@ class NeonizeWorker:
                 timestamp=ts,
                 from_me=bool(source.IsFromMe),
                 raw_proto_b64=raw_b64,
+                is_audio=is_audio,
             )
         except Exception:
             return
@@ -237,6 +324,17 @@ class NeonizeWorker:
                 entry.last_message_preview = preview
             if not source.IsFromMe:
                 entry.unread_count += 1
+
+        # Auto-transcribe incoming audio outside the lock
+        if (
+            self._auto_transcribe
+            and msg.is_audio
+            and self._transcribe_pool is not None
+            and not (self._transcribe_only_incoming and msg.from_me)
+        ):
+            self._transcribe_pool.submit(
+                self._do_transcribe_and_reply, evt, self.client
+            )
 
     def _ingest_history_conversation(self, conv: Any) -> None:
         try:
@@ -267,6 +365,96 @@ class NeonizeWorker:
                         self._ingest_neonize_message(raw)
         except Exception:
             return
+
+    # ------------------------------------------------------------------ #
+    # Transcription helpers
+    # ------------------------------------------------------------------ #
+
+    def _do_transcribe_and_reply(
+        self, evt: NeonizeMessage, client: Any
+    ) -> None:
+        """Download audio, transcribe with mlx-whisper, reply in the same chat."""
+        if self._transcriber is None:
+            return
+        info = evt.Info
+        source = info.MessageSource
+        chat_id = Jid2String(source.Chat)
+        tmp_path: str | None = None
+        try:
+            audio_bytes: bytes = client.download_any(evt.Message)
+        except Exception as exc:
+            logging.error("[transcribe] download failed | chat=%s | %s", chat_id, exc)
+            return
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as fh:
+                fh.write(audio_bytes)
+                tmp_path = fh.name
+            text = self._transcriber.transcribe(tmp_path)
+        except Exception as exc:
+            logging.error("[transcribe] transcription failed | chat=%s | %s", chat_id, exc)
+            return
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+        if not text:
+            return
+        reply = f"{self._transcribe_prefix}{text}"
+        try:
+            chat_jid = self._jid_from_chat_id(chat_id)
+            client.send_message(chat_jid, reply)
+            logging.info(
+                "[transcribe] OK | chat=%s | chars=%d", chat_id, len(text)
+            )
+        except Exception as exc:
+            logging.error("[transcribe] send reply failed | chat=%s | %s", chat_id, exc)
+
+    def _transcribe_stored_audio(
+        self, *, chat_id: str, message_id: str
+    ) -> str:
+        """On-demand transcription for a cached audio message (RPC call)."""
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        stored = self._lookup_stored_message(chat_id, message_id)
+        if not stored.is_audio:
+            raise WorkerError(
+                f"Mensagem {message_id} não é um áudio. "
+                "Use transcribe_whatsapp_audio apenas em mensagens de voz/áudio."
+            )
+        if not stored.raw_proto_b64:
+            raise WorkerError(
+                f"Mensagem {message_id} não tem metadados para download. "
+                "Receba o áudio novamente ou sincronize o histórico do chat."
+            )
+        transcriber = AudioTranscriber(
+            self._transcribe_model, self._transcribe_language
+        )
+        neonize_msg = self._load_quoted_neonize_message(stored)
+        tmp_path: str | None = None
+        try:
+            audio_bytes: bytes = self.client.download_any(neonize_msg.Message)
+        except Exception as exc:
+            raise WorkerError(f"Falha ao baixar áudio: {exc}") from exc
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as fh:
+                fh.write(audio_bytes)
+                tmp_path = fh.name
+            text = transcriber.transcribe(tmp_path)
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise WorkerError(f"Falha na transcrição: {exc}") from exc
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+        return text
+
+    # ------------------------------------------------------------------ #
 
     def _ensure_connect_thread(self) -> None:
         if self._connect_thread and self._connect_thread.is_alive():
@@ -1082,6 +1270,24 @@ class NeonizeWorker:
                 delete_media=bool(params.get("delete_media", False)),
                 entries=entries,
             )
+        if method == "transcribe_audio":
+            return {
+                "text": self._transcribe_stored_audio(
+                    chat_id=str(params["chat_id"]),
+                    message_id=str(params["message_id"]),
+                )
+            }
+        if method == "transcription_status":
+            return {
+                "auto_transcribe": self._auto_transcribe,
+                "model": self._transcribe_model,
+                "language": self._transcribe_language,
+                "prefix": self._transcribe_prefix,
+                "only_incoming": self._transcribe_only_incoming,
+                "transcriber_ready": (
+                    self._transcriber._ready if self._transcriber else False
+                ),
+            }
         if method == "shutdown":
             return self.shutdown()
         raise WorkerError(f"Método desconhecido: {method}")
@@ -1111,35 +1317,121 @@ def _write_response(obj: dict[str, Any]) -> None:
     _RPC_STDOUT.flush()
 
 
+def _acquire_lock(session_dir: Path) -> Any:
+    """Acquire an exclusive fcntl lock so only one worker runs per session."""
+    import fcntl
+
+    lock_path = session_dir / "worker.lock"
+    lock_file = open(str(lock_path), "w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock_file.close()
+        sys.stderr.write(
+            "[integrator] Outro worker WhatsApp já está em execução para esta sessão.\n"
+            f"Lockfile: {lock_path}\n"
+            "Encerre integrator serve ou integrator whatsapp watch antes de iniciar outro.\n"
+        )
+        sys.stderr.flush()
+        sys.exit(1)
+    lock_file.write(str(os.getpid()))
+    lock_file.flush()
+    return lock_file
+
+
+def _run_watch_mode(worker: NeonizeWorker) -> None:
+    """Watch mode: connect and stay alive auto-transcribing; no stdin RPC loop."""
+    import signal
+
+    stop_event = threading.Event()
+
+    def _handle_sig(*_: Any) -> None:
+        stop_event.set()
+
+    signal.signal(signal.SIGTERM, _handle_sig)
+    try:
+        signal.signal(signal.SIGINT, _handle_sig)
+    except OSError:
+        pass
+
+    worker.connect_background()
+    status = worker.status(live=False)
+    sys.stderr.write(
+        f"[integrator-watch] iniciado | auto_transcribe={worker._auto_transcribe}"
+        f" | model={worker._transcribe_model}"
+        f" | state={status.get('state', '?')}\n"
+    )
+    sys.stderr.flush()
+
+    # Keepalive loop: check connection every 30 s and reconnect if needed.
+    while not stop_event.is_set():
+        stop_event.wait(30)
+        if stop_event.is_set():
+            break
+        try:
+            st = worker.status(live=False)
+            if st.get("state") != "connected":
+                worker._ensure_connect_thread()
+        except Exception:
+            pass
+
+    try:
+        worker.shutdown()
+    except Exception:
+        pass
+    sys.stderr.write("[integrator-watch] encerrado.\n")
+    sys.stderr.flush()
+
+
 def main() -> None:
     _redirect_library_stdout()
     _configure_library_logging()
-    session_dir = Path(os.environ.get("INTEGRATOR_WHATSAPP_SESSION_DIR", "data/whatsapp"))
-    worker = NeonizeWorker(session_dir.resolve())
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        req_id = None
+    session_dir = Path(
+        os.environ.get("INTEGRATOR_WHATSAPP_SESSION_DIR", "data/whatsapp")
+    ).resolve()
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    lock_file = _acquire_lock(session_dir)
+    try:
+        worker = NeonizeWorker(session_dir)
+
+        watch_mode = os.environ.get(
+            "INTEGRATOR_WHATSAPP_WATCH_MODE", ""
+        ).lower() in ("1", "true", "yes")
+
+        if watch_mode:
+            _run_watch_mode(worker)
+            return
+
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            req_id = None
+            try:
+                req = _read_request(line)
+                req_id = req.get("id")
+                method = str(req.get("method", ""))
+                params = req.get("params") or {}
+                if not isinstance(params, dict):
+                    raise WorkerError("params deve ser objeto")
+                result = worker.handle(method, params)
+                _write_response({"id": req_id, "ok": True, "result": result})
+            except WorkerError as exc:
+                _write_response({"id": req_id, "ok": False, "error": str(exc)})
+            except Exception as exc:
+                _write_response(
+                    {
+                        "id": req_id,
+                        "ok": False,
+                        "error": f"[integrator] {exc}",
+                    }
+                )
+    finally:
         try:
-            req = _read_request(line)
-            req_id = req.get("id")
-            method = str(req.get("method", ""))
-            params = req.get("params") or {}
-            if not isinstance(params, dict):
-                raise WorkerError("params deve ser objeto")
-            result = worker.handle(method, params)
-            _write_response({"id": req_id, "ok": True, "result": result})
-        except WorkerError as exc:
-            _write_response({"id": req_id, "ok": False, "error": str(exc)})
-        except Exception as exc:
-            _write_response(
-                {
-                    "id": req_id,
-                    "ok": False,
-                    "error": f"[integrator] {exc}",
-                }
-            )
+            lock_file.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
