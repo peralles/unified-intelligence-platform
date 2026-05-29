@@ -92,6 +92,47 @@ def _is_group_chat_id(chat_id: str) -> bool:
     return "@g.us" in chat_id
 
 
+def _split_chat_jid(chat_id: str) -> tuple[str, str]:
+    if "@" in chat_id:
+        user, server = chat_id.rsplit("@", 1)
+        return user, server
+    return chat_id, "s.whatsapp.net"
+
+
+def _looks_like_opaque_id(name: str, chat_id: str) -> bool:
+    user, _ = _split_chat_jid(chat_id)
+    label = name.strip()
+    if not label:
+        return True
+    if label == user:
+        return True
+    return label.isdigit() and len(label) >= 10
+
+
+def _format_phone_digits(digits: str) -> str:
+    cleaned = "".join(ch for ch in digits if ch.isdigit())
+    if not cleaned:
+        return ""
+    try:
+        import phonenumbers
+
+        parsed = phonenumbers.parse(f"+{cleaned}", None)
+        if phonenumbers.is_valid_number(parsed):
+            return phonenumbers.format_number(
+                parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL
+            )
+    except Exception:
+        pass
+    return f"+{cleaned}"
+
+
+def _phone_from_chat_id(chat_id: str) -> str | None:
+    user, server = _split_chat_jid(chat_id)
+    if server == "s.whatsapp.net" and user.isdigit():
+        return _format_phone_digits(user)
+    return None
+
+
 @dataclass
 class ChatEntry:
     chat_id: str
@@ -100,6 +141,22 @@ class ChatEntry:
     last_message_preview: str = ""
     last_timestamp: int = 0
     is_group: bool = False
+
+
+def _build_display_name(entry: ChatEntry, *, phone: str | None) -> str:
+    name = (entry.name or "").strip()
+    if entry.is_group:
+        return name or "Grupo sem nome"
+    if phone:
+        if name and not _looks_like_opaque_id(name, entry.chat_id):
+            return f"{name} ({phone})"
+        return phone
+    if name and not _looks_like_opaque_id(name, entry.chat_id):
+        return name
+    if entry.chat_id.endswith("@lid"):
+        return "Contato privado (número oculto pelo WhatsApp)"
+    user, _ = _split_chat_jid(entry.chat_id)
+    return user or entry.chat_id
 
 
 @dataclass
@@ -322,8 +379,57 @@ class NeonizeWorker:
     def _chat_display_name(self, chat_jid_str: str, pushname: str) -> str:
         if pushname:
             return pushname
-        user = chat_jid_str.split("@", 1)[0]
+        user, _ = _split_chat_jid(chat_jid_str)
         return user or chat_jid_str
+
+    def _resolve_lid_phone(self, chat_id: str) -> str | None:
+        _, server = _split_chat_jid(chat_id)
+        if server != "lid" or not self.client.is_logged_in:
+            return None
+        try:
+            pn_jid = self.client.get_pn_from_lid(self._jid_from_chat_id(chat_id))
+            return _phone_from_chat_id(Jid2String(pn_jid))
+        except Exception:
+            return None
+
+    def _chat_phone(self, entry: ChatEntry) -> str | None:
+        phone = _phone_from_chat_id(entry.chat_id)
+        if phone is not None:
+            return phone
+        if entry.chat_id.endswith("@lid") and (
+            _looks_like_opaque_id(entry.name, entry.chat_id) or not entry.name.strip()
+        ):
+            return self._resolve_lid_phone(entry.chat_id)
+        return None
+
+    def _chat_to_dict(self, entry: ChatEntry) -> dict[str, Any]:
+        phone = self._chat_phone(entry)
+        return {
+            "chat_id": entry.chat_id,
+            "name": entry.name,
+            "display_name": _build_display_name(entry, phone=phone),
+            "phone": phone,
+            "unread_count": entry.unread_count,
+            "last_message_preview": entry.last_message_preview,
+            "last_timestamp": entry.last_timestamp,
+            "is_group": entry.is_group,
+        }
+
+    def _chat_display_for_id(self, chat_id: str) -> str:
+        with self.state.lock:
+            entry = self.state.chats.get(chat_id)
+        if entry is None:
+            phone = _phone_from_chat_id(chat_id)
+            if phone:
+                return phone
+            if chat_id.endswith("@lid"):
+                phone = self._resolve_lid_phone(chat_id)
+                if phone:
+                    return phone
+                return "Contato privado (número oculto pelo WhatsApp)"
+            user, _ = _split_chat_jid(chat_id)
+            return user or chat_id
+        return self._chat_to_dict(entry)["display_name"]
 
     def _ingest_neonize_message(self, evt: NeonizeMessage) -> None:
         try:
@@ -608,17 +714,7 @@ class NeonizeWorker:
                 key=lambda c: c.last_timestamp,
                 reverse=True,
             )[:limit]
-            return [
-                {
-                    "chat_id": c.chat_id,
-                    "name": c.name,
-                    "unread_count": c.unread_count,
-                    "last_message_preview": c.last_message_preview,
-                    "last_timestamp": c.last_timestamp,
-                    "is_group": c.is_group,
-                }
-                for c in items
-            ]
+            return [self._chat_to_dict(c) for c in items]
 
     def find_chats(self, *, query: str, limit: int = 20) -> list[dict[str, Any]]:
         q = query.strip().lower()
@@ -627,20 +723,15 @@ class NeonizeWorker:
         with self.state.lock:
             matches = []
             for c in self.state.chats.values():
-                hay = f"{c.name} {c.chat_id}".lower()
+                payload = self._chat_to_dict(c)
+                hay = (
+                    f"{c.name} {c.chat_id} {payload.get('display_name', '')} "
+                    f"{payload.get('phone', '') or ''}"
+                ).lower()
                 if q in hay:
                     matches.append(c)
             matches.sort(key=lambda c: c.last_timestamp, reverse=True)
-            return [
-                {
-                    "chat_id": c.chat_id,
-                    "name": c.name,
-                    "unread_count": c.unread_count,
-                    "last_message_preview": c.last_message_preview,
-                    "is_group": c.is_group,
-                }
-                for c in matches[:limit]
-            ]
+            return [self._chat_to_dict(c) for c in matches[:limit]]
 
     def get_messages(
         self,
@@ -670,6 +761,7 @@ class NeonizeWorker:
                 {
                     "message_id": m.message_id,
                     "chat_id": m.chat_id,
+                    "chat_display_name": self._chat_display_for_id(m.chat_id),
                     "sender_id": m.sender_id,
                     "text": text,
                     "timestamp": m.timestamp,
@@ -1542,6 +1634,7 @@ class NeonizeWorker:
                             {
                                 "message_id": m.message_id,
                                 "chat_id": m.chat_id,
+                                "chat_display_name": self._chat_display_for_id(m.chat_id),
                                 "sender_id": m.sender_id,
                                 "text": m.text[:800],
                                 "timestamp": m.timestamp,

@@ -79,7 +79,9 @@ def _base_metadata() -> list[dict[str, Any]]:
         {
             "name": "list_whatsapp_chats",
             "description": (
-                "Lista chats recentes (id, nome, não lidas, prévia da última mensagem). "
+                "Lista chats recentes. Ao responder ao usuário, use sempre display_name "
+                "(nome + telefone quando existir). O campo chat_id é só para outras tools — "
+                "nunca mostre JIDs @lid ou números internos crus. "
                 "Requer sessão pareada via integrator whatsapp pair."
             ),
             "input_schema": {
@@ -95,7 +97,8 @@ def _base_metadata() -> list[dict[str, Any]]:
         {
             "name": "find_whatsapp_chats",
             "description": (
-                "Busca chats por nome ou trecho do id/número. "
+                "Busca chats por nome, telefone ou trecho do id. "
+                "Use display_name ao falar com o usuário; chat_id só para follow-up técnico. "
                 "Sem query, equivale a list_whatsapp_chats (útil para filtrar chats vazios "
                 "pela prévia da última mensagem)."
             ),
@@ -120,6 +123,7 @@ def _base_metadata() -> list[dict[str, Any]]:
             "name": "get_whatsapp_messages",
             "description": (
                 "Mensagens de um chat em cache (texto truncado). "
+                "Cada item inclui chat_display_name — use esse rótulo, não chat_id, ao resumir para o usuário. "
                 "Use sync_whatsapp_chat_history para puxar mensagens mais antigas. "
                 "Filtros before_timestamp/after_timestamp (Unix segundos) para limpeza em lote."
             ),
@@ -252,7 +256,8 @@ def _base_metadata() -> list[dict[str, Any]]:
         {
             "name": "search_whatsapp_messages",
             "description": (
-                "Busca texto nas mensagens em cache (opcionalmente por chat_id)."
+                "Busca texto nas mensagens em cache (opcionalmente por chat_id). "
+                "Use chat_display_name nos resultados ao responder ao usuário."
             ),
             "input_schema": {
                 "type": "object",
@@ -704,7 +709,8 @@ def _base_metadata() -> list[dict[str, Any]]:
         {
             "name": "get_whatsapp_user_info",
             "description": (
-                "Status/nome verificado de um ou mais contatos (chat_id ou chat_ids)."
+                "Status/nome verificado de um ou mais contatos (chat_id ou chat_ids). "
+                "Útil para enriquecer chats @lid antes de responder ao usuário."
             ),
             "input_schema": {
                 "type": "object",
