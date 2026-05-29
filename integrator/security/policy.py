@@ -34,6 +34,7 @@ DEFAULT_CONFIRM_REQUIRED = frozenset({
     "batch_modify_gmail_labels",
     "leave_whatsapp_group_and_purge",
     "edit_whatsapp_text",
+    "whatsapp_react_message",
 })
 
 
@@ -113,9 +114,7 @@ def enrich_tool_schema(meta: dict[str, Any]) -> dict[str, Any]:
     return enriched
 
 
-def check_confirmation(name: str, arguments: dict[str, Any] | None) -> None:
-    if name not in get_confirm_required_tools():
-        return
+def _require_confirm(name: str, arguments: dict[str, Any] | None) -> None:
     args = arguments or {}
     if args.get("confirm") is True:
         return
@@ -123,6 +122,19 @@ def check_confirmation(name: str, arguments: dict[str, Any] | None) -> None:
         f"A tool '{name}' exige confirmação explícita. "
         "Inclua \"confirm\": true nos argumentos após validar com o usuário."
     )
+
+
+def check_confirmation(name: str, arguments: dict[str, Any] | None) -> None:
+    args = arguments or {}
+    if name == "transcribe_whatsapp_audio" and args.get("reply") is True:
+        _require_confirm(name, arguments)
+        return
+    if name == "get_whatsapp_group_invite_link" and args.get("revoke") is True:
+        _require_confirm(name, arguments)
+        return
+    if name not in get_confirm_required_tools():
+        return
+    _require_confirm(name, arguments)
 
 
 def strip_control_args(arguments: dict[str, Any] | None) -> tuple[dict[str, Any], str | None]:

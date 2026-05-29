@@ -217,7 +217,7 @@ def _base_metadata() -> list[dict[str, Any]]:
             "name": "whatsapp_react_message",
             "description": (
                 "Reage a uma mensagem com emoji (ex: 👍). "
-                "message_id deve estar em cache."
+                "message_id deve estar em cache. Requer confirm=true."
             ),
             "input_schema": {
                 "type": "object",
@@ -642,7 +642,8 @@ def _base_metadata() -> list[dict[str, Any]]:
         {
             "name": "get_whatsapp_group_invite_link",
             "description": (
-                "Obtém link de convite do grupo. revoke=true invalida link anterior."
+                "Obtém link de convite do grupo. revoke=true invalida link anterior "
+                "e exige confirm=true."
             ),
             "input_schema": {
                 "type": "object",
@@ -780,8 +781,8 @@ def _base_metadata() -> list[dict[str, Any]]:
                 "Transcreve localmente um áudio (nota de voz) do WhatsApp usando mlx-whisper "
                 "(Apple Silicon). Baixa o áudio do CDN do WhatsApp e retorna o texto. "
                 "Requer que a mensagem esteja em cache (use get_whatsapp_messages para obter "
-                "o message_id). Para auto-transcrição de todos os áudios, use "
-                "'integrator whatsapp watch'."
+                "o message_id). reply=true envia o texto no chat e exige confirm=true. "
+                "Para auto-transcrição de todos os áudios, use 'integrator whatsapp watch'."
             ),
             "input_schema": {
                 "type": "object",

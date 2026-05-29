@@ -17,6 +17,7 @@ class CacheRow:
     timestamp: int
     from_me: bool
     raw_proto_b64: str
+    is_audio: bool = False
 
 
 class MessageCacheStore:
@@ -45,20 +46,30 @@ class MessageCacheStore:
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_messages_chat_ts ON messages (chat_id, timestamp)"
         )
+        cols = {
+            row[1]
+            for row in self._conn.execute("PRAGMA table_info(messages)").fetchall()
+        }
+        if "is_audio" not in cols:
+            self._conn.execute(
+                "ALTER TABLE messages ADD COLUMN is_audio INTEGER NOT NULL DEFAULT 0"
+            )
         self._conn.commit()
 
     def upsert(self, msg: Any) -> None:
         self._conn.execute(
             """
             INSERT INTO messages (
-                message_id, chat_id, sender_id, text, timestamp, from_me, raw_proto_b64
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                message_id, chat_id, sender_id, text, timestamp, from_me,
+                raw_proto_b64, is_audio
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(chat_id, message_id) DO UPDATE SET
                 sender_id=excluded.sender_id,
                 text=excluded.text,
                 timestamp=excluded.timestamp,
                 from_me=excluded.from_me,
-                raw_proto_b64=excluded.raw_proto_b64
+                raw_proto_b64=excluded.raw_proto_b64,
+                is_audio=excluded.is_audio
             """,
             (
                 msg.message_id,
@@ -68,6 +79,7 @@ class MessageCacheStore:
                 msg.timestamp,
                 1 if msg.from_me else 0,
                 msg.raw_proto_b64,
+                1 if getattr(msg, "is_audio", False) else 0,
             ),
         )
         self._conn.commit()
@@ -79,7 +91,8 @@ class MessageCacheStore:
     ) -> dict[str, list[CacheRow]]:
         cur = self._conn.execute(
             """
-            SELECT message_id, chat_id, sender_id, text, timestamp, from_me, raw_proto_b64
+            SELECT message_id, chat_id, sender_id, text, timestamp, from_me,
+                   raw_proto_b64, is_audio
             FROM messages
             ORDER BY chat_id, timestamp
             """
@@ -97,6 +110,7 @@ class MessageCacheStore:
                     timestamp=int(row[4]),
                     from_me=bool(row[5]),
                     raw_proto_b64=row[6] or "",
+                    is_audio=bool(row[7]) if len(row) > 7 else False,
                 )
             )
             if len(bucket) > max_per_chat:

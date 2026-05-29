@@ -68,6 +68,38 @@ def test_confirmation_required():
     check_confirmation("send_gmail_message", {"confirm": True})
 
 
+def test_transcribe_reply_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        check_confirmation(
+            "transcribe_whatsapp_audio",
+            {"chat_id": "c", "message_id": "m", "reply": True},
+        )
+    check_confirmation(
+        "transcribe_whatsapp_audio",
+        {"chat_id": "c", "message_id": "m", "reply": True, "confirm": True},
+    )
+    check_confirmation(
+        "transcribe_whatsapp_audio",
+        {"chat_id": "c", "message_id": "m", "reply": False},
+    )
+
+
+def test_group_invite_revoke_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        check_confirmation(
+            "get_whatsapp_group_invite_link",
+            {"chat_id": "g@g.us", "revoke": True},
+        )
+    check_confirmation(
+        "get_whatsapp_group_invite_link",
+        {"chat_id": "g@g.us", "revoke": True, "confirm": True},
+    )
+    check_confirmation(
+        "get_whatsapp_group_invite_link",
+        {"chat_id": "g@g.us", "revoke": False},
+    )
+
+
 def test_strip_confirm_arg():
     assert strip_confirm_arg({"confirm": True, "q": "x"}) == {"q": "x"}
 

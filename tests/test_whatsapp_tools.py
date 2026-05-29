@@ -255,9 +255,22 @@ def test_react_whatsapp_mock(mock_get: MagicMock) -> None:
 
     out = invoke_tool(
         "whatsapp_react_message",
-        {"chat_id": "c@s.whatsapp.net", "message_id": "M1", "emoji": "👍"},
+        {
+            "confirm": True,
+            "chat_id": "c@s.whatsapp.net",
+            "message_id": "M1",
+            "emoji": "👍",
+        },
     )
     assert json.loads(out)["emoji"] == "👍"
+
+
+def test_react_whatsapp_requires_confirm() -> None:
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "whatsapp_react_message",
+            {"chat_id": "c@s.whatsapp.net", "message_id": "M1", "emoji": "👍"},
+        )
 
 
 @patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
@@ -379,6 +392,7 @@ def test_transcribe_whatsapp_audio_with_reply(mock_get: MagicMock) -> None:
     out = invoke_tool(
         "transcribe_whatsapp_audio",
         {
+            "confirm": True,
             "chat_id": "5511999999999@s.whatsapp.net",
             "message_id": "MSG456",
             "reply": True,
@@ -388,6 +402,43 @@ def test_transcribe_whatsapp_audio_with_reply(mock_get: MagicMock) -> None:
     assert data["text"] == "Reunião às 15h"
     assert data.get("replied") is True
     session.send_text.assert_called_once()
+
+
+def test_transcribe_whatsapp_audio_reply_requires_confirm() -> None:
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "transcribe_whatsapp_audio",
+            {
+                "chat_id": "5511999999999@s.whatsapp.net",
+                "message_id": "MSG456",
+                "reply": True,
+            },
+        )
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_get_group_invite_revoke_requires_confirm(mock_get: MagicMock) -> None:
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "get_whatsapp_group_invite_link",
+            {"chat_id": "123@g.us", "revoke": True},
+        )
+    mock_get.assert_not_called()
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_get_group_invite_revoke_with_confirm(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.get_group_invite_link.return_value = {"invite_link": "https://chat.whatsapp.com/x"}
+    mock_get.return_value = session
+
+    out = invoke_tool(
+        "get_whatsapp_group_invite_link",
+        {"confirm": True, "chat_id": "123@g.us", "revoke": True},
+    )
+    data = json.loads(out)
+    assert "invite_link" in data
+    session.get_group_invite_link.assert_called_once_with(chat_id="123@g.us", revoke=True)
 
 
 def test_whatsapp_total_tool_count() -> None:

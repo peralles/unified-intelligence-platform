@@ -14,7 +14,11 @@ from integrator.providers.tools import (
     invoke_tool,
     list_all_tool_metadata,
 )
-from integrator.security.policy import ConfirmationRequiredError, get_confirm_required_tools
+from integrator.security.policy import (
+    ConfirmationRequiredError,
+    ToolPolicyError,
+    get_confirm_required_tools,
+)
 
 
 def test_total_tool_count():
@@ -30,6 +34,7 @@ def test_total_tool_count():
 def test_gmail_extra_confirm_required():
     assert "modify_gmail_labels" in get_confirm_required_tools()
     assert "reply_gmail_message" in get_confirm_required_tools()
+    assert "whatsapp_react_message" in get_confirm_required_tools()
 
 
 @patch("integrator.providers.tools.invoke_gmail_extra_tool")
@@ -183,3 +188,26 @@ def test_star_gmail_message(mock_service_fn: MagicMock) -> None:
         {"message_id": "m1", "starred": True},
     )
     assert result["starred"] is True
+
+
+def test_gmail_extra_audit_on_blocked_invoke(tmp_path, monkeypatch) -> None:
+    from integrator.config import settings
+    from integrator.logging_setup import flush_logging, reset_logging, setup_logging
+
+    monkeypatch.setattr(settings, "root_dir", tmp_path)
+    monkeypatch.setattr(settings, "tool_denylist", "trash_gmail_message")
+    monkeypatch.setattr(settings, "audit_log_enabled", True)
+    monkeypatch.setattr(settings, "audit_log_file", tmp_path / "data/logs/audit.jsonl")
+    reset_logging()
+    setup_logging(force=True)
+
+    with pytest.raises(ToolPolicyError):
+        invoke_tool("trash_gmail_message", {"confirm": True, "message_id": "m1"})
+    flush_logging()
+    log_path = settings.audit_log_path
+    lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["tool"] == "trash_gmail_message"
+    assert record["success"] is False
+    assert record["blocked"] is True

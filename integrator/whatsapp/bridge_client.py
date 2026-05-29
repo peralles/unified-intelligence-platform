@@ -59,9 +59,51 @@ class WhatsAppBridgeClient:
         self._req_id += 1
         return str(self._req_id)
 
+    def _reap_process(
+        self,
+        proc: subprocess.Popen[str],
+        *,
+        timeout: float = 5.0,
+    ) -> None:
+        try:
+            if proc.stdin:
+                proc.stdin.close()
+        except OSError:
+            pass
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+                try:
+                    proc.wait(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    LOGGER.warning(
+                        "bridge worker did not exit after kill | session=%s",
+                        self.session_dir,
+                    )
+        else:
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                LOGGER.warning(
+                    "bridge zombie wait timed out | session=%s",
+                    self.session_dir,
+                )
+
     def _ensure_process(self) -> subprocess.Popen[str]:
         if self._proc is not None and self._proc.poll() is None:
             return self._proc
+        if self._proc is not None:
+            self._reap_process(self._proc)
+            self._proc = None
         bridge = self.bridge_root()
         if not (bridge / "pyproject.toml").is_file():
             raise WhatsAppApiError(
@@ -139,13 +181,8 @@ class WhatsAppBridgeClient:
         with self._lock:
             if self._proc is None:
                 return
-            try:
-                if self._proc.stdin:
-                    self._proc.stdin.close()
-            except OSError:
-                pass
             LOGGER.debug("bridge stop | session=%s", self.session_dir)
-            self._proc.terminate()
+            self._reap_process(self._proc)
             self._proc = None
 
 

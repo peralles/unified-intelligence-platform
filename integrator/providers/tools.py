@@ -60,24 +60,59 @@ def _invoke_google_extra_tool(
     invoke_fn: Any,
 ) -> str:
     import json
+    import time
 
-    from integrator.accounts.registry import resolve_account_id
+    from integrator.accounts.registry import AccountNotFoundError, resolve_account_id
     from integrator.providers.google_tools import strip_control_args
+    from integrator.security.audit import log_tool_invocation
     from integrator.security.policy import (
+        ConfirmationRequiredError,
         ToolPolicyError,
         check_confirmation,
         is_tool_allowed,
     )
 
+    started = time.perf_counter()
+    account_id: str | None = None
+
+    def _finish(
+        *,
+        success: bool,
+        error_kind: str | None = None,
+        blocked: bool = False,
+    ) -> None:
+        log_tool_invocation(
+            name,
+            success=success,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            error_kind=error_kind,
+            blocked=blocked,
+            account_id=account_id,
+        )
+
     if not is_tool_allowed(name):
+        _finish(success=False, error_kind="tool_policy", blocked=True)
         raise ToolPolicyError(f"Tool '{name}' não permitida pela política.")
-    check_confirmation(name, arguments)
+    try:
+        check_confirmation(name, arguments)
+    except ConfirmationRequiredError:
+        _finish(success=False, error_kind="confirmation_required", blocked=True)
+        raise
     args, explicit_account = strip_control_args(arguments)
-    account_id = resolve_account_id(explicit_account)
+    try:
+        account_id = resolve_account_id(explicit_account)
+    except AccountNotFoundError as exc:
+        _finish(success=False, error_kind="account", blocked=True)
+        raise ToolPolicyError(str(exc)) from exc
     try:
         result = invoke_fn(name, account_id, args)
     except GoogleAuthError as exc:
+        _finish(success=False, error_kind="auth")
         raise ToolPolicyError(f"[integrator] Autenticação necessária: {exc}") from exc
+    except Exception:
+        _finish(success=False, error_kind="execution")
+        raise
+    _finish(success=True)
     return json.dumps(result, ensure_ascii=False, default=str)
 
 

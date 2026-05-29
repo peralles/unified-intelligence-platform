@@ -224,6 +224,7 @@ class NeonizeWorker:
                             timestamp=row.timestamp,
                             from_me=row.from_me,
                             raw_proto_b64=row.raw_proto_b64,
+                            is_audio=row.is_audio,
                         )
                     )
                 bucket.sort(key=lambda m: m.timestamp)
