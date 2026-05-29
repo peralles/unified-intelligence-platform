@@ -13,6 +13,11 @@ dependencies = [
   "segno>=1.6",
 ]
 
+[project.optional-dependencies]
+# Apple Silicon (M1/M2/M3) local transcription — install with:
+#   cd bridges/whatsapp-neonize && uv add mlx-whisper
+transcribe = ["mlx-whisper>=0.4"]
+
 [project.scripts]
 whatsapp-neonize-worker = "worker:main"
 

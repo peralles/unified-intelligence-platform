@@ -27,6 +27,7 @@ from integrator.security.policy import get_confirm_required_tools
 meta = list_all_tool_metadata()
 google = list_google_tool_metadata()
 assert len(google) == GOOGLE_TOOL_COUNT == 12, len(google)
+assert WHATSAPP_TOOL_COUNT == 18, f'Expected 18 WhatsApp tools, got {WHATSAPP_TOOL_COUNT}'
 expected_total = GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + WHATSAPP_TOOL_COUNT
 assert len(meta) == TOTAL_TOOL_COUNT == expected_total, (len(meta), expected_total)
 confirm = get_confirm_required_tools()
@@ -43,6 +44,9 @@ for required in (
     'delete_whatsapp_messages_for_me',
 ):
     assert required in confirm, required
+# Verify transcription tool is present
+names = {m['name'] for m in meta}
+assert 'transcribe_whatsapp_audio' in names, 'transcribe_whatsapp_audio missing'
 from integrator.accounts.registry import validate_account_id
 assert validate_account_id('Profissional') == 'profissional'
 print(
@@ -65,7 +69,9 @@ print('OK: MCP list_tools', len(tools))
 echo "==> whatsapp CLI smoke"
 uv run integrator whatsapp configure >/dev/null
 uv run integrator whatsapp status >/dev/null
-echo "OK: whatsapp CLI (configure, status)"
+uv run integrator whatsapp watch --help >/dev/null
+uv run integrator whatsapp watch-service status >/dev/null 2>&1 || true
+echo "OK: whatsapp CLI (configure, status, watch)"
 
 echo "==> performance smoke"
 uv run python -c "

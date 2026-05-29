@@ -4,7 +4,8 @@
 
 ## Estado
 
-- MVP: MCP stdio, 12 Google + 9 WhatsApp (delete for me + sync histórico), multi-conta Google, Fase 2
+- MVP: MCP stdio, 12 Google + 2 Gmail extra + 18 WhatsApp = **32 tools**, multi-conta Google, Fase 2
+- Transcrição automática de áudios WhatsApp via mlx-whisper (Apple Silicon) implementada
 - CLI WhatsApp: `status` (rápido + `--live`), `configure`, `pair`, `remove`, `disconnect`; checklist em AGENTS.md
 - Entrada amigável: `./setup.sh` + `Makefile` (delegam à CLI)
 - Auto-config Hermes: `integrator init` / `integrator hermes setup` (stdio padrão)
@@ -18,8 +19,9 @@
 ## Próximos passos (planejado)
 
 - Validação manual WhatsApp: `integrator whatsapp pair` + tools no Hermes
+- Instalar mlx-whisper no venv do bridge para validar transcrição end-to-end
 - CI GitHub Actions (não existe no repo)
-- Novos providers OAuth no padrão `ToolProvider`
+- Novos providers OAuth no padrão `ToolProvider` (LinkedIn análise concluída)
 
 ## Hermes (operacional)
 

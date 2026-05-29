@@ -236,3 +236,62 @@ def test_bridge_client_rpc(mock_popen: MagicMock) -> None:
     result = client.call("ping")
     assert result == {"pong": True}
     client.close()
+
+
+def test_transcribe_whatsapp_audio_in_tool_names() -> None:
+    from integrator.providers.whatsapp_tools import WHATSAPP_TOOL_NAMES
+
+    assert "transcribe_whatsapp_audio" in WHATSAPP_TOOL_NAMES
+    assert len(WHATSAPP_TOOL_NAMES) == 18
+
+
+def test_transcribe_whatsapp_audio_in_metadata() -> None:
+    from integrator.providers.whatsapp_tools import list_whatsapp_tool_metadata
+
+    names = {m["name"] for m in list_whatsapp_tool_metadata()}
+    assert "transcribe_whatsapp_audio" in names
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_transcribe_whatsapp_audio_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.transcribe_audio.return_value = "Olá, tudo bem?"
+    mock_get.return_value = session
+
+    out = invoke_tool(
+        "transcribe_whatsapp_audio",
+        {"chat_id": "5511999999999@s.whatsapp.net", "message_id": "MSG123"},
+    )
+    data = json.loads(out)
+    assert data["text"] == "Olá, tudo bem?"
+    assert data["message_id"] == "MSG123"
+    session.transcribe_audio.assert_called_once_with(
+        chat_id="5511999999999@s.whatsapp.net",
+        message_id="MSG123",
+    )
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_transcribe_whatsapp_audio_with_reply(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.transcribe_audio.return_value = "Reunião às 15h"
+    session.send_text.return_value = {"message_id": "REPLY1"}
+    mock_get.return_value = session
+
+    out = invoke_tool(
+        "transcribe_whatsapp_audio",
+        {
+            "chat_id": "5511999999999@s.whatsapp.net",
+            "message_id": "MSG456",
+            "reply": True,
+        },
+    )
+    data = json.loads(out)
+    assert data["text"] == "Reunião às 15h"
+    assert data.get("replied") is True
+    session.send_text.assert_called_once()
+
+
+def test_whatsapp_total_tool_count() -> None:
+    assert WHATSAPP_TOOL_COUNT == 18
+    assert TOTAL_TOOL_COUNT == GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + 18

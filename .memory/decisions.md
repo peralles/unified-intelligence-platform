@@ -19,8 +19,9 @@ Resumo das escolhas já documentadas em `docs/PLANO_LANGCHAIN_HERMES.md` e `READ
 
 ## Superfície de tools
 
-- **12 tools** Google LangChain + **9 tools** WhatsApp (`whatsapp_*`) via agregador `integrator/providers/tools.py`
-- Extensão futura: padrão `ToolProvider` para outros OAuth (Slack, Notion, etc.)
+- **12 tools** Google LangChain + **2 Gmail extra** + **18 tools** WhatsApp = **32 total** via agregador `integrator/providers/tools.py`
+- WhatsApp: inclui `transcribe_whatsapp_audio` (on-demand via MCP) e watch daemon autônomo
+- Extensão futura: padrão `ToolProvider` para outros OAuth (LinkedIn análise em `.memory/active.md`)
 
 ## WhatsApp (neonize)
 
@@ -29,6 +30,10 @@ Resumo das escolhas já documentadas em `docs/PLANO_LANGCHAIN_HERMES.md` e `READ
 - Sessão: `data/whatsapp/` (gitignored); QR só em `integrator whatsapp pair`
 - Tools destrutivas WhatsApp (`send_*`, `delete_*`) exigem `confirm: true`; delete de terceiros via `delete_whatsapp_messages_for_me` (app state)
 - Hermes: **mesmo** `mcp_servers.langchain-integrator` stdio; sem segunda entrada MCP
+- **Lockfile**: `data/whatsapp/worker.lock` (fcntl) previne duas instâncias neonize simultâneas
+- **Transcrição**: `mlx-whisper` no venv do bridge (sem conflito protobuf); modelo `whisper-large-v3-turbo` para M3 Pro/Max; `-q4` para M3 base 8 GB
+- **Watch daemon** (`integrator whatsapp watch`): standalone, sem Hermes; LaunchAgent macOS via `watch-service install`
+- MCP serve + `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true`: auto-transcreve dentro do Hermes (mesma sessão — exclusivo com watch)
 
 ## Segurança (Fase 2)
 

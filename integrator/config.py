@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     whatsapp_max_message_chars: int = 800
     whatsapp_max_cached_messages_per_chat: int = 5000
 
+    # WhatsApp auto-transcription (mlx-whisper, Apple Silicon)
+    whatsapp_auto_transcribe: bool = False
+    whatsapp_transcribe_model: str = "mlx-community/whisper-large-v3-turbo"
+    whatsapp_transcribe_language: str | None = None
+    whatsapp_transcribe_prefix: str = "🎙️ "
+    whatsapp_transcribe_only_incoming: bool = True
+
     @property
     def audit_log_path(self) -> Path:
         if self.audit_log_file:

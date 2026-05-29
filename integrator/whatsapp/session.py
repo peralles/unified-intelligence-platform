@@ -237,6 +237,26 @@ class WhatsAppSession:
             {"chat_id": chat_id, "message_ids": message_ids},
         )
 
+    def transcribe_audio(
+        self,
+        *,
+        chat_id: str,
+        message_id: str,
+    ) -> str:
+        """Return the transcribed text of a cached audio message."""
+        self.ensure_background_connection()
+        result = self._bridge.call(
+            "transcribe_audio",
+            {"chat_id": chat_id, "message_id": message_id},
+        )
+        return str((result or {}).get("text", ""))
+
+    def transcription_status(self) -> dict[str, Any]:
+        """Return transcription configuration from the active worker."""
+        self.ensure_background_connection()
+        result = self._bridge.call("transcription_status")
+        return dict(result or {})
+
     def delete_messages_for_me(
         self,
         *,
