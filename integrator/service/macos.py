@@ -131,7 +131,7 @@ def is_loaded() -> bool:
 
 
 def install_service(*, port: int = DEFAULT_PORT, start: bool = True) -> Path:
-    path = write_plist(port)
+    path = write_plist(port=port)
     if start:
         enable_service()
     return path
