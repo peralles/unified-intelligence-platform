@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from integrator.providers.tools import (
+    CALENDAR_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
@@ -22,7 +23,12 @@ from integrator.security.policy import (
 
 def test_tool_counts():
     meta = list_all_tool_metadata()
-    expected = GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + WHATSAPP_TOOL_COUNT
+    expected = (
+        GOOGLE_TOOL_COUNT
+        + GMAIL_EXTRA_TOOL_COUNT
+        + CALENDAR_EXTRA_TOOL_COUNT
+        + WHATSAPP_TOOL_COUNT
+    )
     assert len(meta) == TOTAL_TOOL_COUNT == expected
     names = {m["name"] for m in meta}
     wa = {m["name"] for m in list_whatsapp_tool_metadata()}
@@ -33,6 +39,98 @@ def test_tool_counts():
 def test_send_whatsapp_requires_confirm():
     with pytest.raises(ConfirmationRequiredError):
         invoke_tool("send_whatsapp_text", {"text": "oi", "number": "5511999999999"})
+
+
+def test_forward_whatsapp_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "forward_whatsapp_message",
+            {
+                "source_chat_id": "5511@s.whatsapp.net",
+                "message_id": "abc",
+                "target_number": "5511999999999",
+            },
+        )
+
+
+def test_send_document_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "send_whatsapp_document",
+            {"file_path": "/tmp/x.pdf", "number": "5511999999999"},
+        )
+
+
+def test_vote_poll_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "vote_whatsapp_poll",
+            {
+                "chat_id": "5511@s.whatsapp.net",
+                "poll_message_id": "p1",
+                "selected_options": ["Sim"],
+            },
+        )
+
+
+def test_leave_group_and_purge_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool("leave_whatsapp_group_and_purge", {"chat_id": "120@g.us"})
+
+
+def test_join_group_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "join_whatsapp_group_link",
+            {"invite_link": "https://chat.whatsapp.com/AbCdEf"},
+        )
+
+
+def test_leave_group_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool("leave_whatsapp_group", {"chat_id": "120@g.us"})
+
+
+def test_send_poll_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "send_whatsapp_poll",
+            {
+                "question": "Q?",
+                "options": ["a", "b"],
+                "number": "5511999999999",
+            },
+        )
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_get_blocklist_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.get_blocklist.return_value = {"blocked": ["5511@s.whatsapp.net"], "count": 1}
+    mock_get.return_value = session
+    out = invoke_tool("get_whatsapp_blocklist", {})
+    data = json.loads(out)
+    assert data["count"] == 1
+
+
+def test_send_video_requires_confirm():
+    with pytest.raises(ConfirmationRequiredError):
+        invoke_tool(
+            "send_whatsapp_video",
+            {"file_path": "/tmp/x.mp4", "number": "5511999999999"},
+        )
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_list_whatsapp_groups_mock(mock_get: MagicMock) -> None:
+    session = MagicMock()
+    session.list_joined_groups.return_value = [
+        {"chat_id": "120@g.us", "name": "Time", "participant_count": 5}
+    ]
+    mock_get.return_value = session
+    out = invoke_tool("list_whatsapp_groups", {"limit": 10})
+    data = json.loads(out)
+    assert data[0]["name"] == "Time"
 
 
 @patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
@@ -242,7 +340,7 @@ def test_transcribe_whatsapp_audio_in_tool_names() -> None:
     from integrator.providers.whatsapp_tools import WHATSAPP_TOOL_NAMES
 
     assert "transcribe_whatsapp_audio" in WHATSAPP_TOOL_NAMES
-    assert len(WHATSAPP_TOOL_NAMES) == 18
+    assert len(WHATSAPP_TOOL_NAMES) == 40
 
 
 def test_transcribe_whatsapp_audio_in_metadata() -> None:
@@ -293,5 +391,5 @@ def test_transcribe_whatsapp_audio_with_reply(mock_get: MagicMock) -> None:
 
 
 def test_whatsapp_total_tool_count() -> None:
-    assert WHATSAPP_TOOL_COUNT == 18
-    assert TOTAL_TOOL_COUNT == GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + 18
+    assert WHATSAPP_TOOL_COUNT == 40
+    assert TOTAL_TOOL_COUNT == GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + 40 + 1  # +1 calendar extra

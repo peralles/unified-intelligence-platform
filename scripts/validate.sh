@@ -16,6 +16,7 @@ uv run pytest -q --tb=short
 echo "==> import smoke"
 uv run python -c "
 from integrator.providers.tools import (
+    CALENDAR_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
@@ -27,8 +28,12 @@ from integrator.security.policy import get_confirm_required_tools
 meta = list_all_tool_metadata()
 google = list_google_tool_metadata()
 assert len(google) == GOOGLE_TOOL_COUNT == 12, len(google)
-assert WHATSAPP_TOOL_COUNT == 18, f'Expected 18 WhatsApp tools, got {WHATSAPP_TOOL_COUNT}'
-expected_total = GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + WHATSAPP_TOOL_COUNT
+expected_total = (
+    GOOGLE_TOOL_COUNT
+    + GMAIL_EXTRA_TOOL_COUNT
+    + CALENDAR_EXTRA_TOOL_COUNT
+    + WHATSAPP_TOOL_COUNT
+)
 assert len(meta) == TOTAL_TOOL_COUNT == expected_total, (len(meta), expected_total)
 confirm = get_confirm_required_tools()
 for required in (
@@ -42,17 +47,34 @@ for required in (
     'edit_whatsapp_text',
     'delete_whatsapp_messages',
     'delete_whatsapp_messages_for_me',
+    'send_whatsapp_document',
+    'send_whatsapp_audio',
+    'forward_whatsapp_message',
+    'send_whatsapp_video',
+    'send_whatsapp_sticker',
+    'send_whatsapp_contact',
+    'trash_gmail_message',
+    'send_whatsapp_poll',
+    'send_whatsapp_album',
+    'update_whatsapp_blocklist',
+    'leave_whatsapp_group',
+    'restore_gmail_message',
+    'vote_whatsapp_poll',
+    'join_whatsapp_group_link',
+    'send_gmail_draft',
+    'batch_modify_gmail_labels',
+    'leave_whatsapp_group_and_purge',
 ):
     assert required in confirm, required
-# Verify transcription tool is present
 names = {m['name'] for m in meta}
 assert 'transcribe_whatsapp_audio' in names, 'transcribe_whatsapp_audio missing'
+assert WHATSAPP_TOOL_COUNT == 40, f'Expected 40 WhatsApp tools, got {WHATSAPP_TOOL_COUNT}'
 from integrator.accounts.registry import validate_account_id
 assert validate_account_id('Profissional') == 'profissional'
 print(
     'OK:', len(meta), 'tools (',
     GOOGLE_TOOL_COUNT, 'Google +', GMAIL_EXTRA_TOOL_COUNT, 'Gmail extra +',
-    WHATSAPP_TOOL_COUNT, 'WhatsApp)',
+    CALENDAR_EXTRA_TOOL_COUNT, 'Calendar extra +', WHATSAPP_TOOL_COUNT, 'WhatsApp)',
 )
 "
 

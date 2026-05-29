@@ -38,6 +38,28 @@ WHATSAPP_TOOL_NAMES = frozenset({
     "get_whatsapp_group_info",
     "edit_whatsapp_text",
     "mark_whatsapp_read",
+    "mute_whatsapp_chat",
+    "send_whatsapp_document",
+    "send_whatsapp_audio",
+    "forward_whatsapp_message",
+    "send_whatsapp_video",
+    "send_whatsapp_sticker",
+    "send_whatsapp_contact",
+    "list_whatsapp_groups",
+    "get_whatsapp_profile_picture",
+    "send_whatsapp_typing",
+    "send_whatsapp_poll",
+    "send_whatsapp_album",
+    "get_whatsapp_blocklist",
+    "update_whatsapp_blocklist",
+    "get_whatsapp_group_invite_link",
+    "leave_whatsapp_group",
+    "vote_whatsapp_poll",
+    "join_whatsapp_group_link",
+    "get_whatsapp_user_info",
+    "preview_whatsapp_group_link",
+    "clear_whatsapp_chat_cache",
+    "leave_whatsapp_group_and_purge",
     "transcribe_whatsapp_audio",
 })
 
@@ -365,6 +387,375 @@ def _base_metadata() -> list[dict[str, Any]]:
                     },
                 },
                 "required": ["chat_id", "message_ids"],
+            },
+        },
+        {
+            "name": "mute_whatsapp_chat",
+            "description": (
+                "Silencia notificações do chat (padrão 8h) ou reativa com unmute=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do chat."},
+                    "mute_hours": {
+                        "type": "integer",
+                        "description": "Horas de silêncio (mín. 1; padrão 8).",
+                    },
+                    "unmute": {
+                        "type": "boolean",
+                        "description": "true=reativar notificações.",
+                    },
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "send_whatsapp_document",
+            "description": (
+                "Envia documento/arquivo por caminho local absoluto. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Caminho absoluto do arquivo.",
+                    },
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "caption": {"type": "string"},
+                    "filename": {
+                        "type": "string",
+                        "description": "Nome exibido no WhatsApp (padrão: nome do arquivo).",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "send_whatsapp_audio",
+            "description": (
+                "Envia áudio por caminho local. voice_note=true envia como mensagem de voz. "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "voice_note": {
+                        "type": "boolean",
+                        "description": "true = PTT (bolinha de voz).",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "forward_whatsapp_message",
+            "description": (
+                "Reenvia texto de mensagem em cache para outro chat (prefixo ↪️ opcional). "
+                "Mídia pura ainda não suportada. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "source_chat_id": {"type": "string"},
+                    "message_id": {"type": "string"},
+                    "target_chat_id": {"type": "string"},
+                    "target_number": {"type": "string"},
+                    "include_prefix": {
+                        "type": "boolean",
+                        "description": "Adiciona ↪️ antes do texto (padrão true).",
+                    },
+                },
+                "required": ["source_chat_id", "message_id"],
+            },
+        },
+        {
+            "name": "send_whatsapp_video",
+            "description": (
+                "Envia vídeo por caminho local. view_once e gif_playback opcionais. "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "caption": {"type": "string"},
+                    "view_once": {"type": "boolean"},
+                    "gif_playback": {
+                        "type": "boolean",
+                        "description": "Reproduzir como GIF no chat.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "send_whatsapp_sticker",
+            "description": (
+                "Envia figurinha (WebP) por caminho local. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "send_whatsapp_contact",
+            "description": (
+                "Compartilha cartão de contato (nome + número). Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "contact_name": {"type": "string"},
+                    "contact_number": {
+                        "type": "string",
+                        "description": "Número com DDI (só dígitos).",
+                    },
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string", "description": "Destino se não usar chat_id."},
+                },
+                "required": ["contact_name", "contact_number"],
+            },
+        },
+        {
+            "name": "list_whatsapp_groups",
+            "description": "Lista grupos dos quais você participa (id, nome, participantes).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Máximo (padrão 50)."},
+                },
+            },
+        },
+        {
+            "name": "get_whatsapp_profile_picture",
+            "description": (
+                "URL e metadados da foto de perfil de um chat/contato (não baixa o arquivo)."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID do contato ou grupo."},
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "send_whatsapp_typing",
+            "description": (
+                "Indica digitando ou pausa (composing true/false). "
+                "Use com moderação — não spammar presença."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                    "composing": {
+                        "type": "boolean",
+                        "description": "true=digitando, false=pausado (padrão true).",
+                    },
+                    "media": {
+                        "type": "string",
+                        "description": "text ou audio (padrão text).",
+                    },
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "send_whatsapp_poll",
+            "description": (
+                "Cria enquete no chat (question + options, mín. 2). "
+                "allow_multiple para voto múltiplo. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string"},
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "allow_multiple": {"type": "boolean"},
+                },
+                "required": ["question", "options"],
+            },
+        },
+        {
+            "name": "send_whatsapp_album",
+            "description": (
+                "Envia álbum de imagens/vídeos (lista de caminhos locais). "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Caminhos absolutos (2+ arquivos).",
+                    },
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "caption": {"type": "string"},
+                },
+                "required": ["file_paths"],
+            },
+        },
+        {
+            "name": "get_whatsapp_blocklist",
+            "description": "Lista JIDs/contatos bloqueados.",
+            "input_schema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "update_whatsapp_blocklist",
+            "description": (
+                "Bloqueia ou desbloqueia contato (block true/false). Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                    "number": {"type": "string"},
+                    "block": {
+                        "type": "boolean",
+                        "description": "true=bloquear, false=desbloquear (padrão true).",
+                    },
+                },
+            },
+        },
+        {
+            "name": "get_whatsapp_group_invite_link",
+            "description": (
+                "Obtém link de convite do grupo. revoke=true invalida link anterior."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID @g.us"},
+                    "revoke": {"type": "boolean"},
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "leave_whatsapp_group",
+            "description": "Sai do grupo WhatsApp. Requer confirm=true.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID @g.us"},
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "vote_whatsapp_poll",
+            "description": (
+                "Vota em enquete existente (poll_message_id em cache + selected_options). "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                    "poll_message_id": {"type": "string"},
+                    "selected_options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Texto exato da(s) opção(ões) escolhida(s).",
+                    },
+                },
+                "required": ["chat_id", "poll_message_id", "selected_options"],
+            },
+        },
+        {
+            "name": "join_whatsapp_group_link",
+            "description": (
+                "Entra em grupo via link chat.whatsapp.com/... ou código. Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "invite_link": {
+                        "type": "string",
+                        "description": "URL completa ou código do convite.",
+                    },
+                },
+                "required": ["invite_link"],
+            },
+        },
+        {
+            "name": "get_whatsapp_user_info",
+            "description": (
+                "Status/nome verificado de um ou mais contatos (chat_id ou chat_ids)."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                    "chat_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+            },
+        },
+        {
+            "name": "preview_whatsapp_group_link",
+            "description": (
+                "Pré-visualiza grupo pelo link de convite (sem entrar)."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "invite_link": {"type": "string"},
+                },
+                "required": ["invite_link"],
+            },
+        },
+        {
+            "name": "clear_whatsapp_chat_cache",
+            "description": (
+                "Remove mensagens do cache local (memória + SQLite) deste chat. "
+                "Não apaga no WhatsApp dos outros."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string"},
+                },
+                "required": ["chat_id"],
+            },
+        },
+        {
+            "name": "leave_whatsapp_group_and_purge",
+            "description": (
+                "Sai do grupo, apaga em cache no dispositivo (delete for me) e limpa cache local. "
+                "Requer confirm=true."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {"type": "string", "description": "JID @g.us"},
+                    "delete_media": {"type": "boolean"},
+                },
+                "required": ["chat_id"],
             },
         },
         {
@@ -696,6 +1087,287 @@ def invoke_whatsapp_tool(name: str, arguments: dict[str, Any] | None) -> str:
                 else None
             )
             result = session.mark_read(chat_id=chat_id, message_ids=message_ids)
+        elif name == "mute_whatsapp_chat":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            mute_hours = args.get("mute_hours")
+            result = session.set_chat_muted(
+                chat_id=chat_id,
+                mute_hours=int(mute_hours) if mute_hours is not None else None,
+                unmute=bool(args.get("unmute", False)),
+            )
+        elif name == "send_whatsapp_document":
+            file_path = str(args.get("file_path", "")).strip()
+            if not file_path:
+                raise ToolPolicyError("[integrator] Parâmetro 'file_path' é obrigatório.")
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar documento."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_document(
+                file_path=file_path,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                caption=str(args["caption"]) if args.get("caption") else None,
+                filename=str(args["filename"]) if args.get("filename") else None,
+            )
+        elif name == "send_whatsapp_audio":
+            file_path = str(args.get("file_path", "")).strip()
+            if not file_path:
+                raise ToolPolicyError("[integrator] Parâmetro 'file_path' é obrigatório.")
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar áudio."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_audio(
+                file_path=file_path,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                voice_note=bool(args.get("voice_note", False)),
+            )
+        elif name == "forward_whatsapp_message":
+            source_chat_id = str(args.get("source_chat_id", "")).strip()
+            message_id = str(args.get("message_id", "")).strip()
+            if not source_chat_id or not message_id:
+                raise ToolPolicyError(
+                    "[integrator] source_chat_id e message_id são obrigatórios."
+                )
+            target_chat_id = args.get("target_chat_id")
+            target_number = args.get("target_number")
+            if not target_chat_id and not target_number:
+                raise ToolPolicyError(
+                    "[integrator] Informe target_chat_id ou target_number."
+                )
+            chat_hint = _hash_chat_id(source_chat_id)
+            result = session.forward_message(
+                source_chat_id=source_chat_id,
+                message_id=message_id,
+                target_chat_id=str(target_chat_id) if target_chat_id else None,
+                target_number=str(target_number) if target_number else None,
+                include_prefix=bool(args.get("include_prefix", True)),
+            )
+        elif name == "send_whatsapp_video":
+            file_path = str(args.get("file_path", "")).strip()
+            if not file_path:
+                raise ToolPolicyError("[integrator] Parâmetro 'file_path' é obrigatório.")
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar vídeo."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_video(
+                file_path=file_path,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                caption=str(args["caption"]) if args.get("caption") else None,
+                view_once=bool(args.get("view_once", False)),
+                gif_playback=bool(args.get("gif_playback", False)),
+            )
+        elif name == "send_whatsapp_sticker":
+            file_path = str(args.get("file_path", "")).strip()
+            if not file_path:
+                raise ToolPolicyError("[integrator] Parâmetro 'file_path' é obrigatório.")
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar figurinha."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_sticker(
+                file_path=file_path,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+            )
+        elif name == "send_whatsapp_contact":
+            contact_name = str(args.get("contact_name", "")).strip()
+            contact_number = str(args.get("contact_number", "")).strip()
+            if not contact_name or not contact_number:
+                raise ToolPolicyError(
+                    "[integrator] contact_name e contact_number são obrigatórios."
+                )
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar contato."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_contact(
+                contact_name=contact_name,
+                contact_number=contact_number,
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+            )
+        elif name == "list_whatsapp_groups":
+            result = session.list_joined_groups(limit=int(args.get("limit", 50)))
+        elif name == "get_whatsapp_profile_picture":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.get_profile_picture(chat_id=chat_id)
+        elif name == "send_whatsapp_typing":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.send_chat_presence(
+                chat_id=chat_id,
+                composing=bool(args.get("composing", True)),
+                media=str(args.get("media", "text")),
+            )
+        elif name == "send_whatsapp_poll":
+            question = str(args.get("question", "")).strip()
+            raw_opts = args.get("options")
+            if not question:
+                raise ToolPolicyError("[integrator] Parâmetro 'question' é obrigatório.")
+            if not isinstance(raw_opts, list) or len(raw_opts) < 2:
+                raise ToolPolicyError(
+                    "[integrator] options deve ser lista com pelo menos 2 itens."
+                )
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar enquete."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_poll(
+                question=question,
+                options=[str(o) for o in raw_opts],
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                allow_multiple=bool(args.get("allow_multiple", False)),
+            )
+        elif name == "send_whatsapp_album":
+            raw_paths = args.get("file_paths")
+            if not isinstance(raw_paths, list) or len(raw_paths) < 2:
+                raise ToolPolicyError(
+                    "[integrator] file_paths deve ter pelo menos 2 arquivos."
+                )
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para enviar álbum."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.send_album(
+                file_paths=[str(p) for p in raw_paths],
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                caption=str(args["caption"]) if args.get("caption") else None,
+            )
+        elif name == "get_whatsapp_blocklist":
+            result = session.get_blocklist()
+        elif name == "update_whatsapp_blocklist":
+            chat_id = args.get("chat_id")
+            number = args.get("number")
+            if not chat_id and not number:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou number para bloquear/desbloquear."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.update_blocklist(
+                chat_id=str(chat_id) if chat_id else None,
+                number=str(number) if number else None,
+                block=bool(args.get("block", True)),
+            )
+        elif name == "get_whatsapp_group_invite_link":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.get_group_invite_link(
+                chat_id=chat_id,
+                revoke=bool(args.get("revoke", False)),
+            )
+        elif name == "leave_whatsapp_group":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.leave_group(chat_id=chat_id)
+        elif name == "vote_whatsapp_poll":
+            chat_id = str(args.get("chat_id", "")).strip()
+            poll_id = str(args.get("poll_message_id", "")).strip()
+            raw_opts = args.get("selected_options")
+            if not chat_id or not poll_id:
+                raise ToolPolicyError(
+                    "[integrator] chat_id e poll_message_id são obrigatórios."
+                )
+            if not isinstance(raw_opts, list) or not raw_opts:
+                raise ToolPolicyError(
+                    "[integrator] selected_options deve ser lista não vazia."
+                )
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.vote_poll(
+                chat_id=chat_id,
+                poll_message_id=poll_id,
+                selected_options=[str(o) for o in raw_opts],
+            )
+        elif name == "join_whatsapp_group_link":
+            invite_link = str(args.get("invite_link", "")).strip()
+            if not invite_link:
+                raise ToolPolicyError("[integrator] invite_link é obrigatório.")
+            result = session.join_group_link(invite_link=invite_link)
+        elif name == "get_whatsapp_user_info":
+            chat_id = args.get("chat_id")
+            raw_ids = args.get("chat_ids")
+            chat_ids = (
+                [str(i).strip() for i in raw_ids if str(i).strip()]
+                if isinstance(raw_ids, list)
+                else None
+            )
+            if not chat_id and not chat_ids:
+                raise ToolPolicyError(
+                    "[integrator] Informe chat_id ou chat_ids."
+                )
+            if chat_id:
+                chat_hint = _hash_chat_id(str(chat_id))
+            result = session.get_user_info(
+                chat_ids=chat_ids,
+                chat_id=str(chat_id).strip() if chat_id else None,
+            )
+        elif name == "preview_whatsapp_group_link":
+            invite_link = str(args.get("invite_link", "")).strip()
+            if not invite_link:
+                raise ToolPolicyError("[integrator] invite_link é obrigatório.")
+            result = session.preview_group_from_link(invite_link=invite_link)
+        elif name == "clear_whatsapp_chat_cache":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.clear_chat_local_cache(chat_id=chat_id)
+        elif name == "leave_whatsapp_group_and_purge":
+            chat_id = str(args.get("chat_id", "")).strip()
+            if not chat_id:
+                raise ToolPolicyError("[integrator] Parâmetro 'chat_id' é obrigatório.")
+            chat_hint = _hash_chat_id(chat_id)
+            result = session.leave_group_and_purge(
+                chat_id=chat_id,
+                delete_media=bool(args.get("delete_media", False)),
+            )
         elif name == "transcribe_whatsapp_audio":
             chat_id = str(args.get("chat_id", "")).strip()
             message_id = str(args.get("message_id", "")).strip()

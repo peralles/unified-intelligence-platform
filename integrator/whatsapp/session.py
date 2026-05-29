@@ -151,6 +151,289 @@ class WhatsAppSession:
             },
         )
 
+    def send_document(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+        filename: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_document",
+            {
+                "file_path": file_path,
+                "chat_id": chat_id,
+                "number": number,
+                "caption": caption,
+                "filename": filename,
+            },
+        )
+
+    def send_audio(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        voice_note: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_audio",
+            {
+                "file_path": file_path,
+                "chat_id": chat_id,
+                "number": number,
+                "voice_note": voice_note,
+            },
+        )
+
+    def forward_message(
+        self,
+        *,
+        source_chat_id: str,
+        message_id: str,
+        target_chat_id: str | None = None,
+        target_number: str | None = None,
+        include_prefix: bool = True,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "forward_message",
+            {
+                "source_chat_id": source_chat_id,
+                "message_id": message_id,
+                "target_chat_id": target_chat_id,
+                "target_number": target_number,
+                "include_prefix": include_prefix,
+            },
+        )
+
+    def set_chat_muted(
+        self,
+        *,
+        chat_id: str,
+        mute_hours: int | None = 8,
+        unmute: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        payload: dict[str, Any] = {"chat_id": chat_id, "unmute": unmute}
+        if mute_hours is not None:
+            payload["mute_hours"] = mute_hours
+        return self._bridge.call("set_chat_muted", payload)
+
+    def send_video(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+        view_once: bool = False,
+        gif_playback: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_video",
+            {
+                "file_path": file_path,
+                "chat_id": chat_id,
+                "number": number,
+                "caption": caption,
+                "view_once": view_once,
+                "gif_playback": gif_playback,
+            },
+        )
+
+    def send_sticker(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_sticker",
+            {
+                "file_path": file_path,
+                "chat_id": chat_id,
+                "number": number,
+            },
+        )
+
+    def send_contact(
+        self,
+        *,
+        contact_name: str,
+        contact_number: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_contact",
+            {
+                "contact_name": contact_name,
+                "contact_number": contact_number,
+                "chat_id": chat_id,
+                "number": number,
+            },
+        )
+
+    def list_joined_groups(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        self.ensure_background_connection()
+        result = self._bridge.call("list_joined_groups", {"limit": limit})
+        return list(result or [])
+
+    def get_profile_picture(self, *, chat_id: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("get_profile_picture", {"chat_id": chat_id})
+
+    def send_chat_presence(
+        self,
+        *,
+        chat_id: str,
+        composing: bool = True,
+        media: str = "text",
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_chat_presence",
+            {"chat_id": chat_id, "composing": composing, "media": media},
+        )
+
+    def send_poll(
+        self,
+        *,
+        question: str,
+        options: list[str],
+        chat_id: str | None = None,
+        number: str | None = None,
+        allow_multiple: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_poll",
+            {
+                "question": question,
+                "options": options,
+                "chat_id": chat_id,
+                "number": number,
+                "allow_multiple": allow_multiple,
+            },
+        )
+
+    def send_album(
+        self,
+        *,
+        file_paths: list[str],
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "send_album",
+            {
+                "file_paths": file_paths,
+                "chat_id": chat_id,
+                "number": number,
+                "caption": caption,
+            },
+        )
+
+    def get_blocklist(self) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("get_blocklist", {})
+
+    def update_blocklist(
+        self,
+        *,
+        chat_id: str | None = None,
+        number: str | None = None,
+        block: bool = True,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "update_blocklist",
+            {"chat_id": chat_id, "number": number, "block": block},
+        )
+
+    def get_group_invite_link(
+        self,
+        *,
+        chat_id: str,
+        revoke: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "get_group_invite_link",
+            {"chat_id": chat_id, "revoke": revoke},
+        )
+
+    def leave_group(self, *, chat_id: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("leave_group", {"chat_id": chat_id})
+
+    def join_group_link(self, *, invite_link: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("join_group_link", {"invite_link": invite_link})
+
+    def vote_poll(
+        self,
+        *,
+        chat_id: str,
+        poll_message_id: str,
+        selected_options: list[str],
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "vote_poll",
+            {
+                "chat_id": chat_id,
+                "poll_message_id": poll_message_id,
+                "selected_options": selected_options,
+            },
+        )
+
+    def get_user_info(
+        self,
+        *,
+        chat_ids: list[str] | None = None,
+        chat_id: str | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        payload: dict[str, Any] = {}
+        if chat_ids is not None:
+            payload["chat_ids"] = chat_ids
+        if chat_id is not None:
+            payload["chat_id"] = chat_id
+        return self._bridge.call("get_user_info", payload)
+
+    def preview_group_from_link(self, *, invite_link: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("preview_group_from_link", {"invite_link": invite_link})
+
+    def clear_chat_local_cache(self, *, chat_id: str) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call("clear_chat_local_cache", {"chat_id": chat_id})
+
+    def leave_group_and_purge(
+        self,
+        *,
+        chat_id: str,
+        delete_media: bool = False,
+    ) -> dict[str, Any]:
+        self.ensure_background_connection()
+        return self._bridge.call(
+            "leave_group_and_purge",
+            {"chat_id": chat_id, "delete_media": delete_media},
+        )
+
     def search_messages(
         self,
         *,

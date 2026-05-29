@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     whatsapp_session_dir: Path | None = None
     whatsapp_max_message_chars: int = 800
     whatsapp_max_cached_messages_per_chat: int = 5000
+    whatsapp_persist_cache: bool = True
 
     # WhatsApp auto-transcription (mlx-whisper, Apple Silicon)
     whatsapp_auto_transcribe: bool = False

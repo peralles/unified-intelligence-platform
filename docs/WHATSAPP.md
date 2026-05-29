@@ -60,99 +60,39 @@ Mesmo padrão do integrator (`data/logs/`):
 
 Diagnóstico: `integrator logs --failures`
 
-## Transcrição automática de áudios
-
-Transcreve mensagens de voz recebidas localmente usando **mlx-whisper** (Apple Silicon M1/M2/M3).
-
-### Instalação do modelo
-
-```bash
-# Instalar mlx-whisper no venv do bridge (uma vez):
-cd bridges/whatsapp-neonize && uv add mlx-whisper
-# O modelo é baixado do HuggingFace na primeira transcrição (~1,6 GB para turbo)
-```
-
-### Modo watch autônomo (sem Hermes)
-
-```bash
-# Iniciar daemon em primeiro plano (Ctrl+C para parar):
-integrator whatsapp watch
-
-# Com modelo mais leve (M3 base 8 GB):
-integrator whatsapp watch --model mlx-community/whisper-large-v3-turbo-q4
-
-# Forçar idioma português:
-integrator whatsapp watch --language pt
-
-# Instalar como LaunchAgent macOS (inicia no login, roda sempre):
-integrator whatsapp watch-service install
-integrator whatsapp watch-service install --model mlx-community/whisper-large-v3-turbo-q4
-
-# Gerenciar o serviço:
-integrator whatsapp watch-service status
-integrator whatsapp watch-service stop
-integrator whatsapp watch-service start
-integrator whatsapp watch-service uninstall
-```
-
-Quando `watch` está ativo, cada áudio recebido gera automaticamente uma resposta no mesmo chat:
-```
-🎙️ Olá, pode me ligar daqui a pouco?
-```
-
-### Auto-transcrição dentro do Hermes (MCP serve)
-
-```bash
-# Em .env ou variável de ambiente:
-INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true
-```
-
-Com este flag, o worker iniciado pelo `integrator serve` também auto-transcreve. O worker MCP e o `watch` daemon usam a mesma sessão (um exclui o outro via lockfile — use um ou outro).
-
-### Variáveis de ambiente
-
-| Variável | Padrão | Descrição |
-|----------|--------|-----------|
-| `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE` | `false` | Habilita auto-transcrição |
-| `INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL` | `mlx-community/whisper-large-v3-turbo` | Modelo mlx-whisper |
-| `INTEGRATOR_WHATSAPP_TRANSCRIBE_LANGUAGE` | *(vazio)* | Idioma (`pt`, `en`…) — vazio = auto |
-| `INTEGRATOR_WHATSAPP_TRANSCRIBE_PREFIX` | `🎙️ ` | Prefixo da resposta de transcrição |
-| `INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING` | `true` | Ignorar áudios enviados por você |
-
-### Modelos recomendados
-
-| Modelo | Tamanho | Velocidade M3 | Precisão PT-BR |
-|--------|---------|---------------|----------------|
-| `mlx-community/whisper-large-v3-turbo` | 1,6 GB | ~20× real-time | Excelente |
-| `mlx-community/whisper-large-v3-turbo-q4` | 464 MB | ~25× real-time | Muito boa |
-| `mlx-community/whisper-small-mlx` | 481 MB | ~50× real-time | Boa |
-
-Nota de voz de 30s → ~1,5s de transcrição no M3 Pro/Max.
-
-### Restrições
-
-- Exige Apple Silicon (M1/M2/M3) — `mlx-whisper` usa Metal GPU.
-- `ffmpeg` é necessário para decodificar Opus/OGG: `brew install ffmpeg`.
-- O daemon `watch` e o `integrator serve` são **mutuamente exclusivos** (mesma sessão neonize). Encerre um antes de iniciar o outro.
-
----
-
-## Tools MCP (18)
+## Tools MCP (39)
 
 | Tool | Confirmação |
 |------|-------------|
 | `get_whatsapp_connection_status` | não |
-| `list_whatsapp_chats` / `find_whatsapp_chats` | não |
+| `list_whatsapp_chats` / `find_whatsapp_chats` / `list_whatsapp_groups` | não |
 | `get_whatsapp_messages` / `sync_whatsapp_chat_history` / `search_whatsapp_messages` | não |
-| `get_whatsapp_group_info` | não |
+| `get_whatsapp_group_info` / `get_whatsapp_profile_picture` | não |
 | `whatsapp_reply_text` / `send_whatsapp_text` / `send_whatsapp_image` | **`confirm: true`** |
+| `send_whatsapp_document` / `send_whatsapp_audio` / `send_whatsapp_video` / `send_whatsapp_sticker` | **`confirm: true`** |
+| `send_whatsapp_contact` / `forward_whatsapp_message` | **`confirm: true`** |
+| `send_whatsapp_poll` / `send_whatsapp_album` | **`confirm: true`** |
+| `update_whatsapp_blocklist` / `leave_whatsapp_group` | **`confirm: true`** |
+| `get_whatsapp_blocklist` / `get_whatsapp_group_invite_link` | não |
+| `vote_whatsapp_poll` / `join_whatsapp_group_link` | **`confirm: true`** |
+| `get_whatsapp_user_info` / `preview_whatsapp_group_link` | não |
+| `clear_whatsapp_chat_cache` | não (só cache local) |
+| `leave_whatsapp_group_and_purge` | **`confirm: true`** |
 | `whatsapp_react_message` | não |
 | `edit_whatsapp_text` | **`confirm: true`** |
 | `delete_whatsapp_messages` / `delete_whatsapp_messages_for_me` | **`confirm: true`** |
-| `archive_whatsapp_chat` / `pin_whatsapp_chat` / `mark_whatsapp_read` | não |
-| `transcribe_whatsapp_audio` | não |
+| `archive_whatsapp_chat` / `pin_whatsapp_chat` / `mark_whatsapp_read` / `mute_whatsapp_chat` | não |
+| `send_whatsapp_typing` | não (usar com moderação) |
 
-Total com Google: **32 tools** (12 LangChain + 2 Gmail extra + 18 WhatsApp).
+Total com Google: **65 tools** (12 LangChain + 13 Gmail extra + 1 Calendar extra + 39 WhatsApp).
+
+### Cache persistente
+
+Com `INTEGRATOR_WHATSAPP_PERSIST_CACHE=true` (padrão), o worker grava mensagens em `data/whatsapp/message_cache.db` (SQLite). Reply, reação e encaminhamento de texto dependem do cache — após reiniciar o worker, mensagens antigas continuam disponíveis se já foram ingeridas.
+
+### Encaminhar mensagens
+
+`forward_whatsapp_message` reenvia **texto** do cache (prefixo `↪️` opcional). Mídia pura ainda não é suportada.
 
 ### Apagar mensagens
 
@@ -177,6 +117,7 @@ Total com Google: **32 tools** (12 LangChain + 2 Gmail extra + 18 WhatsApp).
 | `INTEGRATOR_WHATSAPP_SESSION_DIR` | `data/whatsapp` | Diretório da sessão |
 | `INTEGRATOR_WHATSAPP_MAX_MESSAGE_CHARS` | `800` | Truncagem em respostas |
 | `INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT` | `5000` | Mensagens por chat no worker |
+| `INTEGRATOR_WHATSAPP_PERSIST_CACHE` | `true` | SQLite `message_cache.db` na sessão |
 
 Ver `config/integrator.example.env`.
 
@@ -204,7 +145,3 @@ Não há `docker-compose` Evolution no repositório por padrão; documente local
 | Worker não inicia | `cd bridges/whatsapp-neonize && uv sync` |
 | Hermes não vê tools novas | `/reload-mcp` ou nova conversa |
 | Desligar WhatsApp no MCP | `INTEGRATOR_WHATSAPP_ENABLED=false` |
-| `mlx-whisper não instalado` | `cd bridges/whatsapp-neonize && uv add mlx-whisper` |
-| Transcription error: ffmpeg | `brew install ffmpeg` |
-| `Outro worker já em execução` | Encerre `integrator serve` ou `watch` antes de iniciar outro |
-| Watch não transcreve | Verificar `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE` e se mlx-whisper está instalado |

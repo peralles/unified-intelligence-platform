@@ -2,8 +2,6 @@
 JSON-line RPC worker for neonize (isolated venv with protobuf 7.x).
 
 Protocol: one JSON object per line on stdin/stdout.
-Watch mode (INTEGRATOR_WHATSAPP_WATCH_MODE=true): standalone daemon that
-auto-transcribes incoming audio messages without requiring an RPC client.
 """
 
 from __future__ import annotations
@@ -105,10 +103,7 @@ class StoredMessage:
 
 
 class AudioTranscriber:
-    """
-    Local Whisper transcription via mlx-whisper (Apple Silicon) with
-    graceful fallback when the library is not installed.
-    """
+    """Local Whisper transcription via mlx-whisper (Apple Silicon)."""
 
     def __init__(self, model_id: str, language: str | None = None) -> None:
         self.model_id = model_id
@@ -165,6 +160,16 @@ class NeonizeWorker:
         self.state = SessionState()
         self._connect_thread: threading.Thread | None = None
         self._pairing = False
+        self._cache_store: Any = None
+        if os.environ.get("INTEGRATOR_WHATSAPP_PERSIST_CACHE", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            from cache_store import MessageCacheStore
+
+            self._cache_store = MessageCacheStore(session_dir / "message_cache.db")
+            self._hydrate_cache_from_store()
 
         # Auto-transcription config (from env — set before process start)
         self._auto_transcribe: bool = os.environ.get(
@@ -183,7 +188,6 @@ class NeonizeWorker:
         self._transcribe_only_incoming: bool = os.environ.get(
             "INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING", "true"
         ).lower() not in ("0", "false", "no")
-
         self._transcriber: AudioTranscriber | None = None
         self._transcribe_pool: ThreadPoolExecutor | None = None
         if self._auto_transcribe:
@@ -195,6 +199,45 @@ class NeonizeWorker:
             )
 
         self._register_handlers()
+
+    def _max_cached_per_chat(self) -> int:
+        return int(os.environ.get("INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT", "5000"))
+
+    def _hydrate_cache_from_store(self) -> None:
+        if self._cache_store is None:
+            return
+        max_c = self._max_cached_per_chat()
+        buckets = self._cache_store.load_into_buckets(max_per_chat=max_c)
+        with self.state.lock:
+            for chat_id, rows in buckets.items():
+                bucket = self.state.messages.setdefault(chat_id, [])
+                known = {m.message_id for m in bucket}
+                for row in rows:
+                    if row.message_id in known:
+                        continue
+                    bucket.append(
+                        StoredMessage(
+                            message_id=row.message_id,
+                            chat_id=row.chat_id,
+                            sender_id=row.sender_id,
+                            text=row.text,
+                            timestamp=row.timestamp,
+                            from_me=row.from_me,
+                            raw_proto_b64=row.raw_proto_b64,
+                        )
+                    )
+                bucket.sort(key=lambda m: m.timestamp)
+                if len(bucket) > max_c:
+                    self.state.messages[chat_id] = bucket[-max_c:]
+
+    def _persist_cached_message(self, msg: StoredMessage) -> None:
+        if self._cache_store is None:
+            return
+        try:
+            self._cache_store.upsert(msg)
+            self._cache_store.prune_chat(msg.chat_id, keep=self._max_cached_per_chat())
+        except Exception as exc:
+            logging.getLogger("whatsapp.cache").warning("cache persist failed: %s", exc)
 
     def _register_handlers(self) -> None:
         @self.client.event(ConnectedEv)
@@ -274,8 +317,6 @@ class NeonizeWorker:
             preview = text[:200]
             ts = int(info.Timestamp or time.time())
             raw_b64 = base64.b64encode(evt.SerializeToString()).decode("ascii")
-
-            # Detect audio (voice notes) and audio document attachments
             wa_msg = evt.Message
             is_audio = bool(
                 getattr(wa_msg, "audioMessage", None)
@@ -286,7 +327,6 @@ class NeonizeWorker:
                     "audio/"
                 )
             )
-
             msg = StoredMessage(
                 message_id=info.ID,
                 chat_id=chat_id,
@@ -308,8 +348,10 @@ class NeonizeWorker:
                 max_cached = int(
                     os.environ.get("INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT", "5000")
                 )
+                max_cached = self._max_cached_per_chat()
                 if len(bucket) > max_cached:
                     self.state.messages[chat_id] = bucket[-max_cached:]
+            self._persist_cached_message(msg)
 
             entry = self.state.chats.get(chat_id)
             if entry is None:
@@ -336,43 +378,7 @@ class NeonizeWorker:
                 self._do_transcribe_and_reply, evt, self.client
             )
 
-    def _ingest_history_conversation(self, conv: Any) -> None:
-        try:
-            chat_jid = getattr(conv, "ID", None) or getattr(conv, "id", None)
-            if chat_jid is None:
-                return
-            if hasattr(chat_jid, "User"):
-                chat_id = Jid2String(chat_jid)
-            else:
-                chat_id = str(chat_jid)
-            name = (
-                getattr(conv, "Name", None)
-                or getattr(conv, "displayName", None)
-                or chat_id
-            )
-            with self.state.lock:
-                entry = self.state.chats.get(chat_id)
-                if entry is None:
-                    self.state.chats[chat_id] = ChatEntry(
-                        chat_id=chat_id,
-                        name=str(name),
-                        is_group="@g.us" in chat_id,
-                    )
-            messages = getattr(conv, "messages", None) or getattr(conv, "Messages", None)
-            if messages:
-                for raw in messages:
-                    if hasattr(raw, "Info"):
-                        self._ingest_neonize_message(raw)
-        except Exception:
-            return
-
-    # ------------------------------------------------------------------ #
-    # Transcription helpers
-    # ------------------------------------------------------------------ #
-
-    def _do_transcribe_and_reply(
-        self, evt: NeonizeMessage, client: Any
-    ) -> None:
+    def _do_transcribe_and_reply(self, evt: NeonizeMessage, client: Any) -> None:
         """Download audio, transcribe with mlx-whisper, reply in the same chat."""
         if self._transcriber is None:
             return
@@ -405,15 +411,11 @@ class NeonizeWorker:
         try:
             chat_jid = self._jid_from_chat_id(chat_id)
             client.send_message(chat_jid, reply)
-            logging.info(
-                "[transcribe] OK | chat=%s | chars=%d", chat_id, len(text)
-            )
+            logging.info("[transcribe] OK | chat=%s | chars=%d", chat_id, len(text))
         except Exception as exc:
             logging.error("[transcribe] send reply failed | chat=%s | %s", chat_id, exc)
 
-    def _transcribe_stored_audio(
-        self, *, chat_id: str, message_id: str
-    ) -> str:
+    def _transcribe_stored_audio(self, *, chat_id: str, message_id: str) -> str:
         """On-demand transcription for a cached audio message (RPC call)."""
         if not self.client.is_logged_in:
             raise WorkerError("WhatsApp não conectado.")
@@ -428,9 +430,7 @@ class NeonizeWorker:
                 f"Mensagem {message_id} não tem metadados para download. "
                 "Receba o áudio novamente ou sincronize o histórico do chat."
             )
-        transcriber = AudioTranscriber(
-            self._transcribe_model, self._transcribe_language
-        )
+        transcriber = AudioTranscriber(self._transcribe_model, self._transcribe_language)
         neonize_msg = self._load_quoted_neonize_message(stored)
         tmp_path: str | None = None
         try:
@@ -454,7 +454,35 @@ class NeonizeWorker:
                     pass
         return text
 
-    # ------------------------------------------------------------------ #
+    def _ingest_history_conversation(self, conv: Any) -> None:
+        try:
+            chat_jid = getattr(conv, "ID", None) or getattr(conv, "id", None)
+            if chat_jid is None:
+                return
+            if hasattr(chat_jid, "User"):
+                chat_id = Jid2String(chat_jid)
+            else:
+                chat_id = str(chat_jid)
+            name = (
+                getattr(conv, "Name", None)
+                or getattr(conv, "displayName", None)
+                or chat_id
+            )
+            with self.state.lock:
+                entry = self.state.chats.get(chat_id)
+                if entry is None:
+                    self.state.chats[chat_id] = ChatEntry(
+                        chat_id=chat_id,
+                        name=str(name),
+                        is_group="@g.us" in chat_id,
+                    )
+            messages = getattr(conv, "messages", None) or getattr(conv, "Messages", None)
+            if messages:
+                for raw in messages:
+                    if hasattr(raw, "Info"):
+                        self._ingest_neonize_message(raw)
+        except Exception:
+            return
 
     def _ensure_connect_thread(self) -> None:
         if self._connect_thread and self._connect_thread.is_alive():
@@ -639,6 +667,23 @@ class NeonizeWorker:
         quoted = NeonizeMessage()
         quoted.ParseFromString(base64.b64decode(stored.raw_proto_b64))
         return quoted
+
+    def _resolve_dest_jid(
+        self,
+        *,
+        chat_id: str | None,
+        number: str | None,
+    ) -> Any:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        if chat_id:
+            return self._jid_from_chat_id(chat_id)
+        if number:
+            digits = "".join(ch for ch in number if ch.isdigit())
+            if not digits:
+                raise WorkerError("Número inválido.")
+            return build_jid(digits)
+        raise WorkerError("Informe chat_id ou number.")
 
     @staticmethod
     def _jid_from_chat_id(chat_id: str) -> Any:
@@ -884,16 +929,7 @@ class NeonizeWorker:
         chat_id: str | None = None,
         number: str | None = None,
     ) -> dict[str, Any]:
-        if not self.client.is_logged_in:
-            raise WorkerError("WhatsApp não conectado. Rode pareamento antes.")
-        if chat_id:
-            jid = self._jid_from_chat_id(chat_id)
-        elif number:
-            digits = "".join(ch for ch in number if ch.isdigit())
-            jid = build_jid(digits)
-        else:
-            raise WorkerError("Informe chat_id ou number.")
-
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
         resp = self.client.send_message(jid, text)
         return {
             "message_id": resp.ID,
@@ -957,18 +993,10 @@ class NeonizeWorker:
         number: str | None = None,
         caption: str | None = None,
     ) -> dict[str, Any]:
-        if not self.client.is_logged_in:
-            raise WorkerError("WhatsApp não conectado.")
         path = Path(file_path).expanduser().resolve()
         if not path.is_file():
             raise WorkerError(f"Arquivo não encontrado: {path}")
-        if chat_id:
-            jid = self._jid_from_chat_id(chat_id)
-        elif number:
-            digits = "".join(ch for ch in number if ch.isdigit())
-            jid = build_jid(digits)
-        else:
-            raise WorkerError("Informe chat_id ou number.")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
         img_msg = self.client.build_image_message(str(path), caption=caption or "")
         resp = self.client.send_message(jid, img_msg)
         return {
@@ -976,6 +1004,490 @@ class NeonizeWorker:
             "timestamp": int(resp.Timestamp),
             "chat_id": Jid2String(jid),
             "file": str(path),
+        }
+
+    def send_document(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+        filename: str | None = None,
+    ) -> dict[str, Any]:
+        path = Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise WorkerError(f"Arquivo não encontrado: {path}")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_document(
+            jid,
+            str(path),
+            caption=caption or "",
+            filename=filename or path.name,
+        )
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "file": str(path),
+        }
+
+    def send_audio(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        voice_note: bool = False,
+    ) -> dict[str, Any]:
+        path = Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise WorkerError(f"Arquivo não encontrado: {path}")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_audio(jid, str(path), ptt=voice_note)
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "file": str(path),
+            "voice_note": voice_note,
+        }
+
+    def forward_message(
+        self,
+        *,
+        source_chat_id: str,
+        message_id: str,
+        target_chat_id: str | None = None,
+        target_number: str | None = None,
+        include_prefix: bool = True,
+    ) -> dict[str, Any]:
+        stored = self._lookup_stored_message(source_chat_id, message_id)
+        body = stored.text.strip()
+        if not body:
+            raise WorkerError(
+                "Mensagem sem texto em cache. Encaminhamento de mídia pura ainda não suportado."
+            )
+        if include_prefix and not body.startswith("↪"):
+            body = f"↪️ {body}"
+        sent = self.send_text(
+            text=body,
+            chat_id=target_chat_id,
+            number=target_number,
+        )
+        sent["forwarded_from"] = {
+            "chat_id": source_chat_id,
+            "message_id": message_id,
+        }
+        return sent
+
+    def send_video(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+        view_once: bool = False,
+        gif_playback: bool = False,
+    ) -> dict[str, Any]:
+        path = Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise WorkerError(f"Arquivo não encontrado: {path}")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_video(
+            jid,
+            str(path),
+            caption=caption or "",
+            viewonce=view_once,
+            gifplayback=gif_playback,
+        )
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "file": str(path),
+        }
+
+    def send_sticker(
+        self,
+        *,
+        file_path: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+    ) -> dict[str, Any]:
+        path = Path(file_path).expanduser().resolve()
+        if not path.is_file():
+            raise WorkerError(f"Arquivo não encontrado: {path}")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_sticker(jid, str(path))
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "file": str(path),
+        }
+
+    def send_contact(
+        self,
+        *,
+        contact_name: str,
+        contact_number: str,
+        chat_id: str | None = None,
+        number: str | None = None,
+    ) -> dict[str, Any]:
+        name = contact_name.strip()
+        digits = "".join(ch for ch in contact_number if ch.isdigit())
+        if not name:
+            raise WorkerError("contact_name é obrigatório.")
+        if not digits:
+            raise WorkerError("contact_number inválido.")
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        resp = self.client.send_contact(jid, name, digits)
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "contact_name": name,
+            "contact_number": digits,
+        }
+
+    def list_joined_groups(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        groups = self.client.get_joined_groups()
+        out: list[dict[str, Any]] = []
+        for g in groups:
+            jid = getattr(g, "JID", None)
+            chat_id = Jid2String(jid) if jid is not None else ""
+            if not chat_id:
+                continue
+            participants = getattr(g, "Participants", None)
+            count = len(participants) if participants is not None else 0
+            out.append(
+                {
+                    "chat_id": chat_id,
+                    "name": str(getattr(g, "GroupName", "") or ""),
+                    "participant_count": count,
+                }
+            )
+            if len(out) >= limit:
+                break
+        return out
+
+    def get_profile_picture(self, *, chat_id: str) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        jid = self._jid_from_chat_id(chat_id)
+        info = self.client.get_profile_picture(jid)
+        return {
+            "chat_id": chat_id,
+            "url": str(getattr(info, "URL", "") or ""),
+            "picture_id": str(getattr(info, "ID", "") or ""),
+            "type": str(getattr(info, "Type", "") or ""),
+        }
+
+    def send_chat_presence(
+        self,
+        *,
+        chat_id: str,
+        composing: bool = True,
+        media: str = "text",
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        from neonize.utils.enum import ChatPresence, ChatPresenceMedia
+
+        jid = self._jid_from_chat_id(chat_id)
+        state = (
+            ChatPresence.CHAT_PRESENCE_COMPOSING
+            if composing
+            else ChatPresence.CHAT_PRESENCE_PAUSED
+        )
+        presence_media = (
+            ChatPresenceMedia.CHAT_PRESENCE_MEDIA_AUDIO
+            if str(media).lower() in ("audio", "voice", "ptt")
+            else ChatPresenceMedia.CHAT_PRESENCE_MEDIA_TEXT
+        )
+        self.client.send_chat_presence(jid, state, presence_media)
+        return {
+            "chat_id": chat_id,
+            "composing": composing,
+            "media": "audio" if presence_media == ChatPresenceMedia.CHAT_PRESENCE_MEDIA_AUDIO else "text",
+        }
+
+    def send_poll(
+        self,
+        *,
+        question: str,
+        options: list[str],
+        chat_id: str | None = None,
+        number: str | None = None,
+        allow_multiple: bool = False,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        title = question.strip()
+        opts = [str(o).strip() for o in options if str(o).strip()]
+        if not title:
+            raise WorkerError("question é obrigatória.")
+        if len(opts) < 2:
+            raise WorkerError("Informe pelo menos 2 options.")
+        from neonize.utils.enum import VoteType
+
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        vote_type = VoteType.MULTIPLE if allow_multiple else VoteType.SINGLE
+        poll_msg = self.client.build_poll_vote_creation(title, opts, vote_type)
+        resp = self.client.send_message(jid, poll_msg)
+        return {
+            "message_id": resp.ID,
+            "timestamp": int(resp.Timestamp),
+            "chat_id": Jid2String(jid),
+            "question": title,
+            "options": opts,
+        }
+
+    def send_album(
+        self,
+        *,
+        file_paths: list[str],
+        chat_id: str | None = None,
+        number: str | None = None,
+        caption: str | None = None,
+    ) -> dict[str, Any]:
+        if not file_paths:
+            raise WorkerError("file_paths deve ser uma lista não vazia.")
+        paths: list[str] = []
+        for raw in file_paths:
+            path = Path(str(raw)).expanduser().resolve()
+            if not path.is_file():
+                raise WorkerError(f"Arquivo não encontrado: {path}")
+            paths.append(str(path))
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        result = self.client.send_album(jid, paths, caption=caption or "")
+        sent: list[dict[str, Any]] = []
+        if isinstance(result, (list, tuple)):
+            for item in result:
+                if hasattr(item, "ID"):
+                    sent.append(
+                        {
+                            "message_id": item.ID,
+                            "timestamp": int(getattr(item, "Timestamp", 0)),
+                        }
+                    )
+        return {
+            "chat_id": Jid2String(jid),
+            "files": paths,
+            "sent": sent,
+            "count": len(sent),
+        }
+
+    def get_blocklist(self) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        bl = self.client.get_blocklist()
+        jids = getattr(bl, "JIDs", None) or []
+        blocked: list[str] = []
+        for entry in jids:
+            blocked.append(Jid2String(entry))
+        return {"blocked": blocked, "count": len(blocked)}
+
+    def update_blocklist(
+        self,
+        *,
+        chat_id: str | None = None,
+        number: str | None = None,
+        block: bool = True,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        from neonize.utils.enum import BlocklistAction
+
+        jid = self._resolve_dest_jid(chat_id=chat_id, number=number)
+        action = BlocklistAction.BLOCK if block else BlocklistAction.UNBLOCK
+        self.client.update_blocklist(jid, action)
+        return {
+            "chat_id": Jid2String(jid),
+            "blocked": block,
+        }
+
+    def get_group_invite_link(
+        self,
+        *,
+        chat_id: str,
+        revoke: bool = False,
+    ) -> dict[str, Any]:
+        if "@g.us" not in chat_id:
+            raise WorkerError("chat_id deve ser um grupo (@g.us).")
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        jid = self._jid_from_chat_id(chat_id)
+        link = self.client.get_group_invite_link(jid, revoke=revoke)
+        return {"chat_id": chat_id, "invite_link": str(link), "revoked_previous": revoke}
+
+    def leave_group(self, *, chat_id: str) -> dict[str, Any]:
+        if "@g.us" not in chat_id:
+            raise WorkerError("chat_id deve ser um grupo (@g.us).")
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        jid = self._jid_from_chat_id(chat_id)
+        self.client.leave_group(jid)
+        with self.state.lock:
+            self.state.chats.pop(chat_id, None)
+            self.state.messages.pop(chat_id, None)
+        return {"chat_id": chat_id, "left": True}
+
+    @staticmethod
+    def _parse_group_invite_code(invite_link: str) -> str:
+        link = invite_link.strip()
+        if "chat.whatsapp.com/" in link:
+            return link.rstrip("/").split("/")[-1].split("?")[0]
+        return link
+
+    def join_group_link(self, *, invite_link: str) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        code = self._parse_group_invite_code(invite_link)
+        if not code:
+            raise WorkerError("invite_link ou código inválido.")
+        jid = self.client.join_group_with_link(code)
+        chat_id = Jid2String(jid)
+        return {"chat_id": chat_id, "invite_code": code}
+
+    def preview_group_from_link(self, *, invite_link: str) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        code = self._parse_group_invite_code(invite_link)
+        if not code:
+            raise WorkerError("invite_link ou código inválido.")
+        info = self.client.get_group_info_from_link(code)
+        jid = getattr(info, "JID", None)
+        chat_id = Jid2String(jid) if jid is not None else ""
+        participants = getattr(info, "Participants", None)
+        count = len(participants) if participants is not None else 0
+        return {
+            "invite_code": code,
+            "chat_id": chat_id,
+            "name": str(getattr(info, "GroupName", "") or ""),
+            "participant_count": count,
+        }
+
+    def clear_chat_local_cache(self, *, chat_id: str) -> dict[str, Any]:
+        removed = 0
+        with self.state.lock:
+            removed = len(self.state.messages.pop(chat_id, []))
+            self.state.chats.pop(chat_id, None)
+        if self._cache_store is not None:
+            try:
+                self._cache_store.delete_chat(chat_id)
+            except Exception as exc:
+                logging.getLogger("whatsapp.cache").warning(
+                    "cache delete_chat failed: %s", exc
+                )
+        return {"chat_id": chat_id, "removed_from_cache": removed}
+
+    def leave_group_and_purge(
+        self,
+        *,
+        chat_id: str,
+        delete_media: bool = False,
+    ) -> dict[str, Any]:
+        if "@g.us" not in chat_id:
+            raise WorkerError("chat_id deve ser um grupo (@g.us).")
+        purge_result: dict[str, Any] | None = None
+        with self.state.lock:
+            ids = [m.message_id for m in self.state.messages.get(chat_id, [])]
+        if ids:
+            purge_result = self.delete_messages_for_me(
+                chat_id=chat_id,
+                message_ids=ids,
+                delete_media=delete_media,
+            )
+        left = self.leave_group(chat_id=chat_id)
+        return {
+            "chat_id": chat_id,
+            "left": left.get("left", True),
+            "purge": purge_result or {"deleted_count": 0, "deleted": []},
+        }
+
+    def vote_poll(
+        self,
+        *,
+        chat_id: str,
+        poll_message_id: str,
+        selected_options: list[str],
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        opts = [str(o).strip() for o in selected_options if str(o).strip()]
+        if not opts:
+            raise WorkerError("selected_options deve ter pelo menos uma opção.")
+        stored = self._lookup_stored_message(chat_id, poll_message_id)
+        neonize_msg = self._load_quoted_neonize_message(stored)
+        poll_info = neonize_msg.Info
+        chat_jid = self._jid_from_chat_id(chat_id)
+        vote_msg = self.client.build_poll_vote(poll_info, opts)
+        resp = self.client.send_message(chat_jid, vote_msg)
+        return {
+            "message_id": resp.ID,
+            "chat_id": chat_id,
+            "poll_message_id": poll_message_id,
+            "selected_options": opts,
+        }
+
+    def get_user_info(
+        self,
+        *,
+        chat_ids: list[str] | None = None,
+        chat_id: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        ids = list(chat_ids or [])
+        if chat_id:
+            ids.append(chat_id)
+        ids = [c.strip() for c in ids if c and str(c).strip()]
+        if not ids:
+            raise WorkerError("Informe chat_id ou chat_ids.")
+        jids = [self._jid_from_chat_id(c) for c in ids]
+        entries = self.client.get_user_info(*jids)
+        users: list[dict[str, Any]] = []
+        for entry in entries:
+            jid = getattr(entry, "JID", None)
+            chat_id_str = Jid2String(jid) if jid is not None else ""
+            ui = getattr(entry, "UserInfo", None)
+            users.append(
+                {
+                    "chat_id": chat_id_str,
+                    "verified_name": str(getattr(ui, "VerifiedName", "") or "") if ui else "",
+                    "status": str(getattr(ui, "Status", "") or "") if ui else "",
+                    "picture_id": str(getattr(ui, "PictureID", "") or "") if ui else "",
+                }
+            )
+        return {"users": users, "count": len(users)}
+
+    def set_chat_muted(
+        self,
+        *,
+        chat_id: str,
+        mute_hours: int | None = 8,
+        unmute: bool = False,
+    ) -> dict[str, Any]:
+        if not self.client.is_logged_in:
+            raise WorkerError("WhatsApp não conectado.")
+        from datetime import timedelta
+
+        jid = self._jid_from_chat_id(chat_id)
+        if unmute:
+            until = timedelta(seconds=0)
+        else:
+            hours = 8 if mute_hours is None else int(mute_hours)
+            until = timedelta(hours=max(1, hours))
+        self.client.put_muted_until(jid, until)
+        return {
+            "chat_id": chat_id,
+            "muted": not unmute,
+            "mute_hours": None if unmute else max(1, int(mute_hours or 8)),
         }
 
     def search_messages(
@@ -1047,6 +1559,7 @@ class NeonizeWorker:
         resp = self.client.edit_message(chat_jid, message_id, new_msg)
         with self.state.lock:
             stored.text = body
+        self._persist_cached_message(stored)
         return {
             "message_id": message_id,
             "chat_id": chat_id,
@@ -1270,6 +1783,130 @@ class NeonizeWorker:
                 delete_media=bool(params.get("delete_media", False)),
                 entries=entries,
             )
+        if method == "send_document":
+            return self.send_document(
+                file_path=str(params["file_path"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                caption=params.get("caption"),
+                filename=params.get("filename"),
+            )
+        if method == "send_audio":
+            return self.send_audio(
+                file_path=str(params["file_path"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                voice_note=bool(params.get("voice_note", False)),
+            )
+        if method == "forward_message":
+            return self.forward_message(
+                source_chat_id=str(params["source_chat_id"]),
+                message_id=str(params["message_id"]),
+                target_chat_id=params.get("target_chat_id"),
+                target_number=params.get("target_number"),
+                include_prefix=bool(params.get("include_prefix", True)),
+            )
+        if method == "set_chat_muted":
+            return self.set_chat_muted(
+                chat_id=str(params["chat_id"]),
+                mute_hours=params.get("mute_hours"),
+                unmute=bool(params.get("unmute", False)),
+            )
+        if method == "send_video":
+            return self.send_video(
+                file_path=str(params["file_path"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                caption=params.get("caption"),
+                view_once=bool(params.get("view_once", False)),
+                gif_playback=bool(params.get("gif_playback", False)),
+            )
+        if method == "send_sticker":
+            return self.send_sticker(
+                file_path=str(params["file_path"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+            )
+        if method == "send_contact":
+            return self.send_contact(
+                contact_name=str(params["contact_name"]),
+                contact_number=str(params["contact_number"]),
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+            )
+        if method == "list_joined_groups":
+            return self.list_joined_groups(limit=int(params.get("limit", 50)))
+        if method == "get_profile_picture":
+            return self.get_profile_picture(chat_id=str(params["chat_id"]))
+        if method == "send_chat_presence":
+            return self.send_chat_presence(
+                chat_id=str(params["chat_id"]),
+                composing=bool(params.get("composing", True)),
+                media=str(params.get("media", "text")),
+            )
+        if method == "send_poll":
+            raw_opts = params.get("options")
+            if not isinstance(raw_opts, list):
+                raise WorkerError("options deve ser uma lista.")
+            return self.send_poll(
+                question=str(params["question"]),
+                options=[str(o) for o in raw_opts],
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                allow_multiple=bool(params.get("allow_multiple", False)),
+            )
+        if method == "send_album":
+            raw_paths = params.get("file_paths")
+            if not isinstance(raw_paths, list):
+                raise WorkerError("file_paths deve ser uma lista.")
+            return self.send_album(
+                file_paths=[str(p) for p in raw_paths],
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                caption=params.get("caption"),
+            )
+        if method == "get_blocklist":
+            return self.get_blocklist()
+        if method == "update_blocklist":
+            return self.update_blocklist(
+                chat_id=params.get("chat_id"),
+                number=params.get("number"),
+                block=bool(params.get("block", True)),
+            )
+        if method == "get_group_invite_link":
+            return self.get_group_invite_link(
+                chat_id=str(params["chat_id"]),
+                revoke=bool(params.get("revoke", False)),
+            )
+        if method == "leave_group":
+            return self.leave_group(chat_id=str(params["chat_id"]))
+        if method == "join_group_link":
+            return self.join_group_link(invite_link=str(params["invite_link"]))
+        if method == "preview_group_from_link":
+            return self.preview_group_from_link(invite_link=str(params["invite_link"]))
+        if method == "clear_chat_local_cache":
+            return self.clear_chat_local_cache(chat_id=str(params["chat_id"]))
+        if method == "leave_group_and_purge":
+            return self.leave_group_and_purge(
+                chat_id=str(params["chat_id"]),
+                delete_media=bool(params.get("delete_media", False)),
+            )
+        if method == "vote_poll":
+            raw_opts = params.get("selected_options")
+            if not isinstance(raw_opts, list):
+                raise WorkerError("selected_options deve ser uma lista.")
+            return self.vote_poll(
+                chat_id=str(params["chat_id"]),
+                poll_message_id=str(params["poll_message_id"]),
+                selected_options=[str(o) for o in raw_opts],
+            )
+        if method == "get_user_info":
+            raw_ids = params.get("chat_ids")
+            chat_ids = [str(i) for i in raw_ids] if isinstance(raw_ids, list) else None
+            return self.get_user_info(
+                chat_ids=chat_ids,
+                chat_id=params.get("chat_id"),
+            )
         if method == "transcribe_audio":
             return {
                 "text": self._transcribe_stored_audio(
@@ -1363,7 +2000,6 @@ def _run_watch_mode(worker: NeonizeWorker) -> None:
     )
     sys.stderr.flush()
 
-    # Keepalive loop: check connection every 30 s and reconnect if needed.
     while not stop_event.is_set():
         stop_event.wait(30)
         if stop_event.is_set():
