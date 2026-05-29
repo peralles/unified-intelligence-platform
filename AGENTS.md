@@ -97,4 +97,4 @@ Antes de dar por concluído, verificar e alinhar:
 - `find_whatsapp_chats` sem `query` lista chats recentes (fallback para `list_chats`; evita erro quando o modelo omite filtro)
 - `watch-service`, `serve` stdio e SSE compartilham `data/whatsapp/worker.lock` — só uma instância neonize por sessão; não reativar watch com serviço SSE ativo
 - `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true` transcreve no mesmo worker do MCP; `bridge_client` repassa vars de transcrição do `settings` ao subprocesso (LaunchAgent não injeta `.env` no worker)
-- `INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=true` (padrão) ignora grupos `@g.us` na auto-transcrição e na tool `transcribe_whatsapp_audio`
+- `INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=true` (padrão) ignora grupos `@g.us`; `TRANSCRIBE_ONLY_INCOMING=false` (padrão) transcreve áudios enviados e recebidos em chats privados

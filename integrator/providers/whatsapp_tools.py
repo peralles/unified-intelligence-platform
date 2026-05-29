@@ -789,8 +789,9 @@ def _base_metadata() -> list[dict[str, Any]]:
                 "Requer que a mensagem esteja em cache (use get_whatsapp_messages para obter "
                 "o message_id). Por padrão, grupos (@g.us) são rejeitados "
                 "(INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY). "
-                "reply=true envia o texto no chat e exige confirm=true. "
-                "Para auto-transcrição contínua, use serviço SSE com AUTO_TRANSCRIBE=true."
+                "Auto-transcrição (SSE + AUTO_TRANSCRIBE=true): só chats privados; "
+                "áudios enviados e recebidos (ONLY_INCOMING=false, padrão). "
+                "reply=true envia o texto no chat e exige confirm=true."
             ),
             "input_schema": {
                 "type": "object",

@@ -52,6 +52,30 @@ def _print_live_status(data: dict) -> None:
         print(f"    Erro:       {data['error']}")
 
 
+def _print_transcription_status(data: dict) -> None:
+    auto = data.get("auto_transcribe")
+    print("\n  Auto-transcrição (worker ativo):")
+    print(f"    Ativa:          {'sim' if auto else 'não'}")
+    if not auto:
+        print("    → Defina INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true e reinicie o serviço.")
+        return
+    incoming_only = data.get("only_incoming")
+    private_only = data.get("private_only")
+    scope = "só recebidos" if incoming_only else "enviados e recebidos"
+    chats = "só chats privados" if private_only else "todos os chats"
+    print(f"    Escopo áudio:   {scope}")
+    print(f"    Chats:          {chats}")
+    print(f"    Modelo:         {data.get('model', '—')}")
+    lang = data.get("language") or "auto"
+    print(f"    Idioma:         {lang}")
+    print(f"    Prefixo:        {data.get('prefix', '')!r}")
+    ready = data.get("transcriber_ready")
+    print(
+        f"    MLX carregado:  {'sim' if ready else 'não (carrega no 1º áudio)'}"
+    )
+    print("    Ação:           nova mensagem no mesmo chat com o texto (🎙️ …)")
+
+
 def _cmd_status(args: argparse.Namespace) -> int:
     settings.ensure_data_dirs()
     _print_local_status()
@@ -64,6 +88,12 @@ def _cmd_status(args: argparse.Namespace) -> int:
         try:
             data = run_bridge_command("status", {"live": True, "wait_s": 25})
             _print_live_status(data)
+            try:
+                tx = run_bridge_command("transcription_status")
+                if isinstance(tx, dict):
+                    _print_transcription_status(tx)
+            except (WhatsAppApiError, WhatsAppNotConnectedError) as exc:
+                print(f"\n  Auto-transcrição: não consultada — {exc}", file=sys.stderr)
         except (WhatsAppApiError, WhatsAppNotConnectedError) as exc:
             LOGGER.warning("whatsapp status live FAIL | %s", exc)
             print(f"\n  Live: falhou — {exc}", file=sys.stderr)
@@ -93,9 +123,11 @@ def _cmd_configure(_: argparse.Namespace) -> int:
     print(f"    WHATSAPP_TRANSCRIBE_MODEL=…     # padrão: {settings.whatsapp_transcribe_model}")
     print("    WHATSAPP_TRANSCRIBE_LANGUAGE=pt # idioma (vazio=auto-detect)")
     print("    WHATSAPP_TRANSCRIBE_PREFIX=…    # prefixo da resposta (padrão: 🎙️ )")
-    print("    WHATSAPP_TRANSCRIBE_ONLY_INCOMING=true  # ignorar audios enviados por você")
     print(
-        "    WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=true  # padrão: só chats privados, não grupos"
+        "    WHATSAPP_TRANSCRIBE_ONLY_INCOMING=false # padrão: enviados e recebidos; true=só recebidos"
+    )
+    print(
+        "    WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=true   # padrão: só chats privados, não grupos"
     )
     print("\n  Arquivos:")
     print(f"    Sessão:   {session_path()}")

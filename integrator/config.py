@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     whatsapp_transcribe_model: str = "mlx-community/whisper-large-v3-turbo"
     whatsapp_transcribe_language: str | None = None
     whatsapp_transcribe_prefix: str = "🎙️ "
-    whatsapp_transcribe_only_incoming: bool = True
+    whatsapp_transcribe_only_incoming: bool = False
     whatsapp_transcribe_private_only: bool = True
 
     @property

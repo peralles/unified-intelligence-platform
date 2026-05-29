@@ -64,6 +64,32 @@ def resolve_uv() -> str:
     )
 
 
+def _whatsapp_transcribe_env() -> dict[str, str]:
+    """WhatsApp worker vars from Settings (.env), for LaunchAgent (no subprocess bridge)."""
+    return {
+        "INTEGRATOR_WHATSAPP_ENABLED": (
+            "true" if settings.whatsapp_enabled else "false"
+        ),
+        "INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE": (
+            "true" if settings.whatsapp_auto_transcribe else "false"
+        ),
+        "INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL": settings.whatsapp_transcribe_model,
+        "INTEGRATOR_WHATSAPP_TRANSCRIBE_PREFIX": settings.whatsapp_transcribe_prefix,
+        "INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING": (
+            "true" if settings.whatsapp_transcribe_only_incoming else "false"
+        ),
+        "INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY": (
+            "true" if settings.whatsapp_transcribe_private_only else "false"
+        ),
+        "INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT": str(
+            settings.whatsapp_max_cached_messages_per_chat
+        ),
+        "INTEGRATOR_WHATSAPP_PERSIST_CACHE": (
+            "true" if settings.whatsapp_persist_cache else "false"
+        ),
+    }
+
+
 def build_program_arguments(port: int) -> list[str]:
     uv = resolve_uv()
     root = settings.root_dir.resolve()
@@ -97,6 +123,16 @@ def write_plist(*, port: int) -> Path:
     ):
         if key in os.environ:
             env[key] = os.environ[key]
+
+    env.update(_whatsapp_transcribe_env())
+    if settings.whatsapp_transcribe_language:
+        env["INTEGRATOR_WHATSAPP_TRANSCRIBE_LANGUAGE"] = (
+            settings.whatsapp_transcribe_language
+        )
+    if settings.whatsapp_session_dir:
+        env["INTEGRATOR_WHATSAPP_SESSION_DIR"] = str(
+            settings.whatsapp_session_dir.resolve()
+        )
 
     plist = {
         "Label": SERVICE_LABEL,

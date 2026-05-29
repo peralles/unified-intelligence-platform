@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Mount, Route
 
+from integrator.config import settings
 from integrator.logging_setup import get_logger, setup_logging
 from integrator.mcp.server import server as mcp_server
 
@@ -39,6 +40,20 @@ def _security_settings(host: str, port: int) -> TransportSecuritySettings:
 
 async def _health(_: Request) -> Response:
     return Response('{"ok":true}', media_type="application/json")
+
+
+def _warm_whatsapp_for_auto_transcribe() -> None:
+    """Keep neonize connected so MessageEv handlers can transcribe without an MCP call."""
+    if not settings.whatsapp_enabled or not settings.whatsapp_auto_transcribe:
+        return
+    from integrator.whatsapp.session import WhatsAppSession
+
+    WhatsAppSession.get().ensure_background_connection()
+    logger.info(
+        "whatsapp worker connected | auto_transcribe | private_only=%s | only_incoming=%s",
+        settings.whatsapp_transcribe_private_only,
+        settings.whatsapp_transcribe_only_incoming,
+    )
 
 
 def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> Starlette:
@@ -67,6 +82,12 @@ def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> 
     @asynccontextmanager
     async def lifespan(_app: Starlette):
         async with session_manager.run():
+            if settings.whatsapp_enabled and settings.whatsapp_auto_transcribe:
+                loop = asyncio.get_running_loop()
+                try:
+                    await loop.run_in_executor(None, _warm_whatsapp_for_auto_transcribe)
+                except Exception as exc:
+                    logger.warning("whatsapp warm connect failed: %s", exc)
             yield
 
     return Starlette(

@@ -256,7 +256,7 @@ class NeonizeWorker:
         )
         self._transcribe_only_incoming: bool = _env_bool(
             "INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING",
-            default=True,
+            default=False,
         )
         self._transcribe_private_only: bool = _env_bool(
             "INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY",
@@ -491,7 +491,7 @@ class NeonizeWorker:
             if not source.IsFromMe:
                 entry.unread_count += 1
 
-        # Auto-transcribe incoming audio outside the lock (private chats only by default)
+        # Auto-transcribe audio (private chats by default; sent + received unless ONLY_INCOMING)
         is_group = bool(source.IsGroup) or _is_group_chat_id(chat_id)
         if (
             self._auto_transcribe
