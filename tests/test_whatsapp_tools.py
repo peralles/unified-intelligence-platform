@@ -17,8 +17,10 @@ from integrator.providers.tools import (
 from integrator.providers.whatsapp_tools import list_whatsapp_tool_metadata
 from integrator.security.policy import (
     ConfirmationRequiredError,
+    ToolPolicyError,
     get_confirm_required_tools,
 )
+from integrator.whatsapp.errors import WhatsAppApiError
 
 
 def test_tool_counts():
@@ -413,6 +415,19 @@ def test_transcribe_whatsapp_audio_reply_requires_confirm() -> None:
                 "message_id": "MSG456",
                 "reply": True,
             },
+        )
+
+
+@patch("integrator.providers.whatsapp_tools.WhatsAppSession.get")
+def test_transcribe_whatsapp_audio_rejects_group(mock_get: MagicMock) -> None:
+    session = mock_get.return_value
+    session.transcribe_audio.side_effect = WhatsAppApiError(
+        "[integrator] Transcrição desabilitada para grupos (@g.us)."
+    )
+    with pytest.raises(ToolPolicyError, match="grupos"):
+        invoke_tool(
+            "transcribe_whatsapp_audio",
+            {"chat_id": "120363012345678901@g.us", "message_id": "AUDIO1"},
         )
 
 

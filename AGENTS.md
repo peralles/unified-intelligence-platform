@@ -84,13 +84,17 @@ Antes de dar por concluído, verificar e alinhar:
 - Push para `main` com rebase quando o usuário pedir commit/pull explicitamente
 - Pareamento WhatsApp no terminal (`integrator whatsapp pair`), como Google (`integrator login`); Hermes não faz QR
 - Se `~/.hermes/config.yaml` já aponta para este repo: não refazer `integrator hermes setup` — `uv sync` + `/reload-mcp` basta
+- Hermes como agente com WhatsApp (tools + auto-transcrição): serviço SSE persistente (`integrator service` + `hermes setup --mode sse`); parar `watch-service` — evita conflito de lock
 
 ## Learned Workspace Facts
 
-- Hermes padrão: MCP **stdio** (`integrator serve` sob demanda); LaunchAgent macOS é opcional (SSE em `127.0.0.1:17320`)
+- Hermes doc padrão: MCP **stdio**; WhatsApp persistente (tools + auto-transcrição): **`integrator service`** (SSE `127.0.0.1:17320`) + `integrator hermes setup --mode sse` — um worker neonize, Hermes só conecta
 - `/reload-mcp` no Hermes pode parecer lento (discovery de plugins, `mcp_reload_confirm`); o integrator sozinho sobe em ~1s
 - Schemas MCP: inline de `$ref`/`$defs` antes de expor tools (evita `PointerToNowhere` no Hermes)
 - Diagnóstico Hermes+integrador: `~/.hermes/logs/mcp-stderr.log`, `agent.log`; `uv run integrator logs --failures`
 - WhatsApp (MVP): **neonize** em worker isolado `bridges/whatsapp-neonize/` (protobuf 7.x; venv principal fica em protobuf 6 por `langchain-google-community`); sessão `data/whatsapp/`; ver `docs/WHATSAPP.md`
-- Hermes: **um** `mcp_servers.langchain-integrator` stdio — 12 tools Google + 6 `whatsapp_*`; sem segundo MCP nem Evolution HTTP no MVP
+- Hermes: **um** `mcp_servers.langchain-integrator` — **66 tools** (12 Google + 13 Gmail extra + 1 Calendar + 40 WhatsApp); sem segundo MCP nem Evolution HTTP no MVP
 - `find_whatsapp_chats` sem `query` lista chats recentes (fallback para `list_chats`; evita erro quando o modelo omite filtro)
+- `watch-service`, `serve` stdio e SSE compartilham `data/whatsapp/worker.lock` — só uma instância neonize por sessão; não reativar watch com serviço SSE ativo
+- `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true` transcreve no mesmo worker do MCP; `bridge_client` repassa vars de transcrição do `settings` ao subprocesso (LaunchAgent não injeta `.env` no worker)
+- `INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=true` (padrão) ignora grupos `@g.us` na auto-transcrição e na tool `transcribe_whatsapp_audio`

@@ -58,6 +58,9 @@ def _build_watch_env() -> dict[str, str]:
     env["INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING"] = (
         "true" if settings.whatsapp_transcribe_only_incoming else "false"
     )
+    env["INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY"] = (
+        "true" if settings.whatsapp_transcribe_private_only else "false"
+    )
     env["INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT"] = str(
         settings.whatsapp_max_cached_messages_per_chat
     )
@@ -188,6 +191,9 @@ def write_watch_plist(*, model: str | None = None, language: str | None = None) 
         "INTEGRATOR_WHATSAPP_TRANSCRIBE_PREFIX": settings.whatsapp_transcribe_prefix,
         "INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING": (
             "true" if settings.whatsapp_transcribe_only_incoming else "false"
+        ),
+        "INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY": (
+            "true" if settings.whatsapp_transcribe_private_only else "false"
         ),
         "INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT": str(
             settings.whatsapp_max_cached_messages_per_chat

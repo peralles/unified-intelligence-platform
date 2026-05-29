@@ -1,31 +1,32 @@
 # Contexto ativo
 
-Última atualização: continual-learning (Hermes stdio, schema MCP, plano WhatsApp).
+Última atualização: continual-learning (Hermes SSE + auto-transcrição privada, 66 tools).
 
 ## Estado
 
-- MVP: MCP stdio, **66 tools** (lotes 2-6 + transcrição: 12 Google + 13 Gmail + 1 Calendar + 40 WhatsApp), Fase 2
-- CLI WhatsApp: `status` (rápido + `--live`), `configure`, `pair`, `remove`, `disconnect`; checklist em AGENTS.md
+- MVP: MCP **66 tools** (12 Google + 13 Gmail extra + 1 Calendar + 40 WhatsApp), Fase 2
+- CLI WhatsApp: `status` (rápido + `--live`), `configure`, `pair`, `remove`, `disconnect`, `watch`, `watch-service`
 - Entrada amigável: `./setup.sh` + `Makefile` (delegam à CLI)
-- Auto-config Hermes: `integrator init` / `integrator hermes setup` (stdio padrão)
 - Correção MCP: schemas sem `$ref` órfão; log `tool OK` em sucesso (`integrator.tools`)
+- Segurança recente: confirm em transcribe+reply, revoke convite, reações; audit nos Google extra; `is_audio` no cache SQLite
+
+## Operacional (este ambiente)
+
+- **Hermes:** SSE → `http://127.0.0.1:17320/sse` (`integrator hermes setup --mode sse`)
+- **Integrador:** LaunchAgent `integrator service` (serve-http persistente)
+- **WhatsApp:** conectado via serviço SSE; `watch-service` **parado** (conflito de `worker.lock`)
+- **Auto-transcrição:** `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true` no `.env`; `TRANSCRIBE_PRIVATE_ONLY=true` (só chats privados)
+- **Reload:** `/reload-mcp` após mudanças de código MCP ou YAML Hermes
 
 ## Pendências
 
 - Validação manual com Google OAuth real (`credentials.json` + `integrator login`)
-- Confirmar integração ponta a ponta com Hermes após `git pull` + `/reload-mcp` ou conversa nova
+- CI GitHub Actions (não existe no repo)
 
 ## Próximos passos (planejado)
 
-- Validação manual WhatsApp: `integrator whatsapp pair` + tools no Hermes
-- CI GitHub Actions (não existe no repo)
+- Sidecar Unix socket (futuro): stdio Hermes + transcrição 24/7 sem conflito de lock
 - Novos providers OAuth no padrão `ToolProvider`
-
-## Hermes (operacional)
-
-- **stdio:** Hermes inicia `integrator serve` por conversa; serviço macOS não é obrigatório
-- **Reload:** só após mudar código/config do integrador ou YAML do Hermes; conversa nova costuma bastar
-- Reload lento/travando UI: checar confirmação `mcp_reload_confirm`, logs em `~/.hermes/logs/`
 
 ## Bloqueios
 

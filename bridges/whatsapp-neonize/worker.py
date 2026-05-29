@@ -80,6 +80,18 @@ def _configure_library_logging() -> None:
     root.setLevel(logging.INFO)
 
 
+def _env_bool(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.lower() in ("1", "true", "yes")
+
+
+def _is_group_chat_id(chat_id: str) -> bool:
+    """WhatsApp group JIDs contain @g.us (private chats use @s.whatsapp.net)."""
+    return "@g.us" in chat_id
+
+
 @dataclass
 class ChatEntry:
     chat_id: str
@@ -185,9 +197,14 @@ class NeonizeWorker:
         self._transcribe_prefix: str = os.environ.get(
             "INTEGRATOR_WHATSAPP_TRANSCRIBE_PREFIX", "🎙️ "
         )
-        self._transcribe_only_incoming: bool = os.environ.get(
-            "INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING", "true"
-        ).lower() not in ("0", "false", "no")
+        self._transcribe_only_incoming: bool = _env_bool(
+            "INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING",
+            default=True,
+        )
+        self._transcribe_private_only: bool = _env_bool(
+            "INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY",
+            default=True,
+        )
         self._transcriber: AudioTranscriber | None = None
         self._transcribe_pool: ThreadPoolExecutor | None = None
         if self._auto_transcribe:
@@ -368,12 +385,14 @@ class NeonizeWorker:
             if not source.IsFromMe:
                 entry.unread_count += 1
 
-        # Auto-transcribe incoming audio outside the lock
+        # Auto-transcribe incoming audio outside the lock (private chats only by default)
+        is_group = bool(source.IsGroup) or _is_group_chat_id(chat_id)
         if (
             self._auto_transcribe
             and msg.is_audio
             and self._transcribe_pool is not None
             and not (self._transcribe_only_incoming and msg.from_me)
+            and not (self._transcribe_private_only and is_group)
         ):
             self._transcribe_pool.submit(
                 self._do_transcribe_and_reply, evt, self.client
@@ -386,6 +405,11 @@ class NeonizeWorker:
         info = evt.Info
         source = info.MessageSource
         chat_id = Jid2String(source.Chat)
+        if self._transcribe_private_only and (
+            bool(source.IsGroup) or _is_group_chat_id(chat_id)
+        ):
+            logging.debug("[transcribe] skip group chat | chat=%s", chat_id)
+            return
         tmp_path: str | None = None
         try:
             audio_bytes: bytes = client.download_any(evt.Message)
@@ -420,6 +444,11 @@ class NeonizeWorker:
         """On-demand transcription for a cached audio message (RPC call)."""
         if not self.client.is_logged_in:
             raise WorkerError("WhatsApp não conectado.")
+        if self._transcribe_private_only and _is_group_chat_id(chat_id):
+            raise WorkerError(
+                "Transcrição desabilitada para grupos (@g.us). "
+                "Use chat privado ou defina INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=false."
+            )
         stored = self._lookup_stored_message(chat_id, message_id)
         if not stored.is_audio:
             raise WorkerError(
@@ -1922,6 +1951,7 @@ class NeonizeWorker:
                 "language": self._transcribe_language,
                 "prefix": self._transcribe_prefix,
                 "only_incoming": self._transcribe_only_incoming,
+                "private_only": self._transcribe_private_only,
                 "transcriber_ready": (
                     self._transcriber._ready if self._transcriber else False
                 ),

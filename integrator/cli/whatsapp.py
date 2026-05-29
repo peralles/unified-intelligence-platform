@@ -94,6 +94,9 @@ def _cmd_configure(_: argparse.Namespace) -> int:
     print("    WHATSAPP_TRANSCRIBE_LANGUAGE=pt # idioma (vazio=auto-detect)")
     print("    WHATSAPP_TRANSCRIBE_PREFIX=…    # prefixo da resposta (padrão: 🎙️ )")
     print("    WHATSAPP_TRANSCRIBE_ONLY_INCOMING=true  # ignorar audios enviados por você")
+    print(
+        "    WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=true  # padrão: só chats privados, não grupos"
+    )
     print("\n  Arquivos:")
     print(f"    Sessão:   {session_path()}")
     print("    Bridge:   bridges/whatsapp-neonize/ (venv isolado, protobuf 7.x)")

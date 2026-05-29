@@ -131,6 +131,9 @@ class WhatsAppBridgeClient:
         env["INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING"] = (
             "true" if settings.whatsapp_transcribe_only_incoming else "false"
         )
+        env["INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY"] = (
+            "true" if settings.whatsapp_transcribe_private_only else "false"
+        )
         cmd = [
             "uv",
             "run",

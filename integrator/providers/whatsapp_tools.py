@@ -781,8 +781,10 @@ def _base_metadata() -> list[dict[str, Any]]:
                 "Transcreve localmente um áudio (nota de voz) do WhatsApp usando mlx-whisper "
                 "(Apple Silicon). Baixa o áudio do CDN do WhatsApp e retorna o texto. "
                 "Requer que a mensagem esteja em cache (use get_whatsapp_messages para obter "
-                "o message_id). reply=true envia o texto no chat e exige confirm=true. "
-                "Para auto-transcrição de todos os áudios, use 'integrator whatsapp watch'."
+                "o message_id). Por padrão, grupos (@g.us) são rejeitados "
+                "(INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY). "
+                "reply=true envia o texto no chat e exige confirm=true. "
+                "Para auto-transcrição contínua, use serviço SSE com AUTO_TRANSCRIBE=true."
             ),
             "input_schema": {
                 "type": "object",
