@@ -4,116 +4,83 @@ import argparse
 import subprocess
 import sys
 
-import yaml
-
-from integrator.hermes.config_merge import (
-    DEFAULT_SERVER_NAME,
-    build_sse_server_config,
-    build_stdio_server_config,
-    get_mcp_server_entry,
-    merge_mcp_server,
-)
+from integrator.clients.mcp_setup import run_all_client_checks, setup_mcp_clients
+from integrator.hermes.config_merge import DEFAULT_SERVER_NAME
 from integrator.hermes.discovery import discover_hermes
-from integrator.hermes.doctor import (
-    critical_failures,
-    doctor_exit_code,
-    format_report,
-    run_checks,
-)
+from integrator.hermes.doctor import doctor_exit_code, format_report
 
 
 def cmd_hermes_doctor(args: argparse.Namespace) -> int:
     install = discover_hermes()
-    results = run_checks(server_name=args.name, mode=args.mode)
+    results = run_all_client_checks(server_name=args.name, mode=args.mode)
     print(format_report(results, install))
     return doctor_exit_code(results)
 
 
 def cmd_hermes_setup(args: argparse.Namespace) -> int:
-    install = discover_hermes()
     mode = args.mode
     server_name = args.name
 
-    results = run_checks(server_name=server_name, mode=mode)
-    crit = critical_failures(results)
+    result = setup_mcp_clients(
+        mode=mode,
+        server_name=server_name,
+        yes=bool(args.yes),
+        force=bool(args.force),
+        dry_run=bool(args.dry_run),
+    )
 
-    if crit and not args.force:
+    if not result.get("ok"):
+        install = discover_hermes()
+        results = run_all_client_checks(server_name=server_name, mode=mode)
         print(format_report(results, install), file=sys.stderr)
-        print(
-            "\nAbortado: pré-requisitos críticos em falta. Use --force para gravar mesmo assim.",
-            file=sys.stderr,
-        )
+        print(f"\nAbortado: {result.get('error', 'falha')}", file=sys.stderr)
         return 1
-
-    if mode == "sse":
-        from integrator.service.macos import require_macos
-
-        try:
-            require_macos()
-        except Exception as exc:
-            print(f"Erro: {exc}", file=sys.stderr)
-            return 1
-        block = build_sse_server_config()
-    else:
-        block = build_stdio_server_config()
-
-    existing = get_mcp_server_entry(install.config_path, server_name)
-    if existing and not args.yes:
-        print(
-            f"Servidor '{server_name}' já existe em {install.config_path}.",
-            file=sys.stderr,
-        )
-        print("Use --yes para substituir.", file=sys.stderr)
-        return 1
-
-    payload = {"mcp_servers": {server_name: block}}
 
     if args.dry_run:
         print("# dry-run — não gravado\n")
-        print(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
-        print(f"Destino: {install.config_path}")
+        hermes = result.get("hermes") or {}
+        claude = result.get("claude_desktop") or {}
+        if hermes.get("yaml"):
+            print("--- Hermes ---")
+            print(hermes["yaml"])
+            print(f"Destino: {hermes.get('dest')}\n")
+        if claude.get("json"):
+            print("--- Claude Desktop ---")
+            print(claude["json"])
+            print(f"Destino: {claude.get('dest')}")
         return 0
 
-    try:
-        changed, msg = merge_mcp_server(
-            install.config_path,
-            server_name,
-            block,
-            overwrite=bool(args.yes or existing),
-        )
-    except (OSError, ValueError) as exc:
-        print(f"Erro ao gravar config: {exc}", file=sys.stderr)
-        return 1
+    hosts = result.get("hosts") or {}
+    for name, info in hosts.items():
+        if info.get("ok"):
+            print(f"  {name}: {info.get('message', 'OK')}")
+        elif info.get("error"):
+            print(f"  {name}: ERRO — {info['error']}", file=sys.stderr)
 
-    if not changed:
-        print(msg, file=sys.stderr)
-        return 1
+    for hint in result.get("restart_hints") or []:
+        print(f"  → {hint}")
 
     if getattr(args, "verbose", False):
-        print(msg)
         print(f"\nModo: {mode}")
-        if mode == "stdio":
-            print("Hermes iniciará: uv run --directory <repo> integrator serve")
-        else:
-            print(f"SSE: {block['url']}")
     else:
-        print("  Hermes configurado para usar Gmail e Agenda.")
+        print("  MCP configurado para Hermes e Claude Desktop.")
 
     from integrator.cli.ux import print_ready_message
 
     print_ready_message(verbose=getattr(args, "verbose", False))
 
+    install = discover_hermes()
     if not args.skip_test and install.binary is not None:
-        print(f"\nTestando MCP ({server_name})…")
+        print(f"\nTestando MCP Hermes ({server_name})…")
         try:
-            result = subprocess.run(
+            proc = subprocess.run(
                 [str(install.binary), "mcp", "test", server_name],
                 capture_output=False,
                 text=True,
                 timeout=120,
                 check=False,
             )
-            return result.returncode
+            return proc.returncode
         except (OSError, subprocess.TimeoutExpired) as exc:
             print(f"Teste MCP falhou: {exc}", file=sys.stderr)
             return 1
@@ -147,7 +114,7 @@ def add_hermes_subparser(sub: argparse._SubParsersAction) -> None:
 
     p_setup = hermes_sub.add_parser(
         "setup",
-        help="Gravar entrada MCP em ~/.hermes/config.yaml",
+        help="Gravar MCP em Hermes (~/.hermes) e Claude Desktop",
     )
     p_setup.add_argument(
         "--mode",

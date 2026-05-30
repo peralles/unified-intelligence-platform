@@ -1,12 +1,14 @@
 # Contexto ativo
 
-Última atualização: continual-learning (Hermes SSE + auto-transcrição privada, 66 tools).
+Última atualização: branch `feat/admin-ui-v2` — admin UI Vite + seams setup/preflight.
 
 ## Estado
 
 - MVP: MCP **66 tools** (12 Google + 13 Gmail extra + 1 Calendar + 40 WhatsApp), Fase 2
-- **Admin UI** (`http://127.0.0.1:17320/admin`): operação diária — Google, WhatsApp QR, Hermes, serviço, config, logs
-- **CLI operador:** redireciona ao admin (padrão); `INTEGRATOR_CLI_LEGACY=true` para scripts/CI
+- **Admin UI** (`http://127.0.0.1:17320/admin`): Vite build em `static/dist/`; sidebar, pills status, wizard setup
+- **Seams:** `integrator/setup/status.py`, `integrator/onboarding/preflight.py` — admin não importa `cli/`
+- **CLI operador:** removida — só bootstrap (`init`, `serve`, `serve-http`, `service`); operação via admin
+- **`./setup.sh status`:** aponta admin (não chama CLI legado)
 - Entrada: `./setup.sh` (bootstrap) + `./setup.sh admin` (painel)
 - Correção MCP: schemas sem `$ref` órfão; log `tool OK` em sucesso (`integrator.tools`)
 - Segurança recente: confirm em transcribe+reply, revoke convite, reações; audit nos Google extra; `is_audio` no cache SQLite

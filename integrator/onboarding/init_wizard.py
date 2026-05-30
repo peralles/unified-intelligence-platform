@@ -7,81 +7,35 @@ import time
 import webbrowser
 from integrator.accounts.registry import list_accounts
 from integrator.auth.google_oauth import GoogleAuthError, run_interactive_login
-from integrator.cli.ux import is_configured, print_ready_message, step
-from integrator.config import settings
+from integrator.cli.ux import print_ready_message, step
+from integrator.onboarding.preflight import repo_deps_ok, run_uv_sync
+from integrator.setup.status import is_configured
 from integrator.hermes.config_merge import (
     DEFAULT_SERVER_NAME,
-    build_stdio_server_config,
     get_mcp_server_entry,
-    merge_mcp_server,
 )
 from integrator.hermes.discovery import discover_hermes
 from integrator.onboarding.google_cloud import (
     credentials_ready,
     run_google_credentials_wizard,
 )
-from integrator.onboarding.links import HERMES_INSTALL, UV_INSTALL
-
-
-def _repo_deps_ok() -> bool:
-    if (settings.root_dir / ".venv").is_dir():
-        return True
-    uv = shutil.which("uv")
-    if not uv:
-        return False
-    try:
-        result = subprocess.run(
-            [uv, "run", "integrator", "status"],
-            cwd=settings.root_dir,
-            capture_output=True,
-            timeout=90,
-            check=False,
-        )
-        return result.returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-
-
-def _run_uv_sync(*, verbose: bool) -> int:
-    uv = shutil.which("uv")
-    if not uv:
-        print("\n  O gerenciador 'uv' não está instalado.")
-        print("  Abrindo página de instalação…")
-        try:
-            webbrowser.open(UV_INSTALL, new=2)
-        except Exception:
-            print(f"  Instale em: {UV_INSTALL}")
-        return 1
-
-    print("\n  Instalando dependências do projeto (pode levar um minuto)…")
-    if verbose:
-        print(f"  Comando: {uv} sync --all-extras")
-    result = subprocess.run(
-        [uv, "sync", "--all-extras"],
-        cwd=settings.root_dir,
-        check=False,
-    )
-    if result.returncode != 0:
-        print("  Falha ao instalar dependências.", file=sys.stderr)
-        return result.returncode
-    print("  Dependências instaladas.")
-    return 0
+from integrator.onboarding.links import HERMES_INSTALL
 
 
 def _step_dependencies(*, verbose: bool, auto_yes: bool) -> int:
-    if _repo_deps_ok():
+    if repo_deps_ok():
         if verbose:
             print("  Dependências: OK")
         return 0
     if auto_yes:
-        return _run_uv_sync(verbose=verbose)
+        return run_uv_sync(verbose=verbose)
     try:
         answer = input("\n  Instalar dependências do projeto agora? [S/n] ").strip().lower()
     except KeyboardInterrupt:
         print("\nCancelado.")
         return 130
     if answer in ("", "s", "sim", "y", "yes"):
-        return _run_uv_sync(verbose=verbose)
+        return run_uv_sync(verbose=verbose)
     print("  Rode depois: uv sync --all-extras")
     return 1
 
@@ -177,7 +131,7 @@ def _step_hermes(*, interactive: bool, auto_yes: bool, verbose: bool) -> int:
         try:
             if not _wait_for_hermes_binary(interactive=interactive, auto_yes=auto_yes):
                 print(
-                    "\n  Aviso: Hermes não encontrado. Config gravada; instale o Hermes depois.",
+                    "\n  Aviso: Hermes não encontrado. MCP gravado; instale o Hermes depois.",
                     file=sys.stderr,
                 )
         except KeyboardInterrupt:
@@ -185,26 +139,22 @@ def _step_hermes(*, interactive: bool, auto_yes: bool, verbose: bool) -> int:
             return 130
         install = discover_hermes()
 
-    block = build_stdio_server_config()
-    try:
-        changed, msg = merge_mcp_server(
-            install.config_path,
-            server_name,
-            block,
-            overwrite=bool(existing),
-        )
-    except (OSError, ValueError) as exc:
-        print(f"Erro ao configurar Hermes: {exc}", file=sys.stderr)
+    from integrator.clients.mcp_setup import setup_mcp_clients
+
+    result = setup_mcp_clients(mode="stdio", server_name=server_name, yes=True)
+    if not result.get("ok"):
+        print(f"Erro ao configurar MCP: {result.get('error')}", file=sys.stderr)
         return 1
 
-    if changed:
-        print(f"  {msg}")
-    elif verbose:
-        print(f"  {msg}")
+    for host, info in (result.get("hosts") or {}).items():
+        if info.get("ok") and info.get("message"):
+            print(f"  {host}: {info['message']}")
+        elif verbose and info.get("error"):
+            print(f"  {host}: {info['error']}")
 
-    if install.binary and (auto_yes or changed):
+    if install.binary and auto_yes:
         if verbose:
-            print(f"  Testando conexão MCP ({server_name})…")
+            print(f"  Testando conexão MCP Hermes ({server_name})…")
         try:
             subprocess.run(
                 [str(install.binary), "mcp", "test", server_name],

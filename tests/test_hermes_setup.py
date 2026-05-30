@@ -4,7 +4,6 @@ import io
 import sys
 from pathlib import Path
 
-import pytest
 import yaml
 
 from integrator.hermes.config_merge import (
@@ -124,35 +123,50 @@ def test_doctor_critical_without_credentials(tmp_path: Path, monkeypatch):
     assert "oauth" in ids
 
 
-def test_setup_dry_run_cli(tmp_path: Path, monkeypatch):
+def test_setup_dry_run_cmd(tmp_path: Path, monkeypatch):
     hermes_cfg = tmp_path / "config.yaml"
     monkeypatch.setattr(
         "integrator.hermes.setup_cmd.discover_hermes",
         lambda: HermesInstall(None, tmp_path, hermes_cfg),
     )
     monkeypatch.setattr(
-        "integrator.hermes.setup_cmd.run_checks",
+        "integrator.hermes.setup_cmd.run_all_client_checks",
         lambda **_: [],
     )
     monkeypatch.setattr(
-        "integrator.hermes.setup_cmd.critical_failures",
-        lambda _: [],
-    )
-    monkeypatch.setattr(
-        "integrator.hermes.setup_cmd.build_stdio_server_config",
-        lambda: build_stdio_server_config(repo_root=tmp_path),
+        "integrator.hermes.setup_cmd.setup_mcp_clients",
+        lambda **_: {
+            "ok": True,
+            "dry_run": True,
+            "hermes": {
+                "dest": str(hermes_cfg),
+                "yaml": "mcp_servers:\n  langchain-integrator:\n    command: uv\n",
+            },
+            "claude_desktop": {
+                "dest": "/tmp/claude.json",
+                "json": '{"mcpServers":{"langchain-integrator":{}}}',
+            },
+        },
     )
 
-    from integrator.cli.main import main
-    from integrator.config import settings
+    import argparse
 
-    monkeypatch.setattr(settings, "cli_legacy", True)
+    from integrator.hermes.setup_cmd import cmd_hermes_setup
 
     buf = io.StringIO()
     monkeypatch.setattr(sys, "stdout", buf)
-    with pytest.raises(SystemExit) as exc:
-        main(["hermes", "setup", "--dry-run", "--skip-test"])
-    assert exc.value.code == 0
+    code = cmd_hermes_setup(
+        argparse.Namespace(
+            mode="stdio",
+            name="langchain-integrator",
+            yes=False,
+            force=False,
+            dry_run=True,
+            skip_test=True,
+            verbose=False,
+        )
+    )
+    assert code == 0
     out = buf.getvalue()
     assert "langchain-integrator" in out
     assert "integrator" in out

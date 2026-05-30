@@ -1,37 +1,21 @@
 from __future__ import annotations
 
-from integrator.accounts.registry import list_accounts
 from integrator.config import settings
-from integrator.onboarding.google_cloud import credentials_ready
-from integrator.whatsapp.session_store import has_persisted_session
+from integrator.setup.status import configuration_summary, is_configured
+
+__all__ = [
+    "configuration_summary",
+    "friendly_google_auth_error",
+    "is_configured",
+    "print_ready_message",
+    "step",
+]
 
 
 def step(number: int, total: int, title: str) -> None:
     print(f"\n{'=' * 60}")
     print(f"  Passo {number}/{total}: {title}")
     print(f"{'=' * 60}")
-
-
-def is_configured() -> bool:
-    """True se credenciais Google e pelo menos uma conta com token existem."""
-    if not credentials_ready():
-        return False
-    return any(a.has_token for a in list_accounts())
-
-
-def configuration_summary() -> tuple[str, str | None]:
-    """
-    Returns:
-        (status_label, next_step_command_or_none)
-    """
-    if not credentials_ready():
-        return "incompleta", "./setup.sh"
-    accounts = list_accounts()
-    if not any(a.has_token for a in accounts):
-        return "incompleta", "./setup.sh"
-    if settings.whatsapp_enabled and not has_persisted_session():
-        return "completa (Google)", "./setup.sh admin (WhatsApp → Parear)"
-    return "completa", None
 
 
 def print_ready_message(*, verbose: bool = False) -> None:
@@ -59,13 +43,13 @@ def friendly_google_auth_error(message: str) -> str:
     if "OAuth não encontrado" in message or "credentials" in message.lower():
         return (
             "Falta configurar o acesso ao Google.\n"
-            "Rode: integrator init\n"
-            "(O assistente abre o navegador e configura tudo para você.)"
+            "Abra o admin: ./setup.sh admin\n"
+            "(Ou rode integrator init no bootstrap.)"
         )
     if "Token não encontrado" in message or "integrator login" in message:
         return (
             "Sua conta Google ainda não foi autorizada.\n"
-            "Rode: integrator init\n"
-            "ou: integrator login pessoal"
+            "Abra o admin: ./setup.sh admin\n"
+            "ou rode integrator init"
         )
     return message

@@ -8,7 +8,7 @@ echo "==> uv sync"
 uv sync --all-extras
 
 echo "==> ruff"
-uv run ruff check integrator tests bridges/whatsapp-neonize/worker.py
+uv run ruff check integrator tests bridges/whatsapp-neonize/worker.py bridges/whatsapp-neonize/transcribe_cleanup.py
 
 echo "==> pytest"
 uv run pytest -q --tb=short
@@ -88,6 +88,17 @@ assert len(tools) == TOTAL_TOOL_COUNT
 print('OK: MCP list_tools', len(tools))
 "
 
+echo "==> admin UI build"
+if [[ -f integrator/admin/static/dist/index.html ]]; then
+  echo "OK: admin dist present"
+else
+  if command -v npm >/dev/null 2>&1; then
+    ./scripts/build-admin.sh
+  else
+    echo "WARN: admin dist missing (npm not available); fallback admin.html"
+  fi
+fi
+
 echo "==> admin routes smoke"
 uv run python -c "
 from integrator.admin.routes import admin_routes
@@ -99,12 +110,14 @@ assert len(routes) >= 18
 print('OK: admin routes', len(routes))
 "
 
-echo "==> whatsapp CLI smoke (legacy)"
-INTEGRATOR_CLI_LEGACY=true uv run integrator whatsapp configure >/dev/null
-INTEGRATOR_CLI_LEGACY=true uv run integrator whatsapp status >/dev/null
-INTEGRATOR_CLI_LEGACY=true uv run integrator whatsapp watch --help >/dev/null
-INTEGRATOR_CLI_LEGACY=true uv run integrator whatsapp watch-service status >/dev/null 2>&1 || true
-echo "OK: whatsapp CLI legacy (configure, status, watch)"
+echo "==> admin API smoke"
+uv run python -c "
+from integrator.admin.routes import _build_state
+state = _build_state()
+assert 'setup' in state
+assert 'accounts' in state
+print('OK: admin state keys', len(state))
+"
 
 echo "==> performance smoke"
 uv run python -c "

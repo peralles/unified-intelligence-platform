@@ -221,7 +221,17 @@ class AudioTranscriber:
             verbose=False,
             fp16=True,
         )
-        return (result.get("text") or "").strip()
+        from transcribe_cleanup import trim_whisper_repetition
+
+        raw = (result.get("text") or "").strip()
+        cleaned = trim_whisper_repetition(raw)
+        if cleaned != raw:
+            logging.info(
+                "[transcribe] trimmed whisper tail repetition (%d -> %d chars)",
+                len(raw),
+                len(cleaned),
+            )
+        return cleaned
 
 
 @dataclass

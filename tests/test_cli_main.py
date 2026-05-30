@@ -1,20 +1,7 @@
 from integrator.cli.main import _build_parser
 
 
-def test_parser_has_core_commands():
+def test_parser_bootstrap_only():
     parser = _build_parser()
     sub = next(a for a in parser._actions if a.dest == "command")
-    assert {
-        "init",
-        "status",
-        "login",
-        "accounts",
-        "use",
-        "logout",
-        "tools",
-        "serve",
-        "serve-http",
-        "service",
-        "logs",
-        "hermes",
-    }.issubset(set(sub.choices.keys()))
+    assert set(sub.choices.keys()) == {"init", "serve", "serve-http", "service"}

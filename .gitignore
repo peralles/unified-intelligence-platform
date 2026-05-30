@@ -24,3 +24,6 @@ data/
 !data/.gitkeep
 *.db
 *.sqlite
+
+# Admin UI (Node)
+integrator/admin/ui/node_modules/
