@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Mount, Route
 
+from integrator.admin.routes import admin_routes
 from integrator.config import settings
 from integrator.logging_setup import get_logger, setup_logging
 from integrator.mcp.server import server as mcp_server
@@ -97,6 +98,7 @@ def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> 
             Mount("/messages/", app=sse.handle_post_message),
             Route("/mcp", endpoint=http_asgi, methods=["GET", "POST", "DELETE"]),
             Route("/health", endpoint=_health, methods=["GET"]),
+            *admin_routes(),
         ],
         lifespan=lifespan,
     )
@@ -105,7 +107,11 @@ def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> 
 def run_http_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     setup_logging()
     app = create_starlette_app(host, port)
-    logger.info("MCP HTTP/SSE em http://%s:%s (sse=/sse, mcp=/mcp)", host, port)
+    logger.info(
+        "MCP HTTP/SSE em http://%s:%s (sse=/sse, mcp=/mcp, admin=/admin)",
+        host,
+        port,
+    )
     config = uvicorn.Config(app, host=host, port=port, log_level="info")
     asyncio.run(uvicorn.Server(config).serve())
 

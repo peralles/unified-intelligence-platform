@@ -73,6 +73,9 @@ def _print_transcription_status(data: dict) -> None:
     print(
         f"    MLX carregado:  {'sim' if ready else 'não (carrega no 1º áudio)'}"
     )
+    ignore = data.get("ignore_numbers") or []
+    if ignore:
+        print(f"    Ignorados:      {len(ignore)} número(s)")
     print("    Ação:           nova mensagem no mesmo chat com o texto (🎙️ …)")
 
 

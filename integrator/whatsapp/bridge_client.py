@@ -134,6 +134,9 @@ class WhatsAppBridgeClient:
         env["INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY"] = (
             "true" if settings.whatsapp_transcribe_private_only else "false"
         )
+        from integrator.admin.runtime import runtime_file_path
+
+        env["INTEGRATOR_ADMIN_RUNTIME_FILE"] = str(runtime_file_path().resolve())
         cmd = [
             "uv",
             "run",

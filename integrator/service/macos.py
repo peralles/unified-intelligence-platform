@@ -133,6 +133,7 @@ def write_plist(*, port: int) -> Path:
         env["INTEGRATOR_WHATSAPP_SESSION_DIR"] = str(
             settings.whatsapp_session_dir.resolve()
         )
+    env["INTEGRATOR_ADMIN_RUNTIME_FILE"] = str(settings.admin_runtime_path.resolve())
 
     plist = {
         "Label": SERVICE_LABEL,
@@ -223,6 +224,7 @@ def service_status(*, port: int = DEFAULT_PORT) -> dict[str, str | bool | int]:
         "url_sse": f"http://{settings.service_host}:{port}/sse",
         "url_mcp": f"http://{settings.service_host}:{port}/mcp",
         "url_health": f"http://{settings.service_host}:{port}/health",
+        "url_admin": f"http://{settings.service_host}:{port}/admin",
         "logs": str(service_log_dir()),
         "port": port,
     }

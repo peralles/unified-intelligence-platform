@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     # Serviço macOS (LaunchAgent + HTTP/SSE)
     service_host: str = "127.0.0.1"
     service_port: int = 17320
+    admin_runtime_file: Path | None = None
+
+    @property
+    def admin_runtime_path(self) -> Path:
+        if self.admin_runtime_file:
+            return self.admin_runtime_file
+        return self.root_dir / "data" / "admin" / "runtime.json"
 
     # WhatsApp (neonize worker em bridges/whatsapp-neonize)
     whatsapp_enabled: bool = True
@@ -96,6 +103,7 @@ class Settings(BaseSettings):
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
         self.credentials_path.parent.mkdir(parents=True, exist_ok=True)
         self.whatsapp_session_path.mkdir(parents=True, exist_ok=True)
+        self.admin_runtime_path.parent.mkdir(parents=True, exist_ok=True)
         if self.audit_log_enabled:
             self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
 

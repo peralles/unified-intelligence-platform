@@ -56,11 +56,16 @@ run_integrator() {
 usage() {
   banner
   cat <<'EOF'
-  Comandos (tudo o resto é feito pela CLI integrator):
+  Comandos:
 
-    ./setup.sh              Configurar pela primeira vez (recomendado)
+    ./setup.sh              Configurar (CLI init ou Admin após serviço)
     ./setup.sh status       Ver se Gmail, Agenda e Hermes já estão prontos
+    ./setup.sh admin        Abrir console web (requer serve-http ativo)
     ./setup.sh help         Esta ajuda
+
+  Console web (após serviço rodando):
+
+    http://127.0.0.1:17320/admin
 
   Opções repassadas ao assistente (exemplos):
 
@@ -104,6 +109,17 @@ case "$1" in
   status|check|verificar)
     shift
     run_status "$@"
+    ;;
+  admin|ui|painel)
+    PORT="${INTEGRATOR_SERVICE_PORT:-17320}"
+    URL="http://127.0.0.1:${PORT}/admin"
+    echo ""
+    echo "  Admin: ${URL}"
+    echo "  (Serviço deve estar ativo: integrator service install ou serve-http)"
+    echo ""
+    if command -v open >/dev/null 2>&1; then
+      open "${URL}" || true
+    fi
     ;;
   setup|init|configurar)
     shift

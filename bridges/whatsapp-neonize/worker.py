@@ -39,6 +39,8 @@ from neonize.proto.Neonize_pb2 import Message as NeonizeMessage
 from neonize.utils import Jid2String, build_jid, extract_text
 from neonize.utils.enum import ReceiptType
 
+from runtime_config import RuntimeConfig
+
 
 class WorkerError(Exception):
     pass
@@ -90,6 +92,21 @@ def _env_bool(name: str, *, default: bool) -> bool:
 def _is_group_chat_id(chat_id: str) -> bool:
     """WhatsApp group JIDs contain @g.us (private chats use @s.whatsapp.net)."""
     return "@g.us" in chat_id
+
+
+def _wa_message_is_audio(wa_msg: Any) -> bool:
+    """Voice/audio detection for MessageEv (URL is often empty until download)."""
+    if wa_msg is None:
+        return False
+    try:
+        if wa_msg.HasField("audioMessage"):
+            return True
+    except (AttributeError, ValueError):
+        pass
+    doc = getattr(wa_msg, "documentMessage", None)
+    if doc and str(getattr(doc, "mimetype", "")).startswith("audio/"):
+        return True
+    return False
 
 
 def _split_chat_jid(chat_id: str) -> tuple[str, str]:
@@ -214,6 +231,8 @@ class SessionState:
     last_error: str = ""
     pair_status: str = ""
     qr_displayed: bool = False
+    qr_png_base64: str = ""
+    qr_updated_at: float = 0.0
     chats: dict[str, ChatEntry] = field(default_factory=dict)
     messages: dict[str, list[StoredMessage]] = field(default_factory=dict)
     lock: threading.RLock = field(default_factory=threading.RLock)
@@ -262,6 +281,7 @@ class NeonizeWorker:
             "INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY",
             default=True,
         )
+        self._runtime = RuntimeConfig()
         self._transcriber: AudioTranscriber | None = None
         self._transcribe_pool: ThreadPoolExecutor | None = None
         if self._auto_transcribe:
@@ -273,6 +293,50 @@ class NeonizeWorker:
             )
 
         self._register_handlers()
+
+    def _effective_auto_transcribe(self) -> bool:
+        return self._runtime.bool_override("auto_transcribe", self._auto_transcribe)
+
+    def _effective_only_incoming(self) -> bool:
+        return self._runtime.bool_override(
+            "transcribe_only_incoming", self._transcribe_only_incoming
+        )
+
+    def _effective_private_only(self) -> bool:
+        return self._runtime.bool_override(
+            "transcribe_private_only", self._transcribe_private_only
+        )
+
+    def _effective_transcribe_prefix(self) -> str:
+        return (
+            self._runtime.str_override("transcribe_prefix", self._transcribe_prefix)
+            or self._transcribe_prefix
+        )
+
+    def _ensure_transcribe_pool(self) -> None:
+        if not self._effective_auto_transcribe():
+            return
+        if self._transcribe_pool is not None:
+            return
+        self._transcriber = AudioTranscriber(
+            self._transcribe_model, self._transcribe_language
+        )
+        self._transcribe_pool = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="wa-transcribe"
+        )
+
+    def _transcribe_is_ignored(self, chat_id: str, sender_id: str) -> bool:
+        extra: str | None = None
+        for jid in (chat_id, sender_id):
+            if jid.endswith("@lid"):
+                phone = self._resolve_lid_phone(jid)
+                if phone:
+                    extra = phone
+                    break
+        if self._runtime.is_chat_ignored(chat_id, sender_id, extra_digits=extra):
+            logging.debug("[transcribe] skip ignored number | chat=%s", chat_id)
+            return True
+        return False
 
     def _max_cached_per_chat(self) -> int:
         return int(os.environ.get("INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT", "5000"))
@@ -349,6 +413,22 @@ class NeonizeWorker:
                 self.state.state = "qr"
                 if self._pairing:
                     self.state.qr_displayed = True
+            png_b64 = ""
+            try:
+                import base64
+                import io
+
+                import segno
+
+                buf = io.BytesIO()
+                segno.make_qr(qr_data).save(buf, kind="png", scale=8, border=2)
+                png_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            except Exception:
+                png_b64 = ""
+            with self.state.lock:
+                if png_b64:
+                    self.state.qr_png_base64 = png_b64
+                    self.state.qr_updated_at = time.time()
             if self._pairing:
                 try:
                     import segno
@@ -442,15 +522,7 @@ class NeonizeWorker:
             ts = int(info.Timestamp or time.time())
             raw_b64 = base64.b64encode(evt.SerializeToString()).decode("ascii")
             wa_msg = evt.Message
-            is_audio = bool(
-                getattr(wa_msg, "audioMessage", None)
-                and getattr(wa_msg.audioMessage, "url", None)
-            ) or bool(
-                getattr(wa_msg, "documentMessage", None)
-                and str(getattr(wa_msg.documentMessage, "mimetype", "")).startswith(
-                    "audio/"
-                )
-            )
+            is_audio = _wa_message_is_audio(wa_msg)
             msg = StoredMessage(
                 message_id=info.ID,
                 chat_id=chat_id,
@@ -493,12 +565,14 @@ class NeonizeWorker:
 
         # Auto-transcribe audio (private chats by default; sent + received unless ONLY_INCOMING)
         is_group = bool(source.IsGroup) or _is_group_chat_id(chat_id)
+        self._ensure_transcribe_pool()
         if (
-            self._auto_transcribe
+            self._effective_auto_transcribe()
             and msg.is_audio
             and self._transcribe_pool is not None
-            and not (self._transcribe_only_incoming and msg.from_me)
-            and not (self._transcribe_private_only and is_group)
+            and not (self._effective_only_incoming() and msg.from_me)
+            and not (self._effective_private_only() and is_group)
+            and not self._transcribe_is_ignored(chat_id, sender_id)
         ):
             self._transcribe_pool.submit(
                 self._do_transcribe_and_reply, evt, self.client
@@ -511,7 +585,10 @@ class NeonizeWorker:
         info = evt.Info
         source = info.MessageSource
         chat_id = Jid2String(source.Chat)
-        if self._transcribe_private_only and (
+        sender_id = Jid2String(source.Sender)
+        if self._transcribe_is_ignored(chat_id, sender_id):
+            return
+        if self._effective_private_only() and (
             bool(source.IsGroup) or _is_group_chat_id(chat_id)
         ):
             logging.debug("[transcribe] skip group chat | chat=%s", chat_id)
@@ -538,7 +615,7 @@ class NeonizeWorker:
                     pass
         if not text:
             return
-        reply = f"{self._transcribe_prefix}{text}"
+        reply = f"{self._effective_transcribe_prefix()}{text}"
         try:
             chat_jid = self._jid_from_chat_id(chat_id)
             client.send_message(chat_jid, reply)
@@ -556,18 +633,18 @@ class NeonizeWorker:
                 "Use chat privado ou defina INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=false."
             )
         stored = self._lookup_stored_message(chat_id, message_id)
-        if not stored.is_audio:
-            raise WorkerError(
-                f"Mensagem {message_id} não é um áudio. "
-                "Use transcribe_whatsapp_audio apenas em mensagens de voz/áudio."
-            )
         if not stored.raw_proto_b64:
             raise WorkerError(
                 f"Mensagem {message_id} não tem metadados para download. "
                 "Receba o áudio novamente ou sincronize o histórico do chat."
             )
-        transcriber = AudioTranscriber(self._transcribe_model, self._transcribe_language)
         neonize_msg = self._load_quoted_neonize_message(stored)
+        if not (stored.is_audio or _wa_message_is_audio(neonize_msg.Message)):
+            raise WorkerError(
+                f"Mensagem {message_id} não é um áudio. "
+                "Use transcribe_whatsapp_audio apenas em mensagens de voz/áudio."
+            )
+        transcriber = AudioTranscriber(self._transcribe_model, self._transcribe_language)
         tmp_path: str | None = None
         try:
             audio_bytes: bytes = self.client.download_any(neonize_msg.Message)
@@ -663,13 +740,48 @@ class NeonizeWorker:
                 return "linked"
         return "restored"
 
+    def _reset_pair_state(self) -> None:
+        with self.state.lock:
+            self.state.state = "qr"
+            self.state.pair_status = ""
+            self.state.qr_displayed = False
+            self.state.qr_png_base64 = ""
+            self.state.qr_updated_at = 0.0
+
+    def pair_start(self) -> dict[str, Any]:
+        """Non-blocking pair: start connect thread; poll with pair_poll."""
+        if not self._pairing:
+            self._pairing = True
+            self._reset_pair_state()
+            thread = threading.Thread(target=self.client.connect, daemon=True)
+            thread.start()
+        return self.pair_poll()
+
+    def pair_poll(self) -> dict[str, Any]:
+        if self.client.is_logged_in:
+            self._wait_session_ready(5.0)
+            result = self.status(live=True, wait_s=3.0)
+            result["pairing_outcome"] = self._pairing_outcome()
+            result["pairing"] = False
+            with self.state.lock:
+                result["qr_png_base64"] = self.state.qr_png_base64 or None
+            self._pairing = False
+            return result
+        result = self.status(live=False)
+        with self.state.lock:
+            result["qr_png_base64"] = self.state.qr_png_base64 or None
+            result["qr_updated_at"] = self.state.qr_updated_at or None
+        result["pairing"] = self._pairing
+        return result
+
+    def pair_stop(self) -> dict[str, Any]:
+        self._pairing = False
+        return self.status(live=False)
+
     def pair(self, timeout_s: float = 120.0) -> dict[str, Any]:
         self._pairing = True
         try:
-            with self.state.lock:
-                self.state.state = "qr"
-                self.state.pair_status = ""
-                self.state.qr_displayed = False
+            self._reset_pair_state()
             thread = threading.Thread(target=self.client.connect, daemon=True)
             thread.start()
             deadline = time.time() + timeout_s
@@ -1806,6 +1918,12 @@ class NeonizeWorker:
             return self.connect_background()
         if method == "pair":
             return self.pair(timeout_s=float(params.get("timeout_s", 120)))
+        if method == "pair_start":
+            return self.pair_start()
+        if method == "pair_poll":
+            return self.pair_poll()
+        if method == "pair_stop":
+            return self.pair_stop()
         if method == "list_chats":
             return self.list_chats(limit=int(params.get("limit", 30)))
         if method == "find_chats":
@@ -2038,13 +2156,17 @@ class NeonizeWorker:
                 )
             }
         if method == "transcription_status":
+            ignore = sorted(self._runtime.ignore_numbers())
             return {
-                "auto_transcribe": self._auto_transcribe,
+                "auto_transcribe": self._effective_auto_transcribe(),
                 "model": self._transcribe_model,
                 "language": self._transcribe_language,
-                "prefix": self._transcribe_prefix,
-                "only_incoming": self._transcribe_only_incoming,
-                "private_only": self._transcribe_private_only,
+                "prefix": self._effective_transcribe_prefix(),
+                "only_incoming": self._effective_only_incoming(),
+                "private_only": self._effective_private_only(),
+                "ignore_numbers": ignore,
+                "ignore_count": len(ignore),
+                "runtime_file": str(self._runtime.path),
                 "transcriber_ready": (
                     self._transcriber._ready if self._transcriber else False
                 ),

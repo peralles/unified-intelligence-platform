@@ -1,0 +1,365 @@
+"""Local admin API and UI for integrator serve-http."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.routing import Route
+
+from integrator.admin import handlers as admin_handlers
+from integrator.admin.env_file import PERSISTABLE_ENV, bool_env, env_file_path, upsert_env
+from integrator.admin.runtime import RuntimeStore, runtime_file_path
+from integrator.config import settings
+from integrator.logging_setup import get_logger
+
+logger = get_logger("admin")
+
+_STATIC = Path(__file__).resolve().parent / "static"
+_RESTART_HINT_KEYS = frozenset({"transcribe_model", "allowlist", "denylist", "confirm_required_tools"})
+
+
+def _tail_log(name: str, lines: int) -> str:
+    log_dir = settings.log_dir or (settings.root_dir / "data" / "logs")
+    path = log_dir / (name if name.endswith(".log") else f"{name}.log")
+    if not path.is_file():
+        return f"(arquivo não encontrado: {path})"
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        return f"(erro ao ler log: {exc})"
+    return "\n".join(content[-lines:])
+
+
+def _build_state() -> dict[str, Any]:
+    store = RuntimeStore()
+    runtime = store.load()
+    host = settings.service_host
+    port = settings.service_port
+    setup = admin_handlers.setup_status(mode="sse")
+    return {
+        "service": {
+            "host": host,
+            "port": port,
+            "url_admin": f"http://{host}:{port}/admin",
+            "url_sse": f"http://{host}:{port}/sse",
+            "url_health": f"http://{host}:{port}/health",
+            "root_dir": str(settings.root_dir),
+        },
+        "paths": {
+            "runtime_file": str(runtime_file_path()),
+            "env_file": str(env_file_path()),
+            "whatsapp_session": str(settings.whatsapp_session_path),
+            "log_dir": str(settings.log_dir or settings.root_dir / "data" / "logs"),
+        },
+        "setup": setup,
+        "accounts": admin_handlers.list_google_accounts(),
+        "mac_service": admin_handlers.mac_service_info(),
+        "runtime": runtime,
+        "effective": {
+            "whatsapp": store.effective_whatsapp(runtime),
+            "tools": store.effective_tools(runtime),
+            "logging": store.effective_logging(runtime),
+        },
+        "ignore_numbers_text": store.ignore_numbers_text(runtime),
+        "whatsapp_live": admin_handlers.whatsapp_snapshot(),
+        "env_defaults": {
+            "whatsapp_auto_transcribe": settings.whatsapp_auto_transcribe,
+            "transcribe_private_only": settings.whatsapp_transcribe_private_only,
+            "transcribe_only_incoming": settings.whatsapp_transcribe_only_incoming,
+            "transcribe_model": settings.whatsapp_transcribe_model,
+            "transcribe_language": settings.whatsapp_transcribe_language or "",
+            "transcribe_prefix": settings.whatsapp_transcribe_prefix,
+            "max_message_chars": settings.whatsapp_max_message_chars,
+            "max_cached_messages_per_chat": settings.whatsapp_max_cached_messages_per_chat,
+            "allowlist": settings.tool_allowlist or "",
+            "denylist": settings.tool_denylist or "",
+            "confirm_required_tools": settings.confirm_required_tools or "",
+            "level": settings.log_level,
+            "audit_log_enabled": settings.audit_log_enabled,
+            "audit_log_success": settings.audit_log_success,
+            "log_tool_success": settings.log_tool_success,
+        },
+        "notes": {
+            "restart_for": (
+                "Alterações em modelo MLX, política de tools ou .env exigem "
+                "reiniciar o serviço (Admin → Serviço ou serve-http)."
+            ),
+            "ignore_list": (
+                "Números ignorados aplicam-se em tempo real à auto-transcrição "
+                "(sem reiniciar)."
+            ),
+            "cli": "Operação diária via /admin; bootstrap: ./setup.sh ou service install",
+        },
+    }
+
+
+async def _json_body(request: Request) -> dict[str, Any]:
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+async def admin_api_setup_status(_: Request) -> Response:
+    mode = "sse"
+    return JSONResponse(admin_handlers.setup_status(mode=mode))
+
+
+async def admin_api_setup_sync(request: Request) -> Response:
+    body = await _json_body(request)
+    if request.method == "GET":
+        return JSONResponse(admin_handlers.sync_deps_status())
+    return JSONResponse(admin_handlers.start_sync_deps(verbose=bool(body.get("verbose"))))
+
+
+async def admin_api_setup_google_steps(_: Request) -> Response:
+    return JSONResponse(admin_handlers.open_google_cloud_steps())
+
+
+async def admin_api_setup_credentials(request: Request) -> Response:
+    body = await _json_body(request)
+    if "json" in body and isinstance(body["json"], str):
+        return JSONResponse(admin_handlers.save_credentials_json(body["json"]))
+    index = int(body.get("index", 0))
+    return JSONResponse(admin_handlers.import_credentials(from_downloads=True, index=index))
+
+
+async def admin_api_accounts(_: Request) -> Response:
+    return JSONResponse(admin_handlers.list_google_accounts())
+
+
+async def admin_api_google_login(request: Request) -> Response:
+    if request.method == "GET":
+        return JSONResponse(admin_handlers.google_login_status())
+    body = await _json_body(request)
+    account_id = str(body.get("account_id", "pessoal")).strip()
+    label = body.get("label")
+    return JSONResponse(
+        admin_handlers.start_google_login(
+            account_id=account_id,
+            label=str(label) if label else None,
+        )
+    )
+
+
+async def admin_api_google_default(request: Request) -> Response:
+    body = await _json_body(request)
+    account_id = str(body.get("account_id", "")).strip()
+    if not account_id:
+        return JSONResponse({"ok": False, "error": "account_id obrigatório"}, status_code=400)
+    return JSONResponse(admin_handlers.google_set_default(account_id))
+
+
+async def admin_api_google_logout(request: Request) -> Response:
+    body = await _json_body(request)
+    account_id = str(body.get("account_id", "")).strip()
+    if not account_id:
+        return JSONResponse({"ok": False, "error": "account_id obrigatório"}, status_code=400)
+    return JSONResponse(admin_handlers.google_logout(account_id))
+
+
+async def admin_api_whatsapp_pair(request: Request) -> Response:
+    action = request.query_params.get("action", "poll")
+    if action == "start":
+        body = await _json_body(request) if request.method == "POST" else {}
+        fresh = bool(body.get("fresh"))
+        return JSONResponse(admin_handlers.whatsapp_pair_start(fresh=fresh))
+    if action == "stop":
+        return JSONResponse(admin_handlers.whatsapp_pair_stop())
+    return JSONResponse(admin_handlers.whatsapp_pair_poll())
+
+
+async def admin_api_whatsapp_session(request: Request) -> Response:
+    if request.method == "DELETE":
+        body = await _json_body(request)
+        force = bool(body.get("force"))
+        return JSONResponse(admin_handlers.whatsapp_remove_session(force=force))
+    return JSONResponse(admin_handlers.whatsapp_disconnect())
+
+
+async def admin_api_service(request: Request) -> Response:
+    if request.method == "GET":
+        return JSONResponse(admin_handlers.mac_service_info())
+    body = await _json_body(request)
+    action = str(body.get("action", "status")).strip().lower()
+    port = body.get("port")
+    port_i = int(port) if port is not None else None
+    return JSONResponse(admin_handlers.mac_service_action(action, port=port_i))
+
+
+async def admin_api_hermes_doctor(_: Request) -> Response:
+    mode = "sse"
+    return JSONResponse(admin_handlers.hermes_doctor(mode=mode))
+
+
+async def admin_api_hermes_setup(request: Request) -> Response:
+    body = await _json_body(request)
+    return JSONResponse(
+        admin_handlers.hermes_setup(
+            mode=str(body.get("mode", "sse")),
+            yes=bool(body.get("yes", True)),
+            force=bool(body.get("force")),
+            dry_run=bool(body.get("dry_run")),
+        )
+    )
+
+
+async def admin_api_hermes_install_link(_: Request) -> Response:
+    return JSONResponse(admin_handlers.open_hermes_install())
+
+
+async def admin_api_tools(_: Request) -> Response:
+    return JSONResponse(admin_handlers.list_tools())
+
+
+async def admin_api_failures(request: Request) -> Response:
+    try:
+        limit = int(request.query_params.get("limit", "40"))
+    except ValueError:
+        limit = 40
+    limit = max(1, min(limit, 200))
+    return JSONResponse(admin_handlers.audit_failures(limit=limit))
+
+
+def _persist_env_from_effective(effective: dict[str, Any], *, persist: bool) -> list[str]:
+    if not persist:
+        return []
+    env_updates: dict[str, str | None] = {}
+    wa = effective.get("whatsapp") or {}
+    tools = effective.get("tools") or {}
+    logging_cfg = effective.get("logging") or {}
+
+    mapping: dict[str, Any] = {
+        "whatsapp_auto_transcribe": wa.get("auto_transcribe"),
+        "transcribe_private_only": wa.get("transcribe_private_only"),
+        "transcribe_only_incoming": wa.get("transcribe_only_incoming"),
+        "transcribe_model": wa.get("transcribe_model"),
+        "transcribe_language": wa.get("transcribe_language") or "",
+        "transcribe_prefix": wa.get("transcribe_prefix"),
+        "max_message_chars": wa.get("max_message_chars"),
+        "max_cached_messages_per_chat": wa.get("max_cached_messages_per_chat"),
+        "allowlist": tools.get("allowlist") or "",
+        "denylist": tools.get("denylist") or "",
+        "confirm_required_tools": tools.get("confirm_required_tools") or "",
+        "level": logging_cfg.get("level"),
+        "audit_log_enabled": logging_cfg.get("audit_log_enabled"),
+        "audit_log_success": logging_cfg.get("audit_log_success"),
+        "log_tool_success": logging_cfg.get("log_tool_success"),
+    }
+
+    touched: list[str] = []
+    for runtime_key, env_key in PERSISTABLE_ENV.items():
+        if runtime_key not in mapping:
+            continue
+        value = mapping[runtime_key]
+        if isinstance(value, bool):
+            env_updates[env_key] = bool_env(value)
+        else:
+            env_updates[env_key] = str(value)
+        touched.append(env_key)
+
+    upsert_env(env_updates)
+    return touched
+
+
+async def admin_index(_: Request) -> Response:
+    html_path = _STATIC / "admin.html"
+    if not html_path.is_file():
+        return HTMLResponse("<h1>admin.html ausente</h1>", status_code=500)
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+async def admin_api_state(_: Request) -> Response:
+    return JSONResponse(_build_state())
+
+
+async def admin_api_config(request: Request) -> Response:
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return JSONResponse({"ok": False, "error": "JSON inválido"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "corpo inválido"}, status_code=400)
+
+    store = RuntimeStore()
+    patch: dict[str, Any] = {}
+    for section in ("whatsapp", "tools", "logging", "service"):
+        if section in body and isinstance(body[section], dict):
+            patch[section] = body[section]
+
+    ignore_text = body.get("ignore_numbers_text")
+    if isinstance(ignore_text, str):
+        numbers = store.parse_ignore_lines(ignore_text)
+        patch.setdefault("whatsapp", {})["transcribe_ignore_numbers"] = numbers
+
+    updated = store.patch(patch) if patch else store.load()
+    effective = {
+        "whatsapp": store.effective_whatsapp(updated),
+        "tools": store.effective_tools(updated),
+        "logging": store.effective_logging(updated),
+    }
+    persist_env = bool(body.get("persist_env", True))
+    env_keys = _persist_env_from_effective(effective, persist=persist_env)
+
+    restart_hints: list[str] = []
+    if persist_env:
+        for key in _RESTART_HINT_KEYS:
+            if key in (body.get("whatsapp") or {}) or key in (body.get("tools") or {}):
+                restart_hints.append(key)
+
+    logger.info(
+        "admin config saved | ignore=%d | persist_env=%s",
+        len((updated.get("whatsapp") or {}).get("transcribe_ignore_numbers") or []),
+        persist_env,
+    )
+    return JSONResponse(
+        {
+            "ok": True,
+            "runtime": updated,
+            "effective": effective,
+            "ignore_numbers_text": store.ignore_numbers_text(updated),
+            "env_updated": env_keys,
+            "restart_recommended": bool(restart_hints),
+            "restart_hints": restart_hints,
+        }
+    )
+
+
+async def admin_api_logs(request: Request) -> Response:
+    name = request.query_params.get("file", "integrator")
+    try:
+        lines = int(request.query_params.get("lines", "150"))
+    except ValueError:
+        lines = 150
+    lines = max(10, min(lines, 2000))
+    return JSONResponse({"ok": True, "file": name, "text": _tail_log(name, lines)})
+
+
+def admin_routes() -> list[Route]:
+    return [
+        Route("/admin", endpoint=admin_index, methods=["GET"]),
+        Route("/admin/api/state", endpoint=admin_api_state, methods=["GET"]),
+        Route("/admin/api/config", endpoint=admin_api_config, methods=["PUT"]),
+        Route("/admin/api/logs", endpoint=admin_api_logs, methods=["GET"]),
+        Route("/admin/api/setup/status", endpoint=admin_api_setup_status, methods=["GET"]),
+        Route("/admin/api/setup/sync", endpoint=admin_api_setup_sync, methods=["GET", "POST"]),
+        Route("/admin/api/setup/google-steps", endpoint=admin_api_setup_google_steps, methods=["POST"]),
+        Route("/admin/api/setup/credentials", endpoint=admin_api_setup_credentials, methods=["POST"]),
+        Route("/admin/api/accounts", endpoint=admin_api_accounts, methods=["GET"]),
+        Route("/admin/api/google/login", endpoint=admin_api_google_login, methods=["GET", "POST"]),
+        Route("/admin/api/google/default", endpoint=admin_api_google_default, methods=["POST"]),
+        Route("/admin/api/google/logout", endpoint=admin_api_google_logout, methods=["POST"]),
+        Route("/admin/api/whatsapp/pair", endpoint=admin_api_whatsapp_pair, methods=["GET", "POST"]),
+        Route("/admin/api/whatsapp/session", endpoint=admin_api_whatsapp_session, methods=["POST", "DELETE"]),
+        Route("/admin/api/service", endpoint=admin_api_service, methods=["GET", "POST"]),
+        Route("/admin/api/hermes/doctor", endpoint=admin_api_hermes_doctor, methods=["GET"]),
+        Route("/admin/api/hermes/setup", endpoint=admin_api_hermes_setup, methods=["POST"]),
+        Route("/admin/api/hermes/install", endpoint=admin_api_hermes_install_link, methods=["POST"]),
+        Route("/admin/api/tools", endpoint=admin_api_tools, methods=["GET"]),
+        Route("/admin/api/failures", endpoint=admin_api_failures, methods=["GET"]),
+    ]

@@ -50,6 +50,20 @@ class WhatsAppSession:
     def pair(self, *, timeout_s: float = 120.0) -> dict[str, Any]:
         return self._bridge.call("pair", {"timeout_s": timeout_s})
 
+    def pair_start(self) -> dict[str, Any]:
+        return self._bridge.call("pair_start")
+
+    def pair_poll(self) -> dict[str, Any]:
+        return self._bridge.call("pair_poll")
+
+    def pair_stop(self) -> dict[str, Any]:
+        return self._bridge.call("pair_stop")
+
+    def disconnect_worker(self) -> None:
+        """Reset singleton without deleting session on disk."""
+        self.shutdown()
+        WhatsAppSession.reset()
+
     def list_chats(self, *, limit: int = 30) -> list[dict[str, Any]]:
         self.ensure_background_connection()
         result = self._bridge.call("list_chats", {"limit": limit})

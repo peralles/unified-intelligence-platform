@@ -6,7 +6,8 @@
 
 - MVP: MCP **66 tools** (12 Google + 13 Gmail extra + 1 Calendar + 40 WhatsApp), Fase 2
 - CLI WhatsApp: `status` (rápido + `--live`), `configure`, `pair`, `remove`, `disconnect`, `watch`, `watch-service`
-- Entrada amigável: `./setup.sh` + `Makefile` (delegam à CLI)
+- **Admin UI** (`http://127.0.0.1:17320/admin`): instalação, Google OAuth, WhatsApp QR, serviço macOS, Hermes, config runtime, 66 tools, logs — operador pode evitar CLI no dia a dia
+- Entrada amigável: `./setup.sh` + `./setup.sh admin` (abre painel)
 - Correção MCP: schemas sem `$ref` órfão; log `tool OK` em sucesso (`integrator.tools`)
 - Segurança recente: confirm em transcribe+reply, revoke convite, reações; audit nos Google extra; `is_audio` no cache SQLite
 
