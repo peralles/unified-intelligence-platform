@@ -92,9 +92,25 @@ run_setup() {
 run_status() {
   require_uv
   banner
-  echo "  Verificando configuração…"
+  PORT="${INTEGRATOR_SERVICE_PORT:-17320}"
+  URL="http://127.0.0.1:${PORT}/admin"
+  echo "  Status e operação diária: console web"
   echo ""
-  INTEGRATOR_CLI_LEGACY=true run_integrator status "$@"
+  echo "  ${URL}"
+  echo ""
+  if curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+    echo "  Serviço: ativo"
+    if command -v open >/dev/null 2>&1; then
+      open "${URL}" 2>/dev/null || true
+    fi
+  else
+    echo "  Serviço: inativo"
+    echo "  Suba com: uv run integrator service install   (macOS)"
+    echo "         ou: uv run integrator serve-http"
+    echo ""
+    echo "  Bootstrap inicial (sem serviço): uv run integrator init"
+  fi
+  echo ""
 }
 
 if [[ $# -eq 0 ]]; then

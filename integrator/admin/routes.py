@@ -8,7 +8,8 @@ from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
-from starlette.routing import Route
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
 from integrator.admin import handlers as admin_handlers
 from integrator.admin.env_file import PERSISTABLE_ENV, bool_env, env_file_path, upsert_env
@@ -19,7 +20,15 @@ from integrator.logging_setup import get_logger
 logger = get_logger("admin")
 
 _STATIC = Path(__file__).resolve().parent / "static"
+_DIST = _STATIC / "dist"
 _RESTART_HINT_KEYS = frozenset({"transcribe_model", "allowlist", "denylist", "confirm_required_tools"})
+
+
+def _admin_html_path() -> Path:
+    built = _DIST / "index.html"
+    if built.is_file():
+        return built
+    return _STATIC / "admin.html"
 
 
 def _tail_log(name: str, lines: int) -> str:
@@ -268,9 +277,9 @@ def _persist_env_from_effective(effective: dict[str, Any], *, persist: bool) -> 
 
 
 async def admin_index(_: Request) -> Response:
-    html_path = _STATIC / "admin.html"
+    html_path = _admin_html_path()
     if not html_path.is_file():
-        return HTMLResponse("<h1>admin.html ausente</h1>", status_code=500)
+        return HTMLResponse("<h1>admin UI ausente</h1>", status_code=500)
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
@@ -340,8 +349,8 @@ async def admin_api_logs(request: Request) -> Response:
     return JSONResponse({"ok": True, "file": name, "text": _tail_log(name, lines)})
 
 
-def admin_routes() -> list[Route]:
-    return [
+def admin_routes() -> list[Route | Mount]:
+    routes: list[Route | Mount] = [
         Route("/admin", endpoint=admin_index, methods=["GET"]),
         Route("/admin/api/state", endpoint=admin_api_state, methods=["GET"]),
         Route("/admin/api/config", endpoint=admin_api_config, methods=["PUT"]),
@@ -363,3 +372,13 @@ def admin_routes() -> list[Route]:
         Route("/admin/api/tools", endpoint=admin_api_tools, methods=["GET"]),
         Route("/admin/api/failures", endpoint=admin_api_failures, methods=["GET"]),
     ]
+    assets = _DIST / "assets"
+    if assets.is_dir():
+        routes.append(
+            Mount(
+                "/admin/assets",
+                app=StaticFiles(directory=assets),
+                name="admin_assets",
+            )
+        )
+    return routes

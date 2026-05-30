@@ -18,6 +18,22 @@ Abrir painel:
 ./setup.sh admin
 ```
 
+## UI (Vite)
+
+Código fonte: `integrator/admin/ui/` (componentes ES modules + CSS tokens). Build:
+
+```bash
+./scripts/build-admin.sh
+```
+
+Saída: `integrator/admin/static/dist/` (servida em `/admin`). Fallback: `admin.html` legado se `dist/` ausente.
+
+Dev com proxy para API:
+
+```bash
+cd integrator/admin/ui && npm run dev
+```
+
 ## Seções do painel
 
 | Seção | Equivalente CLI legado |
@@ -27,6 +43,7 @@ Abrir painel:
 | **WhatsApp** | `whatsapp pair` (QR no browser), `remove`, `disconnect` |
 | **Serviço macOS** | `integrator service …` |
 | **Hermes** | `hermes doctor`, `hermes setup` |
+| **Claude Desktop** | mesmo botão MCP — grava `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | **Config** | `.env` + runtime (ignore transcrição, flags WhatsApp) |
 | **Tools** | `integrator tools` (66 tools MCP) |
 | **Logs / falhas** | `integrator logs --failures`, tail de logs |
@@ -53,13 +70,19 @@ Campos usados hoje:
 | `integrator service …` | Instalar LaunchAgent antes do admin |
 | `integrator init` | Bootstrap sem serviço (`./setup.sh`) |
 
-Demais comandos operacionais redirecionam para o admin, salvo `INTEGRATOR_CLI_LEGACY=true` (scripts, CI, desenvolvedores).
+Demais operações (Google, WhatsApp, Hermes, logs, config) estão **somente** no admin web.
 
 ## Hermes + WhatsApp persistente
 
 1. `integrator service install` — um worker neonize, MCP SSE, admin.
-2. Admin → Hermes → **setup modo SSE** (ou `hermes setup --mode sse` com legacy CLI).
+2. Admin → Hermes → **setup modo SSE**.
 3. No Hermes: `/reload-mcp` após mudanças no integrador.
 4. **Não** usar `watch-service` junto com o serviço SSE (lock `data/whatsapp/worker.lock`).
 
-Ver também: [WHATSAPP.md](WHATSAPP.md), [CLI.md](CLI.md) (referência legado).
+## Claude Desktop
+
+- Um clique **Configurar MCP** grava Hermes **e** Claude Desktop (mesmo servidor `langchain-integrator`, modo SSE).
+- Após gravar: **⌘Q** no Claude e reabra para carregar tools.
+- Config: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS).
+
+Ver também: [WHATSAPP.md](WHATSAPP.md), [CLI.md](CLI.md) (bootstrap).

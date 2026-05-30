@@ -97,11 +97,7 @@ def test_find_downloads_candidates(tmp_path: Path, monkeypatch):
 
 def test_run_init_wizard_all_skipped(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
-        "integrator.onboarding.init_wizard.settings",
-        type("S", (), {"root_dir": tmp_path, "credentials_path": tmp_path / "c.json"})(),
-    )
-    monkeypatch.setattr(
-        "integrator.onboarding.init_wizard._repo_deps_ok",
+        "integrator.onboarding.preflight.repo_deps_ok",
         lambda: True,
     )
     monkeypatch.setattr(
@@ -125,8 +121,8 @@ def test_run_init_wizard_all_skipped(tmp_path: Path, monkeypatch):
         )(),
     )
     monkeypatch.setattr(
-        "integrator.onboarding.init_wizard.merge_mcp_server",
-        lambda *_a, **_k: (False, "já existe"),
+        "integrator.clients.mcp_setup.setup_mcp_clients",
+        lambda **_: {"ok": True, "hosts": {"hermes": {"ok": False, "message": "já existe"}}},
     )
     monkeypatch.setattr(
         "integrator.onboarding.init_wizard.is_configured",

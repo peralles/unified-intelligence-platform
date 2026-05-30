@@ -15,21 +15,14 @@ from integrator.accounts.registry import (
     validate_account_id,
 )
 from integrator.auth.google_oauth import run_interactive_login
-from integrator.cli.ux import configuration_summary, is_configured
+from integrator.onboarding.preflight import repo_deps_ok, run_uv_sync
+from integrator.setup.status import configuration_summary, is_configured
 from integrator.config import settings
-from integrator.hermes.config_merge import (
-    DEFAULT_SERVER_NAME,
-    build_sse_server_config,
-    build_stdio_server_config,
-    get_mcp_server_entry,
-    merge_mcp_server,
-)
+from integrator.clients.claude_desktop import discover_claude_desktop
+from integrator.clients.mcp_setup import run_all_client_checks, setup_mcp_clients
+from integrator.hermes.config_merge import DEFAULT_SERVER_NAME
 from integrator.hermes.discovery import discover_hermes
-from integrator.hermes.doctor import (
-    CheckResult,
-    critical_failures,
-    run_checks,
-)
+from integrator.hermes.doctor import CheckResult, critical_failures
 from integrator.logging_setup import get_logger, read_audit_failures
 from integrator.onboarding.google_cloud import (
     credentials_ready,
@@ -38,7 +31,6 @@ from integrator.onboarding.google_cloud import (
     open_google_setup_sequence,
     validate_credentials_file,
 )
-from integrator.onboarding.init_wizard import _repo_deps_ok, _run_uv_sync
 from integrator.onboarding.links import GOOGLE_SETUP_STEPS, HERMES_INSTALL, UV_INSTALL
 from integrator.providers.tools import list_all_tool_metadata
 from integrator.service.macos import (
@@ -78,17 +70,22 @@ def _check_to_dict(r: CheckResult) -> dict[str, Any]:
 
 def setup_status(*, mode: str = "sse") -> dict[str, Any]:
     install = discover_hermes()
-    checks = run_checks(server_name=DEFAULT_SERVER_NAME, mode=mode)
+    claude = discover_claude_desktop()
+    checks = run_all_client_checks(server_name=DEFAULT_SERVER_NAME, mode=mode)
     label, next_step = configuration_summary()
     return {
         "configured": is_configured(),
         "configuration_label": label,
         "next_step": next_step,
         "credentials_ready": credentials_ready(),
-        "deps_ok": _repo_deps_ok(),
+        "deps_ok": repo_deps_ok(),
         "hermes": {
             "binary": str(install.binary) if install.binary else None,
             "config_path": str(install.config_path),
+        },
+        "claude_desktop": {
+            "config_path": str(claude.config_path),
+            "app_found": claude.app_found,
         },
         "checks": [_check_to_dict(c) for c in checks],
         "critical_failures": len(critical_failures(checks)),
@@ -111,7 +108,7 @@ def start_sync_deps(*, verbose: bool = False) -> dict[str, Any]:
 
         def _run() -> None:
             global _sync_job
-            code = _run_uv_sync(verbose=verbose)
+            code = run_uv_sync(verbose=verbose)
             with _sync_lock:
                 _sync_job = {
                     "status": "ok" if code == 0 else "error",
@@ -126,7 +123,7 @@ def start_sync_deps(*, verbose: bool = False) -> dict[str, Any]:
 def sync_deps_status() -> dict[str, Any]:
     with _sync_lock:
         job = dict(_sync_job) if _sync_job else {"status": "idle"}
-    job["deps_ok"] = _repo_deps_ok()
+    job["deps_ok"] = repo_deps_ok()
     return job
 
 
@@ -347,11 +344,16 @@ def mac_service_action(action: str, *, port: int | None = None) -> dict[str, Any
 
 def hermes_doctor(*, mode: str = "sse") -> dict[str, Any]:
     install = discover_hermes()
-    checks = run_checks(server_name=DEFAULT_SERVER_NAME, mode=mode)
+    claude = discover_claude_desktop()
+    checks = run_all_client_checks(server_name=DEFAULT_SERVER_NAME, mode=mode)
     return {
         "install": {
             "binary": str(install.binary) if install.binary else None,
             "config_path": str(install.config_path),
+        },
+        "claude_desktop": {
+            "config_path": str(claude.config_path),
+            "app_found": claude.app_found,
         },
         "checks": [_check_to_dict(c) for c in checks],
         "critical": len(critical_failures(checks)),
@@ -365,61 +367,12 @@ def hermes_setup(
     force: bool = False,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    install = discover_hermes()
-    server_name = DEFAULT_SERVER_NAME
-    checks = run_checks(server_name=server_name, mode=mode)
-    crit = critical_failures(checks)
-    if crit and not force:
-        return {
-            "ok": False,
-            "error": "Pré-requisitos críticos em falta",
-            "checks": [_check_to_dict(c) for c in crit],
-        }
-
-    if mode == "sse":
-        if not is_macos():
-            return {"ok": False, "error": "Modo SSE requer macOS"}
-        block = build_sse_server_config()
-    else:
-        block = build_stdio_server_config()
-
-    existing = get_mcp_server_entry(install.config_path, server_name)
-    if existing and not yes:
-        return {
-            "ok": False,
-            "error": f"Entrada '{server_name}' já existe; use yes=true",
-        }
-
-    if dry_run:
-        import yaml
-
-        payload = {"mcp_servers": {server_name: block}}
-        return {
-            "ok": True,
-            "dry_run": True,
-            "yaml": yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
-            "dest": str(install.config_path),
-        }
-
-    try:
-        changed, msg = merge_mcp_server(
-            install.config_path,
-            server_name,
-            block,
-            overwrite=bool(yes or existing),
-        )
-    except (OSError, ValueError) as exc:
-        return {"ok": False, "error": str(exc)}
-
-    if not changed:
-        return {"ok": False, "error": msg}
-
-    return {
-        "ok": True,
-        "message": msg,
-        "mode": mode,
-        "config_path": str(install.config_path),
-    }
+    return setup_mcp_clients(
+        mode=mode,
+        yes=yes,
+        force=force,
+        dry_run=dry_run,
+    )
 
 
 def list_tools() -> dict[str, Any]:

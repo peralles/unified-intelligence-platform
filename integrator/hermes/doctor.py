@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -11,6 +10,7 @@ from integrator.accounts.registry import list_accounts
 from integrator.config import settings
 from integrator.hermes.config_merge import DEFAULT_SERVER_NAME, get_mcp_server_entry
 from integrator.hermes.discovery import HermesInstall, discover_hermes
+from integrator.onboarding.preflight import repo_deps_ok
 
 
 class CheckStatus(str, Enum):
@@ -29,23 +29,7 @@ class CheckResult:
 
 
 def _repo_deps_ok() -> bool:
-    venv = settings.root_dir / ".venv"
-    if venv.is_dir():
-        return True
-    uv = shutil.which("uv")
-    if not uv:
-        return False
-    try:
-        result = subprocess.run(
-            [uv, "run", "integrator", "status"],
-            cwd=settings.root_dir,
-            capture_output=True,
-            timeout=60,
-            check=False,
-        )
-        return result.returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
-        return False
+    return repo_deps_ok()
 
 
 def _sse_service_healthy(port: int | None = None) -> bool:

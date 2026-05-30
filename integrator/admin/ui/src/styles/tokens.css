@@ -1,0 +1,19 @@
+:root {
+  --bg: #0a0d12;
+  --bg-elevated: #121820;
+  --panel: #161d28;
+  --panel-hover: #1c2533;
+  --border: #2a3544;
+  --text: #e8edf4;
+  --muted: #8a9bb0;
+  --accent: #d4a017;
+  --accent-dim: #a67c00;
+  --accent-glow: rgba(212, 160, 23, 0.15);
+  --ok: #3dd68c;
+  --warn: #f5b942;
+  --err: #f07178;
+  --sidebar-w: 220px;
+  --radius: 10px;
+  --font: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}

@@ -87,7 +87,7 @@
       <a href="#sec-accounts">Google</a>
       <a href="#sec-whatsapp">WhatsApp</a>
       <a href="#sec-service">Serviço</a>
-      <a href="#sec-hermes">Hermes</a>
+      <a href="#sec-hermes">MCP</a>
       <a href="#sec-config">Config</a>
       <a href="#sec-tools">Tools</a>
       <a href="#sec-logs">Logs</a>
@@ -154,10 +154,11 @@
     </section>
 
     <section id="sec-hermes">
-      <h2>Hermes</h2>
+      <h2>MCP — Hermes &amp; Claude</h2>
+      <p class="hint">Grava <code>langchain-integrator</code> em Hermes e Claude Desktop. Reinicie Claude (⌘Q) após configurar; no Hermes: conversa nova ou <code>/reload-mcp</code>.</p>
       <ul class="checklist" id="hermes-checks"></ul>
       <div class="row" style="margin-top:0.5rem">
-        <button type="button" id="btn-hermes-setup">Configurar MCP (SSE)</button>
+        <button type="button" id="btn-hermes-setup">Configurar MCP (Hermes + Claude)</button>
         <button type="button" class="secondary" id="btn-hermes-install">Instalar Hermes</button>
         <button type="button" class="secondary" id="btn-hermes-doctor">Atualizar diagnóstico</button>
       </div>
@@ -531,7 +532,8 @@
         method: "POST", headers: {"Content-Type":"application/json"},
         body: JSON.stringify({ mode: "sse", yes: true }),
       });
-      toast(r.ok ? "Hermes configurado" : (r.error || "Falha"), r.ok ? "" : "err");
+      toast(r.ok ? "MCP gravado (Hermes + Claude)" : (r.error || "Falha"), r.ok ? "" : "err");
+      if (r.ok && r.restart_hints) toast(r.restart_hints[0], "");
     });
     $("btn-hermes-install").addEventListener("click", async () => {
       await api("/admin/api/hermes/install", { method: "POST", body: "{}" });

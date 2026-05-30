@@ -78,23 +78,26 @@ Antes de dar por concluído, verificar e alinhar:
 
 ## Learned User Preferences
 
-- Onboarding para operadores não técnicos: `./setup.sh` (delega ao wizard `integrator init`)
+- Onboarding para operadores não técnicos: `./setup.sh` (delega ao wizard `integrator init`); operação diária via `./setup.sh admin` após `integrator service install`
 - Texto de CLI/docs para o usuário em português; código do pacote `integrator/` em inglês
 - Após mudanças no código MCP do integrador: um `/reload-mcp` no Hermes ou conversa nova (não repetir init completo)
 - Push para `main` com rebase quando o usuário pedir commit/pull explicitamente
-- Pareamento WhatsApp no terminal (`integrator whatsapp pair`), como Google (`integrator login`); Hermes não faz QR
+- Comandos operacionais (`status`, `login`, `whatsapp`, `hermes`, `logs`) foram **removidos** da CLI — use o console admin
+- Pareamento WhatsApp e Google OAuth no console admin (`/admin`); Hermes não faz QR
 - Se `~/.hermes/config.yaml` já aponta para este repo: não refazer `integrator hermes setup` — `uv sync` + `/reload-mcp` basta
 - Hermes como agente com WhatsApp (tools + auto-transcrição): serviço SSE persistente (`integrator service` + `hermes setup --mode sse`); parar `watch-service` — evita conflito de lock
 
 ## Learned Workspace Facts
 
 - Hermes doc padrão: MCP **stdio**; WhatsApp persistente (tools + auto-transcrição): **`integrator service`** (SSE `127.0.0.1:17320`) + `integrator hermes setup --mode sse` — um worker neonize, Hermes só conecta
+- Console admin local **`http://127.0.0.1:17320/admin`** no `serve-http`/LaunchAgent — Google, WhatsApp (QR), Hermes, serviço macOS, config, logs; ver `docs/ADMIN.md`
+- CLI bootstrap: `init`, `serve`, `serve-http`, `service` — operação diária só via admin web
 - `/reload-mcp` no Hermes pode parecer lento (discovery de plugins, `mcp_reload_confirm`); o integrator sozinho sobe em ~1s
 - Schemas MCP: inline de `$ref`/`$defs` antes de expor tools (evita `PointerToNowhere` no Hermes)
-- Diagnóstico Hermes+integrador: `~/.hermes/logs/mcp-stderr.log`, `agent.log`; `uv run integrator logs --failures`
+- Diagnóstico Hermes+integrador: `~/.hermes/logs/mcp-stderr.log`, `agent.log`; falhas de tools no admin → Logs ou `data/logs/errors.log`
 - WhatsApp (MVP): **neonize** em worker isolado `bridges/whatsapp-neonize/` (protobuf 7.x; venv principal fica em protobuf 6 por `langchain-google-community`); sessão `data/whatsapp/`; ver `docs/WHATSAPP.md`
 - Hermes: **um** `mcp_servers.langchain-integrator` — **66 tools** (12 Google + 13 Gmail extra + 1 Calendar + 40 WhatsApp); sem segundo MCP nem Evolution HTTP no MVP
+- Tools WhatsApp expõem `display_name`/`phone`/`chat_display_name` — agente deve usar esses rótulos, não JIDs `@lid` crus (`chat_id` só para follow-up técnico)
 - `find_whatsapp_chats` sem `query` lista chats recentes (fallback para `list_chats`; evita erro quando o modelo omite filtro)
 - `watch-service`, `serve` stdio e SSE compartilham `data/whatsapp/worker.lock` — só uma instância neonize por sessão; não reativar watch com serviço SSE ativo
-- `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true` transcreve no mesmo worker do MCP; `bridge_client` repassa vars de transcrição do `settings` ao subprocesso (LaunchAgent não injeta `.env` no worker)
-- `INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=true` (padrão) ignora grupos `@g.us`; `TRANSCRIBE_ONLY_INCOMING=false` (padrão) transcreve áudios enviados e recebidos em chats privados
+- `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true` transcreve no worker MCP; `serve-http` warm-connecta na subida; hot-reload em `data/admin/runtime.json` (ex.: `transcribe_ignore_numbers`); `TRANSCRIBE_PRIVATE_ONLY=true` ignora `@g.us`; `TRANSCRIBE_ONLY_INCOMING=false` transcreve enviados e recebidos em privado

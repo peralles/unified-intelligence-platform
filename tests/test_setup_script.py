@@ -31,11 +31,12 @@ def test_setup_sh_is_executable_and_help():
     assert "integrator init" in proc.stdout
 
 
-def test_setup_sh_status_delegates_to_integrator(monkeypatch):
-    """Com uv no PATH, status deve chamar integrator e retornar 0."""
+def test_setup_sh_status_points_to_admin():
+    """status deve apontar ao console web admin."""
     proc = _run("status")
     assert proc.returncode == 0
-    assert "Integrador LangChain" in proc.stdout or "Configuração" in proc.stdout
+    assert "/admin" in proc.stdout
+    assert "console web" in proc.stdout.lower()
 
 
 def test_setup_sh_without_uv_exits_with_instructions():
