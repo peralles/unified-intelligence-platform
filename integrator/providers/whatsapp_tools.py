@@ -97,10 +97,10 @@ def _base_metadata() -> list[dict[str, Any]]:
         {
             "name": "find_whatsapp_chats",
             "description": (
-                "Busca chats por nome, telefone ou trecho do id. "
+                "Busca chats por nome, telefone (com ou sem formatação) ou trecho do id. "
+                "Chats privados @lid incluem phone quando disponível. "
                 "Use display_name ao falar com o usuário; chat_id só para follow-up técnico. "
-                "Sem query, equivale a list_whatsapp_chats (útil para filtrar chats vazios "
-                "pela prévia da última mensagem)."
+                "Sem query, equivale a list_whatsapp_chats."
             ),
             "input_schema": {
                 "type": "object",
@@ -108,7 +108,7 @@ def _base_metadata() -> list[dict[str, Any]]:
                     "query": {
                         "type": "string",
                         "description": (
-                            "Texto para buscar em nome ou chat_id. "
+                            "Nome, número (ex. 5519992034333) ou chat_id. "
                             "Opcional: omitir lista os chats recentes."
                         ),
                     },

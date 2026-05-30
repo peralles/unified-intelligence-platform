@@ -47,3 +47,16 @@ def test_merge_claude_preserves_other_servers(tmp_path: Path) -> None:
     entry = get_claude_mcp_entry(config, DEFAULT_SERVER_NAME)
     assert entry is not None
     assert entry["command"] == "uv"
+
+
+def test_merge_claude_preserves_preferences(tmp_path: Path) -> None:
+    config = tmp_path / "claude_desktop_config.json"
+    config.write_text(
+        json.dumps({"preferences": {"sidebarMode": "task"}, "mcpServers": {}}),
+        encoding="utf-8",
+    )
+    block = build_sse_server_config(host="127.0.0.1", port=17320)
+    merge_claude_mcp_server(config, DEFAULT_SERVER_NAME, block, overwrite=True)
+    data = load_claude_config(config)
+    assert data["preferences"]["sidebarMode"] == "task"
+    assert data["mcpServers"][DEFAULT_SERVER_NAME]["url"] == "http://127.0.0.1:17320/sse"
