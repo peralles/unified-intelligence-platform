@@ -30,7 +30,7 @@ def configuration_summary() -> tuple[str, str | None]:
     if not any(a.has_token for a in accounts):
         return "incompleta", "./setup.sh"
     if settings.whatsapp_enabled and not has_persisted_session():
-        return "completa (Google)", "integrator whatsapp pair"
+        return "completa (Google)", "./setup.sh admin (WhatsApp → Parear)"
     return "completa", None
 
 
@@ -44,7 +44,7 @@ def print_ready_message(*, verbose: bool = False) -> None:
     print("\n  No chat você pode pedir, por exemplo:")
     print('     "Quais e-mails não lidos tenho?" ou "O que tenho na agenda hoje?"')
     if settings.whatsapp_enabled:
-        print('     "Liste meus chats do WhatsApp" (após: integrator whatsapp pair)')
+        print('     "Liste meus chats do WhatsApp" (após parear no admin)')
     if verbose:
         print("\n  Detalhes técnicos:")
         print(f"    Credenciais: {settings.credentials_path}")

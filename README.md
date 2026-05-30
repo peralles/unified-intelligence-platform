@@ -47,12 +47,13 @@ cd unified-intelligence-platform
 ./setup.sh
 ```
 
-(O script só verifica se `uv` está instalado e abre o assistente `integrator init` — toda a configuração fica na CLI.)
+(O script verifica `uv`, roda `integrator init` na 1ª vez e aponta ao [console admin](docs/ADMIN.md) para operação diária.)
 
 Alternativa equivalente:
 
 ```bash
 uv run integrator init
+./setup.sh admin    # após: integrator service install ou serve-http
 ```
 
 O assistente:

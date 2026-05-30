@@ -1,6 +1,9 @@
 # CLI — `integrator`
 
-CLI única, focada em **poucos comandos** e suporte a **várias contas Google** (Gmail + Calendar no mesmo login).
+> **Operadores:** use o [console admin](ADMIN.md) em `http://127.0.0.1:17320/admin` (`./setup.sh admin`).  
+> A CLI abaixo é **legado / CI** — ative com `INTEGRATOR_CLI_LEGACY=true` se um comando redirecionar ao admin.
+
+CLI única, focada em **bootstrap** (`init`, `serve`, `service`) e suporte a **várias contas Google** (Gmail + Calendar no mesmo login).
 
 ## Comandos
 

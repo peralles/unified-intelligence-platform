@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     service_host: str = "127.0.0.1"
     service_port: int = 17320
     admin_runtime_file: Path | None = None
+    # False: status/login/whatsapp/hermes/etc. redirect to /admin (operators use web UI)
+    cli_legacy: bool = False
 
     @property
     def admin_runtime_path(self) -> Path:

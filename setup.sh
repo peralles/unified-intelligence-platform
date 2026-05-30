@@ -94,7 +94,7 @@ run_status() {
   banner
   echo "  Verificando configuração…"
   echo ""
-  run_integrator status "$@"
+  INTEGRATOR_CLI_LEGACY=true run_integrator status "$@"
 }
 
 if [[ $# -eq 0 ]]; then

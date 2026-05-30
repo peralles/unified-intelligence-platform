@@ -27,7 +27,7 @@ Resumo das escolhas já documentadas em `docs/PLANO_LANGCHAIN_HERMES.md` e `READ
 
 - Backend: **neonize** (Whatsmeow in-process no worker), não Evolution HTTP no MVP
 - `neonize` exige **protobuf ≥7**; `langchain-google-community` fixa **protobuf &lt;7** no mesmo venv — worker isolado em `bridges/whatsapp-neonize/` (subprocesso JSON stdin/stdout)
-- Sessão: `data/whatsapp/` (gitignored); QR só em `integrator whatsapp pair`
+- Sessão: `data/whatsapp/` (gitignored); QR no admin (`/admin`) ou CLI legado (`INTEGRATOR_CLI_LEGACY=true`)
 - Tools destrutivas WhatsApp (`send_*`, `delete_*`) exigem `confirm: true`; delete de terceiros via `delete_whatsapp_messages_for_me` (app state)
 - Hermes: **mesmo** `mcp_servers.langchain-integrator` stdio; sem segunda entrada MCP
 - **Lockfile**: `data/whatsapp/worker.lock` (fcntl) — uma instância neonize por sessão; `watch-service`, stdio `serve` e SSE não podem rodar em paralelo
@@ -35,6 +35,14 @@ Resumo das escolhas já documentadas em `docs/PLANO_LANGCHAIN_HERMES.md` e `READ
 - **Watch daemon** (`integrator whatsapp watch` / `watch-service`): transcrição 24/7 sem Hermes; conflita com MCP serve/SSE na mesma sessão
 - **Hermes + auto-transcrição**: `integrator service` (SSE) + `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true`; `bridge_client` repassa vars de transcrição do `settings` ao worker (`.env` não chega ao subprocesso via os.environ)
 - Confirmação condicional: `transcribe_whatsapp_audio` com `reply=true` e `get_whatsapp_group_invite_link` com `revoke=true` exigem `confirm: true`
+
+## Admin local (operadores)
+
+- Console **`http://127.0.0.1:17320/admin`** no mesmo processo que `serve-http` / LaunchAgent
+- Comandos operacionais (`status`, `login`, `whatsapp`, `hermes`, `logs`, …) **redirecionam** ao admin por padrão; `INTEGRATOR_CLI_LEGACY=true` para CI/scripts
+- Bootstrap permanece na CLI: `init`, `serve`, `serve-http`, `service`
+- Runtime hot-reload: `data/admin/runtime.json` (ex.: ignore list transcrição)
+- Doc: `docs/ADMIN.md`
 
 ## Segurança (Fase 2)
 

@@ -88,12 +88,23 @@ assert len(tools) == TOTAL_TOOL_COUNT
 print('OK: MCP list_tools', len(tools))
 "
 
-echo "==> whatsapp CLI smoke"
-uv run integrator whatsapp configure >/dev/null
-uv run integrator whatsapp status >/dev/null
-uv run integrator whatsapp watch --help >/dev/null
-uv run integrator whatsapp watch-service status >/dev/null 2>&1 || true
-echo "OK: whatsapp CLI (configure, status, watch)"
+echo "==> admin routes smoke"
+uv run python -c "
+from integrator.admin.routes import admin_routes
+routes = admin_routes()
+paths = {getattr(r, 'path', None) for r in routes}
+assert '/admin' in paths
+assert '/admin/api/tools' in paths
+assert len(routes) >= 18
+print('OK: admin routes', len(routes))
+"
+
+echo "==> whatsapp CLI smoke (legacy)"
+INTEGRATOR_CLI_LEGACY=true uv run integrator whatsapp configure >/dev/null
+INTEGRATOR_CLI_LEGACY=true uv run integrator whatsapp status >/dev/null
+INTEGRATOR_CLI_LEGACY=true uv run integrator whatsapp watch --help >/dev/null
+INTEGRATOR_CLI_LEGACY=true uv run integrator whatsapp watch-service status >/dev/null 2>&1 || true
+echo "OK: whatsapp CLI legacy (configure, status, watch)"
 
 echo "==> performance smoke"
 uv run python -c "

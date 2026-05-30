@@ -46,26 +46,18 @@ from integrator.service.macos import (
 )
 
 EPILOG = """
-Começar:
-  integrator init                       # assistente guiado (recomendado)
+Operadores (recomendado):
+  ./setup.sh admin                      # http://127.0.0.1:17320/admin
+  integrator service install            # macOS: serviço + admin persistente
 
-Exemplos:
-  integrator login pessoal              # 1ª conta (Gmail + Calendar)
-  integrator login profissional -l Trabalho
-  integrator accounts                 # listar contas
-  integrator use profissional           # conta padrão para o Hermes
-  integrator status
-  integrator hermes doctor              # pré-requisitos Hermes + integrador
-  integrator hermes setup               # gravar MCP em ~/.hermes/config.yaml
-  integrator serve                    # servidor MCP (stdio, Hermes spawn)
-  integrator service install          # macOS: ativar como serviço
-  integrator service disable          # macOS: parar serviço
-  integrator service uninstall        # macOS: remover serviço
-  integrator logs --failures          # últimas falhas (audit rotativo)
-  integrator logs --tail              # tail do log da aplicação
-  integrator whatsapp pair            # parear WhatsApp (QR no terminal)
-  integrator whatsapp status          # situação WhatsApp (rápido)
-  integrator whatsapp remove          # apagar sessão WhatsApp
+Bootstrap / runtime:
+  integrator init                       # 1ª config (./setup.sh)
+  integrator serve                      # MCP stdio (Hermes spawn)
+  integrator serve-http                 # MCP SSE + console /admin
+
+Legado (INTEGRATOR_CLI_LEGACY=true):
+  integrator status | login | whatsapp pair | hermes doctor | logs …
+  Ver docs/CLI.md e docs/ADMIN.md
 """
 
 
@@ -107,9 +99,9 @@ def _cmd_status(args: argparse.Namespace) -> int:
         print("  desabilitado no MCP (INTEGRATOR_WHATSAPP_ENABLED=false)")
     elif wa["has_session_db"]:
         print(f"  sessão local em {wa['session_dir']}")
-        print("  detalhe: integrator whatsapp status [--live]")
+        print("  detalhe: admin ou INTEGRATOR_CLI_LEGACY=true integrator whatsapp status")
     else:
-        print("  não pareado → integrator whatsapp pair")
+        print("  não pareado → ./setup.sh admin (WhatsApp → Parear)")
 
     from integrator.logging_setup import app_log_path, error_log_path
 
@@ -505,6 +497,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    from integrator.cli.operator_redirect import maybe_redirect_operator_command
+
     parser = _build_parser()
     argv = list(argv) if argv is not None else None
     args = parser.parse_args(argv)
@@ -517,6 +511,7 @@ def main(argv: list[str] | None = None) -> None:
     elif global_verbose:
         args.verbose = True
     if not args.command:
+        from integrator.cli.operator_redirect import admin_console_url
         from integrator.cli.ux import is_configured
 
         if not is_configured():
@@ -524,9 +519,13 @@ def main(argv: list[str] | None = None) -> None:
             print("Para começar (recomendado):\n")
             print("  ./setup.sh\n")
             print("  integrator init\n")
-            print("\nOutros comandos:")
+            print(f"\nOperação diária: {admin_console_url()}\n")
+            print("  integrator service install   # macOS\n")
+        else:
+            print(f"Console admin: {admin_console_url()}\n")
         parser.print_help()
         sys.exit(0)
+    maybe_redirect_operator_command(args.command)
     if args.command != "logs":
         from integrator.logging_setup import setup_logging
 
