@@ -144,6 +144,9 @@ def test_setup_dry_run_cli(tmp_path: Path, monkeypatch):
     )
 
     from integrator.cli.main import main
+    from integrator.config import settings
+
+    monkeypatch.setattr(settings, "cli_legacy", True)
 
     buf = io.StringIO()
     monkeypatch.setattr(sys, "stdout", buf)
