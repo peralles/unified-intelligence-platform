@@ -8,7 +8,7 @@ echo "==> uv sync"
 uv sync --all-extras
 
 echo "==> ruff"
-uv run ruff check integrator tests bridges/whatsapp-neonize/worker.py bridges/whatsapp-neonize/transcribe_cleanup.py
+uv run ruff check integrator tests bridges/whatsapp-neonize/worker.py bridges/whatsapp-neonize/transcribe_cleanup.py bridges/whatsapp-neonize/chat_search.py
 
 echo "==> pytest"
 uv run pytest -q --tb=short

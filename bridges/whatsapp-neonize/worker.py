@@ -40,6 +40,7 @@ from neonize.utils import Jid2String, build_jid, extract_text
 from neonize.utils.enum import ReceiptType
 
 from runtime_config import RuntimeConfig
+from chat_search import chat_haystack, normalize_phone_digits, phone_digits_match
 
 
 class WorkerError(Exception):
@@ -305,6 +306,7 @@ class NeonizeWorker:
         self._runtime = RuntimeConfig()
         self._transcriber: AudioTranscriber | None = None
         self._transcribe_pool: ThreadPoolExecutor | None = None
+        self._lid_phone_cache: dict[str, str | None] = {}
         if self._auto_transcribe:
             self._transcriber = AudioTranscriber(
                 self._transcribe_model, self._transcribe_language
@@ -389,6 +391,28 @@ class NeonizeWorker:
                 bucket.sort(key=lambda m: m.timestamp)
                 if len(bucket) > max_c:
                     self.state.messages[chat_id] = bucket[-max_c:]
+                if bucket:
+                    self._ensure_chat_entry_from_cache(chat_id, bucket[-1])
+
+    def _ensure_chat_entry_from_cache(
+        self, chat_id: str, latest: StoredMessage
+    ) -> None:
+        """Rebuild chat index entries from SQLite message cache after restart."""
+        entry = self.state.chats.get(chat_id)
+        is_group = _is_group_chat_id(chat_id)
+        if entry is None:
+            entry = ChatEntry(
+                chat_id=chat_id,
+                name=self._chat_display_name(chat_id, ""),
+                is_group=is_group,
+            )
+            self.state.chats[chat_id] = entry
+        if latest.timestamp >= entry.last_timestamp:
+            entry.last_timestamp = latest.timestamp
+            if latest.text and not entry.last_message_preview:
+                entry.last_message_preview = latest.text[:200]
+        if is_group:
+            entry.is_group = True
 
     def _persist_cached_message(self, msg: StoredMessage) -> None:
         if self._cache_store is None:
@@ -484,24 +508,53 @@ class NeonizeWorker:
         return user or chat_jid_str
 
     def _resolve_lid_phone(self, chat_id: str) -> str | None:
+        if chat_id in self._lid_phone_cache:
+            return self._lid_phone_cache[chat_id]
         _, server = _split_chat_jid(chat_id)
         if server != "lid" or not self.client.is_logged_in:
+            self._lid_phone_cache[chat_id] = None
             return None
         try:
             pn_jid = self.client.get_pn_from_lid(self._jid_from_chat_id(chat_id))
-            return _phone_from_chat_id(Jid2String(pn_jid))
+            phone = _phone_from_chat_id(Jid2String(pn_jid))
         except Exception:
-            return None
+            phone = None
+        self._lid_phone_cache[chat_id] = phone
+        return phone
 
     def _chat_phone(self, entry: ChatEntry) -> str | None:
         phone = _phone_from_chat_id(entry.chat_id)
         if phone is not None:
             return phone
-        if entry.chat_id.endswith("@lid") and (
-            _looks_like_opaque_id(entry.name, entry.chat_id) or not entry.name.strip()
-        ):
+        if entry.chat_id.endswith("@lid"):
             return self._resolve_lid_phone(entry.chat_id)
         return None
+
+    def _chat_matches_query(
+        self,
+        entry: ChatEntry,
+        payload: dict[str, Any],
+        q_lower: str,
+        q_digits: str,
+    ) -> bool:
+        hay = chat_haystack(
+            name=entry.name,
+            chat_id=entry.chat_id,
+            display_name=str(payload.get("display_name") or ""),
+            phone=payload.get("phone"),
+        )
+        if q_lower in hay:
+            return True
+        if not q_digits:
+            return False
+        user, server = _split_chat_jid(entry.chat_id)
+        jid_digits = user if server == "s.whatsapp.net" else None
+        return phone_digits_match(
+            q_digits,
+            payload.get("phone"),
+            jid_digits,
+            entry.chat_id,
+        )
 
     def _chat_to_dict(self, entry: ChatEntry) -> dict[str, Any]:
         phone = self._chat_phone(entry)
@@ -850,21 +903,35 @@ class NeonizeWorker:
             return [self._chat_to_dict(c) for c in items]
 
     def find_chats(self, *, query: str, limit: int = 20) -> list[dict[str, Any]]:
-        q = query.strip().lower()
+        q = query.strip()
         if not q:
             return []
+        q_lower = q.lower()
+        q_digits = normalize_phone_digits(q)
         with self.state.lock:
-            matches = []
-            for c in self.state.chats.values():
-                payload = self._chat_to_dict(c)
-                hay = (
-                    f"{c.name} {c.chat_id} {payload.get('display_name', '')} "
-                    f"{payload.get('phone', '') or ''}"
-                ).lower()
-                if q in hay:
-                    matches.append(c)
-            matches.sort(key=lambda c: c.last_timestamp, reverse=True)
-            return [self._chat_to_dict(c) for c in matches[:limit]]
+            entries = list(self.state.chats.values())
+        matches: list[ChatEntry] = []
+        for entry in entries:
+            payload = self._chat_to_dict(entry)
+            if self._chat_matches_query(entry, payload, q_lower, q_digits):
+                matches.append(entry)
+        matches.sort(key=lambda c: c.last_timestamp, reverse=True)
+        results = [self._chat_to_dict(c) for c in matches[:limit]]
+        if results or not q_digits or len(q_digits) < 10:
+            return results
+        phone_fmt = _format_phone_digits(q_digits)
+        return [
+            {
+                "chat_id": f"{q_digits}@s.whatsapp.net",
+                "name": "",
+                "display_name": phone_fmt or f"+{q_digits}",
+                "phone": phone_fmt or q_digits,
+                "unread_count": 0,
+                "last_message_preview": "",
+                "last_timestamp": 0,
+                "is_group": False,
+            }
+        ]
 
     def get_messages(
         self,
