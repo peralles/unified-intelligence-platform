@@ -53,30 +53,23 @@ def load_google_credentials(*, account_id: str, interactive: bool = False):
 
     if not interactive and not token_path.is_file():
         raise GoogleAuthError(
-            f"Token não encontrado para '{account_id}': {token_path}\n"
+            f"Token não encontrado para '{account_id}'.\n"
             f"Execute: integrator login {account_id}"
         )
 
-    import os
-
-    previous_cwd = os.getcwd()
     try:
-        os.chdir(settings.root_dir)
-        try:
-            creds = get_google_credentials(
-                scopes=list(GOOGLE_SCOPES),
-                token_file=str(token_path),
-                client_secrets_file=str(creds_path),
-            )
-        except Exception as exc:
-            raise GoogleAuthError(
-                f"Falha ao carregar/renovar token de '{account_id}' ({token_path}): {exc}\n"
-                f"Execute: integrator login {account_id}"
-            ) from exc
-        secure_token_file(token_path)
-        return creds
-    finally:
-        os.chdir(previous_cwd)
+        creds = get_google_credentials(
+            scopes=list(GOOGLE_SCOPES),
+            token_file=str(token_path),
+            client_secrets_file=str(creds_path),
+        )
+    except Exception as exc:
+        raise GoogleAuthError(
+            f"Falha ao carregar/renovar token de '{account_id}': {exc}\n"
+            f"Execute: integrator login {account_id}"
+        ) from exc
+    secure_token_file(token_path)
+    return creds
 
 
 def run_interactive_login(

@@ -32,10 +32,20 @@ def _admin_html_path() -> Path:
 
 
 def _tail_log(name: str, lines: int) -> str:
-    log_dir = settings.log_dir or (settings.root_dir / "data" / "logs")
-    path = log_dir / (name if name.endswith(".log") else f"{name}.log")
+    log_dir = (settings.log_dir or (settings.root_dir / "data" / "logs")).resolve()
+    # Reject names with path separators or dotdot sequences before resolving
+    safe_name = name.strip().replace("\\", "/")
+    if "/" in safe_name or safe_name.startswith("."):
+        return "(nome de arquivo inválido)"
+    filename = safe_name if safe_name.endswith(".log") else f"{safe_name}.log"
+    path = (log_dir / filename).resolve()
+    # Ensure the resolved path stays inside log_dir
+    try:
+        path.relative_to(log_dir)
+    except ValueError:
+        return "(acesso negado: caminho fora do diretório de logs)"
     if not path.is_file():
-        return f"(arquivo não encontrado: {path})"
+        return f"(arquivo não encontrado: {path.name})"
     try:
         content = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError as exc:

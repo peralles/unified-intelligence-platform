@@ -536,6 +536,9 @@ def invoke_gmail_extra_tool(
         if not isinstance(raw_ids, list) or not raw_ids:
             raise ValueError("message_ids deve ser lista não vazia")
         message_ids = [str(i).strip() for i in raw_ids if str(i).strip()][:1000]
+        if not message_ids:
+            raise ValueError("message_ids não contém IDs válidos (apenas strings vazias)")
+
         body: dict[str, Any] = {"ids": message_ids}
         add_labels = args.get("add_labels")
         remove_labels = args.get("remove_labels")

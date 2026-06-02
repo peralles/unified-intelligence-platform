@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from integrator.config import settings
+
+_store_lock = threading.Lock()
 
 RUNTIME_VERSION = 1
 
@@ -95,9 +98,10 @@ class RuntimeStore:
         )
 
     def patch(self, patch: dict[str, Any]) -> dict[str, Any]:
-        current = self.load()
-        updated = _deep_merge(current, patch)
-        self.save(updated)
+        with _store_lock:
+            current = self.load()
+            updated = _deep_merge(current, patch)
+            self.save(updated)
         return updated
 
     def parse_ignore_lines(self, text: str) -> list[str]:

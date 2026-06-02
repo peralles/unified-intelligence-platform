@@ -239,6 +239,8 @@ def invoke_google_tool(name: str, arguments: dict[str, Any] | None) -> str:
         registry = build_live_tools(account_id)
     except GoogleAuthError:
         _finish(success=False, error_kind="auth")
+        from integrator.providers.tool_cache import invalidate_live_tools
+        invalidate_live_tools(account_id)
         raise
 
     tool = registry.get(name)
@@ -249,7 +251,7 @@ def invoke_google_tool(name: str, arguments: dict[str, Any] | None) -> str:
     args = lc_args
     try:
         result = tool.invoke(args)
-    except Exception as exc:
+    except Exception:
         _finish(success=False, error_kind="execution")
         from integrator.logging_setup import get_logger
 
@@ -258,7 +260,7 @@ def invoke_google_tool(name: str, arguments: dict[str, Any] | None) -> str:
             name,
             account_id,
         )
-        raise exc
+        raise
 
     _finish(success=True)
     if isinstance(result, str):

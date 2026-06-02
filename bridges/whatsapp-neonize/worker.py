@@ -258,6 +258,7 @@ class NeonizeWorker:
         self.state = SessionState()
         self._connect_thread: threading.Thread | None = None
         self._pairing = False
+        self._pairing_lock = threading.Lock()
         self._cache_store: Any = None
         if os.environ.get("INTEGRATOR_WHATSAPP_PERSIST_CACHE", "true").lower() in (
             "1",
@@ -551,13 +552,9 @@ class NeonizeWorker:
             if not any(m.message_id == msg.message_id for m in bucket):
                 bucket.append(msg)
                 bucket.sort(key=lambda m: m.timestamp)
-                max_cached = int(
-                    os.environ.get("INTEGRATOR_WHATSAPP_MAX_CACHED_MESSAGES_PER_CHAT", "5000")
-                )
                 max_cached = self._max_cached_per_chat()
                 if len(bucket) > max_cached:
                     self.state.messages[chat_id] = bucket[-max_cached:]
-            self._persist_cached_message(msg)
 
             entry = self.state.chats.get(chat_id)
             if entry is None:
@@ -572,6 +569,9 @@ class NeonizeWorker:
                 entry.last_message_preview = preview
             if not source.IsFromMe:
                 entry.unread_count += 1
+
+        # SQLite write outside the lock to avoid starvation under message bursts
+        self._persist_cached_message(msg)
 
         # Auto-transcribe audio (private chats by default; sent + received unless ONLY_INCOMING)
         is_group = bool(source.IsGroup) or _is_group_chat_id(chat_id)
@@ -637,7 +637,7 @@ class NeonizeWorker:
         """On-demand transcription for a cached audio message (RPC call)."""
         if not self.client.is_logged_in:
             raise WorkerError("WhatsApp não conectado.")
-        if self._transcribe_private_only and _is_group_chat_id(chat_id):
+        if self._effective_private_only() and _is_group_chat_id(chat_id):
             raise WorkerError(
                 "Transcrição desabilitada para grupos (@g.us). "
                 "Use chat privado ou defina INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY=false."
@@ -760,11 +760,12 @@ class NeonizeWorker:
 
     def pair_start(self) -> dict[str, Any]:
         """Non-blocking pair: start connect thread; poll with pair_poll."""
-        if not self._pairing:
-            self._pairing = True
-            self._reset_pair_state()
-            thread = threading.Thread(target=self.client.connect, daemon=True)
-            thread.start()
+        with self._pairing_lock:
+            if not self._pairing:
+                self._pairing = True
+                self._reset_pair_state()
+                thread = threading.Thread(target=self.client.connect, daemon=True)
+                thread.start()
         return self.pair_poll()
 
     def pair_poll(self) -> dict[str, Any]:
@@ -1098,13 +1099,15 @@ class NeonizeWorker:
                     m for m in bucket if m.message_id != mid
                 ]
 
+        with self.state.lock:
+            cache_remaining = len(self.state.messages.get(chat_id, []))
         return {
             "chat_id": chat_id,
             "mode": "for_me",
             "deleted": deleted,
             "failed": failed,
             "deleted_count": len(deleted),
-            "cache_remaining": len(self.state.messages.get(chat_id, [])),
+            "cache_remaining": cache_remaining,
         }
 
     def request_chat_history(

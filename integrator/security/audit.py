@@ -50,27 +50,20 @@ def log_tool_invocation(
     enqueue_audit_line(line)
 
     if success:
-        _get_tools_logger().info(
-            "tool OK | %s | account=%s | %.1fms",
-            tool_name,
-            account_id or "-",
-            duration_ms,
-        )
+        if settings.log_tool_success:
+            _get_tools_logger().info(
+                "tool OK | %s | account=%s | %.1fms",
+                tool_name,
+                account_id or "-",
+                duration_ms,
+            )
         return
 
-    if not success:
-        _get_tools_logger().warning(
-            "tool FAIL | %s | account=%s | error=%s | blocked=%s | %.1fms",
-            tool_name,
-            account_id or "-",
-            error_kind or "unknown",
-            blocked,
-            duration_ms,
-        )
-    elif settings.log_tool_success:
-        _get_tools_logger().info(
-            "tool ok | %s | account=%s | %.1fms",
-            tool_name,
-            account_id or "-",
-            duration_ms,
-        )
+    _get_tools_logger().warning(
+        "tool FAIL | %s | account=%s | error=%s | blocked=%s | %.1fms",
+        tool_name,
+        account_id or "-",
+        error_kind or "unknown",
+        blocked,
+        duration_ms,
+    )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,8 @@ from integrator.config import settings
 
 ACCOUNT_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 REGISTRY_VERSION = 1
+
+_registry_lock = threading.Lock()
 
 
 class AccountNotFoundError(Exception):
@@ -121,15 +124,16 @@ def get_account(account_id: str) -> AccountInfo:
 
 def add_account(account_id: str, *, label: str | None = None, email: str | None = None) -> AccountInfo:
     aid = validate_account_id(account_id)
-    data = _load_raw()
-    accounts = data.setdefault("accounts", {})
-    accounts[aid] = {
-        "label": label or aid,
-        "email": email,
-    }
-    if not data.get("default_account"):
-        data["default_account"] = aid
-    _save_raw(data)
+    with _registry_lock:
+        data = _load_raw()
+        accounts = data.setdefault("accounts", {})
+        accounts[aid] = {
+            "label": label or aid,
+            "email": email,
+        }
+        if not data.get("default_account"):
+            data["default_account"] = aid
+        _save_raw(data)
     settings.token_path_for(aid).parent.mkdir(parents=True, exist_ok=True)
     invalidate_metadata_cache_only()
     return get_account(aid)
@@ -143,18 +147,20 @@ def invalidate_metadata_cache_only() -> None:
 
 def update_account_email(account_id: str, email: str) -> None:
     aid = validate_account_id(account_id)
-    data = _load_raw()
-    if aid not in (data.get("accounts") or {}):
-        raise AccountNotFoundError(f"Conta '{aid}' não existe.")
-    data["accounts"][aid]["email"] = email
-    _save_raw(data)
+    with _registry_lock:
+        data = _load_raw()
+        if aid not in (data.get("accounts") or {}):
+            raise AccountNotFoundError(f"Conta '{aid}' não existe.")
+        data["accounts"][aid]["email"] = email
+        _save_raw(data)
 
 
 def set_default_account(account_id: str) -> AccountInfo:
     account = get_account(account_id)
-    data = _load_raw()
-    data["default_account"] = account.id
-    _save_raw(data)
+    with _registry_lock:
+        data = _load_raw()
+        data["default_account"] = account.id
+        _save_raw(data)
     return account
 
 
@@ -169,17 +175,18 @@ def get_default_account_id() -> str | None:
 
 def remove_account(account_id: str) -> None:
     aid = validate_account_id(account_id)
-    data = _load_raw()
-    accounts = data.get("accounts") or {}
-    if aid not in accounts:
-        raise AccountNotFoundError(f"Conta '{aid}' não existe.")
-    del accounts[aid]
-    token = settings.token_path_for(aid)
-    if token.is_file():
-        token.unlink()
-    if data.get("default_account") == aid:
-        data["default_account"] = next(iter(accounts), None)
-    _save_raw(data)
+    with _registry_lock:
+        data = _load_raw()
+        accounts = data.get("accounts") or {}
+        if aid not in accounts:
+            raise AccountNotFoundError(f"Conta '{aid}' não existe.")
+        del accounts[aid]
+        token = settings.token_path_for(aid)
+        if token.is_file():
+            token.unlink()
+        if data.get("default_account") == aid:
+            data["default_account"] = next(iter(accounts), None)
+        _save_raw(data)
     _invalidate_caches(aid)
 
 
