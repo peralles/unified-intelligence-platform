@@ -446,3 +446,393 @@ body::before {
   color: var(--accent);
   background: var(--accent-glow);
 }
+
+/* ─── Nav enhancements ──────────────────────────────────────────────────── */
+
+.nav-icon {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.nav-label {
+  flex: 1;
+}
+
+.nav-badge {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  font-size: 0;
+  flex-shrink: 0;
+}
+
+.nav-badge--ok   { background: var(--ok); }
+.nav-badge--warn { background: var(--warn); }
+.nav-badge--err  { background: var(--err); }
+
+/* ─── Sidebar extras ────────────────────────────────────────────────────── */
+
+.brand-mark {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.sidebar__footer {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar__footer .btn {
+  width: 100%;
+}
+
+/* ─── Header extras ─────────────────────────────────────────────────────── */
+
+.main__header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.last-updated {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+/* ─── Status banner ─────────────────────────────────────────────────────── */
+
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+  animation: fadeUp 0.3s ease both;
+}
+
+.status-banner--ok {
+  background: rgba(61, 214, 140, 0.08);
+  border-color: rgba(61, 214, 140, 0.3);
+  color: var(--ok);
+}
+
+.status-banner--warn {
+  background: rgba(245, 185, 66, 0.08);
+  border-color: rgba(245, 185, 66, 0.3);
+  color: var(--warn);
+}
+
+.status-banner--err {
+  background: rgba(240, 113, 120, 0.08);
+  border-color: rgba(240, 113, 120, 0.3);
+  color: var(--err);
+}
+
+.banner-icon {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ─── Status cards (dashboard grid) ────────────────────────────────────── */
+
+.status-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 720px) {
+  .status-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 720px) {
+  .status-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.status-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: fadeUp 0.35s ease both;
+}
+
+.status-card--ok   { border-top: 3px solid var(--ok); }
+.status-card--warn { border-top: 3px solid var(--warn); }
+.status-card--err  { border-top: 3px solid var(--err); }
+
+.status-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.status-card__title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.status-card__detail {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  flex: 1;
+}
+
+/* ─── Badge (inline status chip) ───────────────────────────────────────── */
+
+.badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.badge--ok {
+  background: rgba(61, 214, 140, 0.15);
+  color: var(--ok);
+}
+
+.badge--warn {
+  background: rgba(245, 185, 66, 0.15);
+  color: var(--warn);
+}
+
+.badge--err {
+  background: rgba(240, 113, 120, 0.15);
+  color: var(--err);
+}
+
+/* ─── URL row ───────────────────────────────────────────────────────────── */
+
+.url-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.url-code {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Setup steps (wizard) ──────────────────────────────────────────────── */
+
+.setup-steps {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.setup-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.35rem 0;
+}
+
+.step-icon {
+  display: inline-block;
+  width: 1.2em;
+  text-align: center;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.step-done {
+  color: var(--ok);
+}
+
+.step-todo {
+  color: var(--muted);
+}
+
+/* ─── Code block ────────────────────────────────────────────────────────── */
+
+.code-block {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.65rem 0.9rem;
+  color: var(--text);
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0.5rem 0;
+}
+
+/* ─── MCP / view helpers ────────────────────────────────────────────────── */
+
+.mcp-checks {
+  margin: 0.5rem 0;
+}
+
+.view-placeholder {
+  padding: 1rem 0;
+  text-align: center;
+}
+
+/* ─── Check group ───────────────────────────────────────────────────────── */
+
+.check-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* ─── Config save bar ───────────────────────────────────────────────────── */
+
+.config-save-bar {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1.15rem;
+}
+
+.dirty-hint {
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem !important;
+}
+
+/* ─── Tool list ─────────────────────────────────────────────────────────── */
+
+.tool-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  break-inside: avoid;
+}
+
+.tool-item:last-child {
+  border-bottom: none;
+}
+
+.tool-name {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+
+.tool-desc {
+  font-size: 0.73rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+/* ─── Table extras ──────────────────────────────────────────────────────── */
+
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+
+.empty-cell {
+  text-align: center;
+  color: var(--muted);
+  font-style: italic;
+  padding: 0.75rem !important;
+}
+
+.td-actions {
+  white-space: nowrap;
+}
+
+/* ─── Checklist (redesign) ──────────────────────────────────────────────── */
+
+.checklist__item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.checklist__item:last-child {
+  border-bottom: none;
+}
+
+.chk-icon {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  width: 1.2em;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.chk--ok    { color: var(--ok); }
+.chk--falta { color: var(--err); }
+.chk--aviso { color: var(--warn); }
+.chk--info  { color: var(--muted); }
+
+.chk-body {
+  font-size: 0.84rem;
+  flex: 1;
+}
+
+.chk-label {
+  font-weight: 500;
+}
+
+.chk-detail {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.chk-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-style: italic;
+}

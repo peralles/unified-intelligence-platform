@@ -1,24 +1,31 @@
-/** @typedef {{ show: (msg: string, kind?: string) => void }} Toast */
+let _toastEl = null;
+let _toastTimer = null;
+const _queue = [];
+let _showing = false;
 
-/** @type {Toast | null} */
-let toastRef = null;
-
-export function bindToast(el) {
-  toastRef = {
-    show(msg, kind = "") {
-      el.textContent = msg;
-      el.className = "toast" + (kind ? ` toast--${kind}` : "");
-      el.style.display = "block";
-      clearTimeout(el._t);
-      el._t = setTimeout(() => {
-        el.style.display = "none";
-      }, 5000);
-    },
-  };
+function _next() {
+  if (_showing || _queue.length === 0 || !_toastEl) return;
+  const { msg, kind, dur } = _queue.shift();
+  _showing = true;
+  _toastEl.textContent = msg;
+  _toastEl.className = `toast${kind ? ` toast--${kind}` : ""}`;
+  _toastEl.style.display = "block";
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    _toastEl.style.display = "none";
+    _showing = false;
+    _next();
+  }, dur || 4000);
 }
 
-export function toast(msg, kind = "") {
-  toastRef?.show(msg, kind);
+export function bindToast(el) {
+  _toastEl = el;
+}
+
+export function toast(msg, kind = "", dur) {
+  if (!_toastEl) return;
+  _queue.push({ msg, kind, dur });
+  _next();
 }
 
 export async function api(path, opts = {}) {
