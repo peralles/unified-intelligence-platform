@@ -178,7 +178,9 @@ def run_http_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
         host,
         port,
     )
-    config = uvicorn.Config(app, host=host, port=port, log_level="info")
+    # proxy_headers=True trusts X-Forwarded-For/Proto from Caddy/Nginx so that
+    # client IPs appear correctly in logs when running behind a reverse proxy.
+    config = uvicorn.Config(app, host=host, port=port, log_level="info", proxy_headers=True)
     asyncio.run(uvicorn.Server(config).serve())
 
 
