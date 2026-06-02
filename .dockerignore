@@ -1,0 +1,43 @@
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Virtual environments (rebuilt in Docker)
+.venv
+bridges/whatsapp-neonize/.venv
+
+# Sensitive / local-only files
+.env
+.env.*
+!.env.example
+credentials/
+data/
+
+# Dev / IDE
+.cursor/
+.memory/
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+# Node / frontend build artifacts (included via COPY . .)
+integrator/admin/ui/node_modules/
+
+# Documentation build artifacts
+docs/*.pdf
+site/
+
+# Test artifacts
+htmlcov/
+.coverage
+coverage.xml

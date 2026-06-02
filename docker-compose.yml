@@ -1,0 +1,63 @@
+# docker-compose.yml — local development and Coolify deployment
+#
+# Production (Coolify / VPS):
+#   1. Copy config/integrator.example.env.docker → .env and fill in values
+#   2. Place credentials/credentials.json (Google OAuth client secret)
+#   3. docker compose up -d
+#   4. Open http://YOUR_HOST:17320/admin  (or the Coolify domain)
+#
+# Local development:
+#   docker compose up --build
+
+services:
+  integrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: integrator:latest
+    container_name: integrator
+    restart: unless-stopped
+    ports:
+      - "${INTEGRATOR_PORT:-17320}:17320"
+    volumes:
+      - integrator_data:/app/data
+      # Mount credentials as read-only; upload client_secret.json via admin UI instead
+      - ./credentials:/app/credentials:ro
+    environment:
+      # ── Service binding ──────────────────────────────────────────────────
+      INTEGRATOR_SERVICE_HOST: "0.0.0.0"
+      INTEGRATOR_SERVICE_PORT: "17320"
+
+      # ── Admin auth (required for public/VPS deployment) ───────────────────
+      INTEGRATOR_ADMIN_USERNAME: "${INTEGRATOR_ADMIN_USERNAME:-admin}"
+      INTEGRATOR_ADMIN_PASSWORD: "${INTEGRATOR_ADMIN_PASSWORD:?Set INTEGRATOR_ADMIN_PASSWORD in .env}"
+
+      # ── Allowed hosts for reverse proxy (comma-separated) ─────────────────
+      # Example: "myapp.coolify.io,myapp.example.com"
+      INTEGRATOR_ALLOWED_HOSTS: "${INTEGRATOR_ALLOWED_HOSTS:-}"
+
+      # ── WhatsApp transcription (CPU via faster-whisper) ───────────────────
+      INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE: "${INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE:-false}"
+      # Model: large-v3-turbo (default, good quality+speed), small (faster, less accurate)
+      INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL: "${INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL:-large-v3-turbo}"
+      INTEGRATOR_WHATSAPP_TRANSCRIBE_LANGUAGE: "${INTEGRATOR_WHATSAPP_TRANSCRIBE_LANGUAGE:-}"
+      INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY: "${INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY:-true}"
+      INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING: "${INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING:-false}"
+
+      # ── Logging ────────────────────────────────────────────────────────────
+      INTEGRATOR_LOG_LEVEL: "${INTEGRATOR_LOG_LEVEL:-INFO}"
+
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:17320/health').read()"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  integrator_data:
+    driver: local

@@ -188,42 +188,52 @@ class StoredMessage:
     is_audio: bool = False
 
 
+def _resolve_model_id(model_id: str) -> str:
+    """Strip mlx-community/ prefix for migration from mlx-whisper model names."""
+    if model_id.startswith("mlx-community/"):
+        return model_id[len("mlx-community/"):]
+    return model_id
+
+
 class AudioTranscriber:
-    """Local Whisper transcription via mlx-whisper (Apple Silicon)."""
+    """Local Whisper transcription via faster-whisper (CPU-compatible, all platforms)."""
 
     def __init__(self, model_id: str, language: str | None = None) -> None:
-        self.model_id = model_id
+        self.model_id = _resolve_model_id(model_id)
         self.language = language or None
-        self._ready = False
-        self._error: str | None = None
+        self._model: Any = None
 
-    def _ensure_ready(self) -> None:
-        if self._ready:
+    def _ensure_model(self) -> None:
+        if self._model is not None:
             return
         try:
-            import mlx_whisper  # noqa: F401
-            self._ready = True
-        except ImportError as exc:
-            self._error = (
-                f"mlx-whisper não instalado no venv do bridge. "
-                f"Execute: cd bridges/whatsapp-neonize && uv add mlx-whisper  ({exc})"
+            from faster_whisper import WhisperModel
+
+            self._model = WhisperModel(
+                self.model_id,
+                device="cpu",
+                compute_type="int8",
             )
-            raise RuntimeError(self._error) from exc
+            logging.info("[transcribe] faster-whisper model loaded | model=%s", self.model_id)
+        except ImportError as exc:
+            raise RuntimeError(
+                f"faster-whisper não instalado no venv do bridge. "
+                f"Execute: cd bridges/whatsapp-neonize && uv sync  ({exc})"
+            ) from exc
 
     def transcribe(self, audio_path: str) -> str:
-        self._ensure_ready()
-        import mlx_whisper
+        self._ensure_model()
 
-        result = mlx_whisper.transcribe(
+        segments, _info = self._model.transcribe(
             audio_path,
-            path_or_hf_repo=self.model_id,
             language=self.language,
-            verbose=False,
-            fp16=True,
+            beam_size=5,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 500},
         )
         from transcribe_cleanup import trim_whisper_repetition
 
-        raw = (result.get("text") or "").strip()
+        raw = " ".join(seg.text for seg in segments).strip()
         cleaned = trim_whisper_repetition(raw)
         if cleaned != raw:
             logging.info(
