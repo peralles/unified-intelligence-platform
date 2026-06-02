@@ -30,12 +30,14 @@ logger = get_logger("http")
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 17320
 
-# Paths that bypass Basic Auth (MCP protocol endpoints, health check)
-_AUTH_BYPASS_PREFIXES = ("/sse", "/mcp", "/messages/", "/health")
+# Only the health probe bypasses auth — everything else (admin AND MCP) requires credentials.
+# Hermes/Claude connect to /sse or /mcp using credentials embedded in the URL:
+#   http://user:pass@host:port/sse
+_AUTH_BYPASS_PATHS = frozenset({"/health"})
 
 
 class _BasicAuthMiddleware(BaseHTTPMiddleware):
-    """HTTP Basic Auth guarding admin routes; MCP/SSE/health endpoints bypass auth."""
+    """HTTP Basic Auth protecting all routes; only /health is exempt for Docker health checks."""
 
     def __init__(self, app: ASGIApp, username: str, password: str) -> None:
         super().__init__(app)
@@ -44,7 +46,7 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         path = request.url.path
-        if any(path == p or path.startswith(p) for p in _AUTH_BYPASS_PREFIXES):
+        if path in _AUTH_BYPASS_PATHS:
             return await call_next(request)
 
         auth = request.headers.get("Authorization", "")
