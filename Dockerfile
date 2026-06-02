@@ -1,35 +1,43 @@
-# syntax=docker/dockerfile:1
-# Multi-stage build: keeps the final image slim (~1 GB with faster-whisper model).
+# syntax=docker/dockerfile:1.7
+# ─────────────────────────────────────────────────────────────────────────────
+# Smallest viable base: python:3.12-slim-bookworm (Debian Bookworm minimal).
+# Alpine is NOT viable — neonize and CTranslate2 require glibc (not musl).
+# ─────────────────────────────────────────────────────────────────────────────
+
+ARG UV_VERSION=0.8.17
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
 
 # ─── Stage 1: build main venv ────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+FROM ${PYTHON_IMAGE} AS builder
 
 WORKDIR /app
 
-# System build deps (neonize pulls libstdc++ at runtime; faster-whisper needs nothing at build)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-ENV UV_LINK_MODE=copy
+COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
 
-# Cache deps layer: copy lockfiles first
+ENV UV_LINK_MODE=copy \
+    UV_NO_CACHE=1
+
+# Dependency layer — only invalidated when lockfiles change
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-# Copy source and do final install
+# Source layer
 COPY integrator/ ./integrator/
 RUN uv sync --frozen --no-dev
 
-# ─── Stage 2: build bridge venv ──────────────────────────────────────────────
-FROM python:3.12-slim AS bridge-builder
+# ─── Stage 2: build bridge venv (isolated protobuf 7.x) ──────────────────────
+FROM ${PYTHON_IMAGE} AS bridge-builder
 
 WORKDIR /bridge
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-ENV UV_LINK_MODE=copy
+COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
+
+ENV UV_LINK_MODE=copy \
+    UV_NO_CACHE=1
 
 COPY bridges/whatsapp-neonize/pyproject.toml bridges/whatsapp-neonize/uv.lock ./
 RUN uv sync --frozen --no-install-project
@@ -37,58 +45,76 @@ RUN uv sync --frozen --no-install-project
 COPY bridges/whatsapp-neonize/ ./
 RUN uv sync --frozen
 
-# ─── Stage 3: final runtime image ────────────────────────────────────────────
-FROM python:3.12-slim
+# ─── Stage 3: minimal runtime image ─────────────────────────────────────────
+FROM ${PYTHON_IMAGE}
 
 LABEL org.opencontainers.image.title="Unified Intelligence Platform — Integrator"
 LABEL org.opencontainers.image.description="MCP server + WhatsApp bridge + admin console"
+LABEL org.opencontainers.image.source="https://github.com/peralles/unified-intelligence-platform"
 
-# Runtime system deps:
+# Runtime deps only — no build tools in final image:
 #   ffmpeg        — audio decoding for faster-whisper transcription
-#   libsndfile1   — libsndfile used by soundfile (faster-whisper dep)
-#   ca-certificates — TLS for outbound Google/WhatsApp connections
+#   libsndfile1   — soundfile dependency of faster-whisper
+#   ca-certificates — TLS for outbound Google API / WhatsApp connections
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# uv is kept at runtime only to launch the bridge subprocess via
+# "uv run --directory bridges/whatsapp-neonize python worker.py"
+ARG UV_VERSION=0.8.17
+COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy built venvs from builders
-COPY --from=builder /app/.venv ./.venv
-COPY --from=bridge-builder /bridge/.venv ./bridges/whatsapp-neonize/.venv
+# Copy pre-built venvs
+COPY --from=builder        /app/.venv                              ./.venv
+COPY --from=bridge-builder /bridge/.venv                           ./bridges/whatsapp-neonize/.venv
 
-# Copy all source
+# Copy application source
 COPY --from=builder /app/integrator ./integrator
 COPY . .
 
-# Persistent data dirs — mount these as a Docker volume in production
+# Non-root user — reduces attack surface if a dependency is compromised
+RUN groupadd --gid 1000 app && \
+    useradd  --uid 1000 --gid app --no-create-home --shell /sbin/nologin app
+
+# Pre-create data dirs and assign ownership so Docker seeds named volumes
+# with the correct permissions on first mount
 RUN mkdir -p \
-    /app/data/logs \
-    /app/data/admin \
-    /app/data/tokens \
-    /app/data/whatsapp \
-    /app/credentials
+        /app/data/logs \
+        /app/data/admin \
+        /app/data/tokens \
+        /app/data/whatsapp \
+        /app/credentials \
+    && chown -R app:app /app
 
-# ─── Environment defaults ────────────────────────────────────────────────────
-# Override INTEGRATOR_SERVICE_HOST via env for local dev (default stays 0.0.0.0 in container)
-ENV INTEGRATOR_SERVICE_HOST=0.0.0.0
-ENV INTEGRATOR_SERVICE_PORT=17320
-# Disable macOS LaunchAgent-related codepaths on Linux
-ENV INTEGRATOR_SKIP_MACOS_SERVICE=1
-# Path used by the bridge process to locate the runtime config
-ENV INTEGRATOR_ADMIN_RUNTIME_FILE=/app/data/admin/runtime.json
+USER app
 
-ENV PATH="/app/.venv/bin:$PATH"
+# ─── Runtime environment ─────────────────────────────────────────────────────
+ENV INTEGRATOR_SERVICE_HOST=0.0.0.0 \
+    INTEGRATOR_SERVICE_PORT=17320 \
+    INTEGRATOR_SKIP_MACOS_SERVICE=1 \
+    INTEGRATOR_ADMIN_RUNTIME_FILE=/app/data/admin/runtime.json \
+    PATH="/app/.venv/bin:$PATH" \
+    # uv: don't sync at runtime (venv already built), no cache writes
+    UV_FROZEN=1 \
+    UV_NO_CACHE=1 \
+    # Python: no .pyc files (read-only filesystem safe), unbuffered stdout
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 EXPOSE 17320
 
 VOLUME ["/app/data", "/app/credentials"]
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:17320/health').read()"
+    CMD python -c \
+        "import urllib.request; urllib.request.urlopen('http://localhost:17320/health').read()"
 
-ENTRYPOINT ["uv", "run", "integrator", "serve-http", "--host", "0.0.0.0", "--port", "17320"]
+# Call the venv binary directly — avoids uv resolver overhead at startup
+ENTRYPOINT ["/app/.venv/bin/integrator", "serve-http", \
+            "--host", "0.0.0.0", "--port", "17320"]
