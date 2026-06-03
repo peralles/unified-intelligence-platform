@@ -549,12 +549,7 @@ class NeonizeWorker:
             return False
         user, server = _split_chat_jid(entry.chat_id)
         jid_digits = user if server == "s.whatsapp.net" else None
-        return phone_digits_match(
-            q_digits,
-            payload.get("phone"),
-            jid_digits,
-            entry.chat_id,
-        )
+        return phone_digits_match(q_digits, payload.get("phone"), jid_digits)
 
     def _chat_to_dict(self, entry: ChatEntry) -> dict[str, Any]:
         phone = self._chat_phone(entry)

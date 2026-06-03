@@ -1,6 +1,6 @@
 # Integrador LangChain → Hermes
 
-Servidor **MCP local** (Python) que expõe as **12 ferramentas oficiais** LangChain de **Gmail** e **Google Calendar**, com OAuth Google unificado e **várias contas**, para o agente [Hermes](https://dev.to/emmanuelthecoder/hermes-the-self-improving-agent-you-can-actually-run-yourself-555l).
+Servidor **MCP local** (Python) com **66 tools** — **Gmail** e **Google Calendar** (LangChain + extras), **WhatsApp** (neonize) e setup **Hermes / Claude Desktop** — para o agente [Hermes](https://dev.to/emmanuelthecoder/hermes-the-self-improving-agent-you-can-actually-run-yourself-555l). OAuth Google multi-conta; WhatsApp via console admin (QR).
 
 | Item | Valor |
 |------|--------|
@@ -415,7 +415,7 @@ Guia completo de implantação (Coolify, transcrição CPU, segurança, backup):
 ```bash
 uv run ruff check integrator tests
 uv run pytest -q --tb=short
-./scripts/validate.sh    # sync + ruff + pytest + smokes (12 tools, MCP, latência)
+./scripts/validate.sh    # sync + ruff + pytest + smokes (66 tools, MCP, latência)
 ```
 
 Relatório detalhado: [`docs/AVALIACAO_QUALIDADE_PERFORMANCE.md`](docs/AVALIACAO_QUALIDADE_PERFORMANCE.md).
@@ -430,6 +430,8 @@ Instruções para agentes de código: [`AGENTS.md`](AGENTS.md) (memória persist
 |---------|----------|
 | [AGENTS.md](AGENTS.md) | Instruções para agentes + `.memory/` |
 | [docs/DOCKER.md](docs/DOCKER.md) | Implantação Docker — VPS, Coolify, migração de tokens |
+| [docs/WHATSAPP.md](docs/WHATSAPP.md) | WhatsApp (neonize, tools, busca por telefone) |
+| [docs/ADMIN.md](docs/ADMIN.md) | Console admin (`/admin`) |
 | [docs/CLI.md](docs/CLI.md) | Referência CLI (espelho resumido) |
 | [docs/PLANO_LANGCHAIN_HERMES.md](docs/PLANO_LANGCHAIN_HERMES.md) | Arquitetura e decisões |
 | [docs/ATIVIDADES_IMPLANTACAO.md](docs/ATIVIDADES_IMPLANTACAO.md) | Checklist de implantação |

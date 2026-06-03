@@ -1,6 +1,6 @@
 # Plano de implementação — operações Hermes (ordem de velocidade)
 
-**Status:** lote 6 em branch (65 tools).
+**Status:** 66 tools na `main` (incl. busca WhatsApp por telefone).
 
 ## Fase 4 — Lote 3 (mídia e Gmail)
 

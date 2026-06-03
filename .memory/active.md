@@ -1,6 +1,6 @@
 # Contexto ativo
 
-Última atualização: branch `feat/admin-ui-v2` — admin UI Vite + seams setup/preflight.
+Última atualização: merge `fix(whatsapp)` na `main` — busca de chats por telefone/`@lid` + docs 66 tools.
 
 ## Estado
 

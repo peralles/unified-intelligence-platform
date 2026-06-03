@@ -1,6 +1,6 @@
 # WhatsApp no integrator (Hermes)
 
-Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.com/krypton-byte/neonize)), exposta como **17 tools MCP** no mesmo servidor que Gmail/Calendar.
+Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.com/krypton-byte/neonize)), exposta como **40 tools MCP** no mesmo servidor que Gmail/Calendar.
 
 ## Arquitetura
 
@@ -11,7 +11,7 @@ Integração **local** com WhatsApp Web (Baileys via [neonize](https://github.co
 ```
 Hermes ──stdio──► integrator serve ──► providers/tools.py
                               ├── google_tools (12)
-                              └── whatsapp_tools (17) ──► bridge_client ──► worker.py (neonize)
+                              └── whatsapp_tools (40) ──► bridge_client ──► worker.py (neonize)
 ```
 
 ## Pré-requisitos (macOS)
@@ -60,7 +60,7 @@ Mesmo padrão do integrator (`data/logs/`):
 
 Diagnóstico: `integrator logs --failures`
 
-## Tools MCP (39)
+## Tools MCP (40)
 
 | Tool | Confirmação |
 |------|-------------|
@@ -84,7 +84,14 @@ Diagnóstico: `integrator logs --failures`
 | `archive_whatsapp_chat` / `pin_whatsapp_chat` / `mark_whatsapp_read` / `mute_whatsapp_chat` | não |
 | `send_whatsapp_typing` | não (usar com moderação) |
 
-Total com Google: **65 tools** (12 LangChain + 13 Gmail extra + 1 Calendar extra + 39 WhatsApp).
+Total com Google: **66 tools** (12 LangChain + 13 Gmail extra + 1 Calendar extra + 40 WhatsApp).
+
+### Busca de chats (`find_whatsapp_chats`)
+
+- Aceita **nome**, trecho de `chat_id`, ou **telefone** com ou sem formatação (`+55 (19) 99203-4333`, `5519992034333`, etc.).
+- Chats privados `@lid`: o worker resolve `phone` via neonize quando possível; busca compara dígitos normalizados (não só substring no texto).
+- Após reinício do worker, entradas do índice de chats são **reidratadas** a partir do cache SQLite de mensagens (última mensagem por chat).
+- Se a query tiver **≥10 dígitos** e nenhum chat local coincidir, retorna um candidato sintético `{digits}@s.whatsapp.net` para o agente iniciar conversa (confirme `chat_id` real com `list_whatsapp_chats` após a primeira mensagem).
 
 ### Cache persistente
 
@@ -144,4 +151,5 @@ Não há `docker-compose` Evolution no repositório por padrão; documente local
 | Erro `libmagic` | `brew install libmagic` |
 | Worker não inicia | `cd bridges/whatsapp-neonize && uv sync` |
 | Hermes não vê tools novas | `/reload-mcp` ou nova conversa |
+| `find_whatsapp_chats` não acha por número | Use dígitos completos (DDD+celular); confira se o chat já está no cache (`sync_whatsapp_chat_history`) |
 | Desligar WhatsApp no MCP | `INTEGRATOR_WHATSAPP_ENABLED=false` |
