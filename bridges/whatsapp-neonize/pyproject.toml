@@ -8,16 +8,16 @@ version = "0.1.0"
 description = "Isolated neonize worker for integrator WhatsApp tools (protobuf 7.x)"
 requires-python = ">=3.11"
 dependencies = [
-  "mlx-whisper>=0.4.3",
+  "faster-whisper>=1.0.0",
   "neonize>=0.3.17",
   "protobuf>=7.34.1,<8",
   "segno>=1.6",
 ]
 
 [project.optional-dependencies]
-# Apple Silicon (M1/M2/M3) local transcription — install with:
-#   cd bridges/whatsapp-neonize && uv add mlx-whisper
-transcribe = ["mlx-whisper>=0.4"]
+# Apple Silicon (M1/M2/M3) — use mlx-whisper for hardware-accelerated transcription:
+#   cd bridges/whatsapp-neonize && uv add --optional mlx mlx-whisper
+mlx = ["mlx-whisper>=0.4"]
 
 [project.scripts]
 whatsapp-neonize-worker = "worker:main"

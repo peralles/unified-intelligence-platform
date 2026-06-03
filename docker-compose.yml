@@ -1,0 +1,107 @@
+# docker-compose.yml — Coolify / VPS deployment
+# ─────────────────────────────────────────────────────────────────────────────
+# Quick start:
+#   1. cp config/integrator.docker.env .env   # and fill in required values
+#   2. docker compose up -d
+#   3. Open https://<your-domain>/admin
+#
+# Required env vars (set in Coolify UI or .env):
+#   INTEGRATOR_ADMIN_PASSWORD   — strong password for the admin console
+#   INTEGRATOR_ALLOWED_HOSTS    — your subdomain (e.g. integrator.example.com)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  integrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_VERSION: "0.8.17"
+        PYTHON_IMAGE: "python:3.12-slim-bookworm"
+    image: integrator:latest
+    container_name: integrator
+    restart: unless-stopped
+
+    # ── Security hardening ──────────────────────────────────────────────────
+    # Runs as UID/GID 1000 (non-root user "app" created in Dockerfile).
+    # Named volumes are seeded from image contents on first create, so the
+    # app:app ownership set in the Dockerfile carries over automatically.
+    user: "1000:1000"
+
+    security_opt:
+      - no-new-privileges:true   # prevent setuid/setcap escalation
+
+    cap_drop:
+      - ALL                      # drop every Linux capability
+
+    # read_only: true + tmpfs for /tmp (audio transcription temp files)
+    # The named volume /app/data and bind-mount /app/credentials remain
+    # writable even with read_only: true.
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=256m,noexec,nosuid
+
+    # ── Network ─────────────────────────────────────────────────────────────
+    ports:
+      - "${INTEGRATOR_PORT:-17320}:17320"
+
+    # ── Storage ─────────────────────────────────────────────────────────────
+    volumes:
+      # Named volume: WhatsApp session, Google tokens, logs, runtime config.
+      # Back this up periodically — losing it requires re-pairing WhatsApp
+      # and re-authenticating Google.
+      - integrator_data:/app/data
+
+      # Google OAuth client_secret.json — read-only; upload via admin UI
+      # or place the file at ./credentials/credentials.json before first run.
+      - ./credentials:/app/credentials:ro,z
+
+    # ── Environment ─────────────────────────────────────────────────────────
+    environment:
+      # Service binding (always 0.0.0.0 inside container)
+      INTEGRATOR_SERVICE_HOST: "0.0.0.0"
+      INTEGRATOR_SERVICE_PORT: "17320"
+
+      # Admin + MCP authentication — required for public deployment.
+      # Both admin console (/admin) and MCP endpoints (/sse, /mcp) are protected.
+      INTEGRATOR_ADMIN_USERNAME: "${INTEGRATOR_ADMIN_USERNAME:-admin}"
+      INTEGRATOR_ADMIN_PASSWORD: "${INTEGRATOR_ADMIN_PASSWORD:?INTEGRATOR_ADMIN_PASSWORD must be set}"
+
+      # Subdomain / reverse-proxy domain (MCP DNS-rebinding protection).
+      # Set to your Coolify domain, e.g.: integrator.example.com
+      INTEGRATOR_ALLOWED_HOSTS: "${INTEGRATOR_ALLOWED_HOSTS:-}"
+
+      # WhatsApp transcription via faster-whisper (CPU).
+      # Model is downloaded on first audio message (~1–6 GB depending on size).
+      # Recommended for CPU VPS: small (fast) or large-v3-turbo (quality)
+      INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE: "${INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE:-false}"
+      INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL: "${INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL:-large-v3-turbo}"
+      INTEGRATOR_WHATSAPP_TRANSCRIBE_LANGUAGE: "${INTEGRATOR_WHATSAPP_TRANSCRIBE_LANGUAGE:-}"
+      INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY: "${INTEGRATOR_WHATSAPP_TRANSCRIBE_PRIVATE_ONLY:-true}"
+      INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING: "${INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING:-false}"
+
+      # Logging
+      INTEGRATOR_LOG_LEVEL: "${INTEGRATOR_LOG_LEVEL:-INFO}"
+
+    # ── Health check ────────────────────────────────────────────────────────
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:17320/health').read()"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+# ── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  integrator_data:
+    driver: local
+    # To use an NFS or other remote volume in Coolify, replace with:
+    # driver: local
+    # driver_opts:
+    #   type: nfs
+    #   o: addr=<nfs-server>,rw
+    #   device: ":/path/on/nfs"

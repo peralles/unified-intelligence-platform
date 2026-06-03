@@ -40,10 +40,19 @@ class Settings(BaseSettings):
     log_console_enabled: bool = True
     log_tool_success: bool = False
 
-    # Serviço macOS (LaunchAgent + HTTP/SSE)
+    # HTTP service
     service_host: str = "127.0.0.1"
     service_port: int = 17320
     admin_runtime_file: Path | None = None
+
+    # Admin authentication (for VPS/public deployment)
+    # Set INTEGRATOR_ADMIN_USERNAME + INTEGRATOR_ADMIN_PASSWORD to enable Basic Auth
+    admin_username: str | None = None
+    admin_password: str | None = None
+
+    # Allowed hosts for DNS rebinding protection (comma-separated domains/host:port)
+    # Example: "myapp.coolify.io,myapp.example.com"
+    allowed_hosts: str | None = None
 
     @property
     def admin_runtime_path(self) -> Path:
@@ -58,9 +67,9 @@ class Settings(BaseSettings):
     whatsapp_max_cached_messages_per_chat: int = 5000
     whatsapp_persist_cache: bool = True
 
-    # WhatsApp auto-transcription (mlx-whisper, Apple Silicon)
+    # WhatsApp auto-transcription (faster-whisper, CPU-compatible; or mlx-whisper on Apple Silicon)
     whatsapp_auto_transcribe: bool = False
-    whatsapp_transcribe_model: str = "mlx-community/whisper-large-v3-turbo"
+    whatsapp_transcribe_model: str = "large-v3-turbo"
     whatsapp_transcribe_language: str | None = None
     whatsapp_transcribe_prefix: str = "🎙️ "
     whatsapp_transcribe_only_incoming: bool = False

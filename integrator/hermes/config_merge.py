@@ -40,11 +40,29 @@ def build_sse_server_config(
     host: str | None = None,
     port: int | None = None,
 ) -> dict[str, Any]:
-    """Bloco MCP HTTP/SSE (serviço macOS ou serve-http)."""
+    """Bloco MCP HTTP/SSE (serviço macOS ou serve-http).
+
+    When INTEGRATOR_ADMIN_USERNAME/PASSWORD are set the credentials are embedded
+    in the URL so Hermes authenticates automatically:
+    http://user:pass@host:port/sse
+    """
+    import urllib.parse
+
     h = host or settings.service_host
+    # Use 127.0.0.1 for displayed/configured URLs when binding to all interfaces
+    if h in ("0.0.0.0", "::"):
+        h = "127.0.0.1"
     p = port if port is not None else settings.service_port
+
+    if settings.admin_username and settings.admin_password:
+        user = urllib.parse.quote(settings.admin_username, safe="")
+        pwd = urllib.parse.quote(settings.admin_password, safe="")
+        url = f"http://{user}:{pwd}@{h}:{p}/sse"
+    else:
+        url = f"http://{h}:{p}/sse"
+
     return {
-        "url": f"http://{h}:{p}/sse",
+        "url": url,
         "transport": "sse",
     }
 

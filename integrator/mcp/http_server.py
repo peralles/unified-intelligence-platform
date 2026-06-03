@@ -1,9 +1,11 @@
-"""Servidor MCP HTTP/SSE para execução em background (macOS LaunchAgent)."""
+"""MCP HTTP/SSE server — runs as background service (macOS LaunchAgent or Docker)."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+import secrets
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -12,9 +14,11 @@ from mcp.server.sse import SseServerTransport
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Mount, Route
+from starlette.types import ASGIApp
 
 from integrator.admin.routes import admin_routes
 from integrator.config import settings
@@ -26,16 +30,72 @@ logger = get_logger("http")
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 17320
 
+# Only the health probe bypasses auth — everything else (admin AND MCP) requires credentials.
+# Hermes/Claude connect to /sse or /mcp using credentials embedded in the URL:
+#   http://user:pass@host:port/sse
+_AUTH_BYPASS_PATHS = frozenset({"/health"})
+
+
+class _BasicAuthMiddleware(BaseHTTPMiddleware):
+    """HTTP Basic Auth protecting all routes; only /health is exempt for Docker health checks."""
+
+    def __init__(self, app: ASGIApp, username: str, password: str) -> None:
+        super().__init__(app)
+        self._username = username
+        self._password = password
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        path = request.url.path
+        if path in _AUTH_BYPASS_PATHS:
+            return await call_next(request)
+
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(auth[6:]).decode("utf-8", errors="replace")
+                user, _, pwd = decoded.partition(":")
+                if secrets.compare_digest(user, self._username) and secrets.compare_digest(
+                    pwd, self._password
+                ):
+                    return await call_next(request)
+            except Exception:
+                pass
+
+        return Response(
+            "Unauthorized",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="Integrator Admin"'},
+        )
+
 
 def _security_settings(host: str, port: int) -> TransportSecuritySettings:
+    base_hosts = [f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"]
+    base_origins = [
+        f"http://127.0.0.1:{port}",
+        f"http://localhost:{port}",
+        f"http://[::1]:{port}",
+    ]
+
+    # Accept extra hosts/origins configured for VPS/reverse-proxy deployment.
+    # INTEGRATOR_ALLOWED_HOSTS=myapp.coolify.io,myapp.example.com
+    if settings.allowed_hosts:
+        for entry in settings.allowed_hosts.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            # entry may be "domain.com" or "domain.com:port"
+            base_hosts.append(entry)
+            base_origins.extend([f"http://{entry}", f"https://{entry}"])
+
+    # When not binding to localhost, also accept host:port of the bind address.
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        base_hosts.append(f"{host}:{port}")
+        base_origins.append(f"http://{host}:{port}")
+
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=[f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"],
-        allowed_origins=[
-            f"http://127.0.0.1:{port}",
-            f"http://localhost:{port}",
-            f"http://[::1]:{port}",
-        ],
+        allowed_hosts=base_hosts,
+        allowed_origins=base_origins,
     )
 
 
@@ -91,7 +151,7 @@ def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> 
                     logger.warning("whatsapp warm connect failed: %s", exc)
             yield
 
-    return Starlette(
+    app: ASGIApp = Starlette(
         debug=False,
         routes=[
             Route("/sse", endpoint=handle_sse, methods=["GET"]),
@@ -103,6 +163,12 @@ def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> 
         lifespan=lifespan,
     )
 
+    if settings.admin_username and settings.admin_password:
+        app = _BasicAuthMiddleware(app, settings.admin_username, settings.admin_password)
+        logger.info("admin basic auth enabled | user=%s", settings.admin_username)
+
+    return app  # type: ignore[return-value]
+
 
 def run_http_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     setup_logging()
@@ -112,7 +178,9 @@ def run_http_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
         host,
         port,
     )
-    config = uvicorn.Config(app, host=host, port=port, log_level="info")
+    # proxy_headers=True trusts X-Forwarded-For/Proto from Caddy/Nginx so that
+    # client IPs appear correctly in logs when running behind a reverse proxy.
+    config = uvicorn.Config(app, host=host, port=port, log_level="info", proxy_headers=True)
     asyncio.run(uvicorn.Server(config).serve())
 
 

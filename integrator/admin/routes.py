@@ -58,14 +58,16 @@ def _build_state() -> dict[str, Any]:
     runtime = store.load()
     host = settings.service_host
     port = settings.service_port
+    # Use 127.0.0.1 in displayed URLs when binding to all interfaces (0.0.0.0 / ::)
+    display_host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     setup = admin_handlers.setup_status(mode="sse")
     return {
         "service": {
-            "host": host,
+            "host": display_host,
             "port": port,
-            "url_admin": f"http://{host}:{port}/admin",
-            "url_sse": f"http://{host}:{port}/sse",
-            "url_health": f"http://{host}:{port}/health",
+            "url_admin": f"http://{display_host}:{port}/admin",
+            "url_sse": f"http://{display_host}:{port}/sse",
+            "url_health": f"http://{display_host}:{port}/health",
             "root_dir": str(settings.root_dir),
         },
         "paths": {
