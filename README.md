@@ -391,6 +391,25 @@ Prefixo comum: `INTEGRATOR_` (ver `integrator/config.py` e `.env.example`).
 
 ---
 
+## Implantação em VPS / Coolify (Docker)
+
+Para rodar o integrador em uma VPS ou no Coolify, o projeto inclui um `Dockerfile` multi-stage e um `docker-compose.yml` prontos para uso.
+
+```bash
+# Início rápido
+cp config/integrator.docker.env .env        # preencha INTEGRATOR_ADMIN_PASSWORD
+mkdir -p credentials
+cp /caminho/para/client_secret.json credentials/credentials.json
+docker compose up -d
+open http://localhost:17320/admin
+```
+
+**Migrando de instalação local existente?** Se você já tem tokens Google configurados (`data/tokens/*.json`, `data/accounts.yaml`), não precisa refazer a autenticação. Veja as instruções de migração em [`docs/DOCKER.md`](docs/DOCKER.md#migrando-autenticação-google-existente-instalação-local--docker).
+
+Guia completo de implantação (Coolify, transcrição CPU, segurança, backup): [`docs/DOCKER.md`](docs/DOCKER.md).
+
+---
+
 ## Desenvolvimento e qualidade
 
 ```bash
@@ -410,6 +429,7 @@ Instruções para agentes de código: [`AGENTS.md`](AGENTS.md) (memória persist
 | Arquivo | Conteúdo |
 |---------|----------|
 | [AGENTS.md](AGENTS.md) | Instruções para agentes + `.memory/` |
+| [docs/DOCKER.md](docs/DOCKER.md) | Implantação Docker — VPS, Coolify, migração de tokens |
 | [docs/CLI.md](docs/CLI.md) | Referência CLI (espelho resumido) |
 | [docs/PLANO_LANGCHAIN_HERMES.md](docs/PLANO_LANGCHAIN_HERMES.md) | Arquitetura e decisões |
 | [docs/ATIVIDADES_IMPLANTACAO.md](docs/ATIVIDADES_IMPLANTACAO.md) | Checklist de implantação |

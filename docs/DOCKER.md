@@ -126,9 +126,9 @@ INTEGRATOR_WHATSAPP_TRANSCRIBE_ONLY_INCOMING=false
 
 ### Basic Auth
 
-Quando `INTEGRATOR_ADMIN_USERNAME` e `INTEGRATOR_ADMIN_PASSWORD` estão definidos, todas as rotas `/admin/*` exigem autenticação HTTP Basic.
+Quando `INTEGRATOR_ADMIN_USERNAME` e `INTEGRATOR_ADMIN_PASSWORD` estão definidos, **todas** as rotas exigem autenticação HTTP Basic — incluindo `/admin`, `/sse`, `/mcp` e `/messages/`. A única exceção é `/health`, usada pelo health check do Docker.
 
-As rotas MCP (`/sse`, `/mcp`, `/messages/`) e `/health` são **isentas** de Basic Auth — elas são usadas por agentes de IA (Hermes/Claude) que se conectam pela rede interna.
+Os agentes de IA (Hermes/Claude) se conectam via SSE com as credenciais embutidas na URL (`http://user:pass@host:port/sse`). O comando `integrator hermes setup --mode sse` configura isso automaticamente.
 
 **Recomendação**: exponha apenas a porta 17320 via proxy reverso com TLS (Coolify faz isso automaticamente). Nunca deixe a porta exposta diretamente sem TLS.
 
@@ -172,6 +172,100 @@ docker compose exec integrator bash
 
 # Verificar saúde
 curl http://localhost:17320/health
+```
+
+---
+
+## Migrando autenticação Google existente (instalação local → Docker)
+
+Se você já tem uma instalação local funcionando com Gmail e Google Calendar configurados (tokens OAuth presentes), pode reutilizar esses arquivos sem refazer a autenticação.
+
+### Estrutura dos arquivos a migrar
+
+```
+data/
+├── tokens/
+│   ├── pessoal.json          # token OAuth por conta
+│   ├── profissional.json
+│   └── default.json          # conta migrada do formato legado (google.json)
+└── accounts.yaml             # registry das contas
+credentials/
+└── credentials.json          # OAuth client secret (não é token — é o app)
+```
+
+### Passo 1 — Credenciais OAuth (client secret)
+
+Copie o `credentials.json` da instalação local para a pasta `credentials/` do repositório (ela é montada como bind-mount read-only no container):
+
+```bash
+cp /caminho/antigo/credentials/credentials.json ./credentials/credentials.json
+```
+
+No Coolify, você também pode colar o conteúdo diretamente pelo console admin (`/admin → Google → Salvar JSON colado`) após o primeiro deploy.
+
+### Passo 2 — Copie os tokens para o volume Docker
+
+Use um container auxiliar Alpine para copiar e já corrigir as permissões de uma vez:
+
+```bash
+# Substitua ./data pelo caminho real da instalação anterior se diferente
+docker run --rm \
+  -v integrator_data:/app/data \
+  -v "$(pwd)/data":/host-data \
+  alpine sh -c "
+    mkdir -p /app/data/tokens &&
+    cp -r /host-data/tokens/. /app/data/tokens/ &&
+    [ -f /host-data/accounts.yaml ] && cp /host-data/accounts.yaml /app/data/accounts.yaml || true &&
+    chown -R 1000:1000 /app/data/tokens /app/data/accounts.yaml 2>/dev/null || true
+  "
+```
+
+> **Nota**: execute antes de `docker compose up` ou com o serviço parado (`docker compose stop`). O volume `integrator_data` é criado automaticamente pelo Docker quando necessário.
+
+### Passo 3 — Suba o serviço e verifique
+
+```bash
+docker compose up -d
+
+# Aguarde o health check ficar healthy
+docker compose ps
+
+# Verifique as contas reconhecidas
+docker exec integrator integrator status
+```
+
+A saída deve listar suas contas com tokens válidos. Se aparecer "token expirado", o integrador renova automaticamente na próxima chamada de tool.
+
+### Token legado (`google.json`)
+
+Se a instalação anterior usava o formato de conta única (`data/tokens/google.json`), o integrador migra automaticamente para `data/tokens/default.json` na primeira inicialização. Basta incluí-lo na cópia:
+
+```bash
+docker run --rm \
+  -v integrator_data:/app/data \
+  -v "$(pwd)/data/tokens":/host-tokens \
+  alpine sh -c "
+    mkdir -p /app/data/tokens &&
+    cp /host-tokens/google.json /app/data/tokens/google.json &&
+    chown 1000:1000 /app/data/tokens/google.json
+  "
+docker compose up -d
+```
+
+### No Coolify (acesso via SSH)
+
+No Coolify o container tem um nome gerado automaticamente. Localize-o e use `docker cp` normalmente:
+
+```bash
+# SSH na VPS, depois:
+docker ps --filter "name=integrator" --format "{{.Names}}"
+# Ex.: coolify-integrator-abc123
+
+# Substitua <container> pelo nome encontrado
+docker cp ./data/tokens/. <container>:/app/data/tokens/
+docker cp ./data/accounts.yaml <container>:/app/data/accounts.yaml
+docker exec -u root <container> chown -R 1000:1000 /app/data/tokens /app/data/accounts.yaml
+docker restart <container>
 ```
 
 ---
