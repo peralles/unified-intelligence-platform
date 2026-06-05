@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from integrator.hermes.config_merge import DEFAULT_SERVER_NAME
 from integrator.hermes.doctor import CheckResult, CheckStatus
@@ -55,8 +55,8 @@ def _split_url_credentials(url: str) -> tuple[str, dict[str, str]]:
     if not parts.username:
         return url, {}
 
-    username = parts.username
-    password = parts.password or ""
+    username = unquote(parts.username or "")
+    password = unquote(parts.password or "")
     host = parts.hostname or ""
     if parts.port is not None:
         host = f"{host}:{parts.port}"

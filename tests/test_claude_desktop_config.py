@@ -39,7 +39,10 @@ def test_to_claude_server_block_sse_with_basic_auth() -> None:
     ]
     assert "--header" in claude["args"]
     assert claude["args"][-1] == "Authorization:${INTEGRATOR_MCP_AUTHORIZATION}"
-    assert claude["env"]["INTEGRATOR_MCP_AUTHORIZATION"].startswith("Basic ")
+    token = claude["env"]["INTEGRATOR_MCP_AUTHORIZATION"].removeprefix("Basic ")
+    import base64
+
+    assert base64.b64decode(token).decode() == "admin:secr@et"
 
 
 def test_to_claude_server_block_stdio(tmp_path: Path) -> None:
