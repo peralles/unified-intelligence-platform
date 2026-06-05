@@ -42,10 +42,10 @@ class WhatsAppSession:
         self._bridge.call("connect")
         self._started = True
 
-    def status(self) -> dict[str, Any]:
-        """Estado em tempo real (sobe connect no worker se ainda não iniciou)."""
+    def status(self, *, live: bool = True, wait_s: float = 25) -> dict[str, Any]:
+        """Worker status; live=True waits for login (CLI). Admin snapshot uses live=False."""
         self.ensure_background_connection()
-        return self._bridge.call("status", {"live": True, "wait_s": 25})
+        return self._bridge.call("status", {"live": live, "wait_s": wait_s})
 
     def pair(self, *, timeout_s: float = 120.0) -> dict[str, Any]:
         return self._bridge.call("pair", {"timeout_s": timeout_s})

@@ -222,6 +222,10 @@ class AudioTranscriber:
                 f"Execute: cd bridges/whatsapp-neonize && uv sync  ({exc})"
             ) from exc
 
+    @property
+    def ready(self) -> bool:
+        return self._model is not None
+
     def transcribe(self, audio_path: str) -> str:
         self._ensure_model()
 
@@ -480,7 +484,7 @@ class NeonizeWorker:
                 if png_b64:
                     self.state.qr_png_base64 = png_b64
                     self.state.qr_updated_at = time.time()
-            if self._pairing:
+            if self._pairing and sys.stderr.isatty():
                 try:
                     import segno
 
@@ -795,7 +799,7 @@ class NeonizeWorker:
             with self.state.lock:
                 self.state.state = "qr"
         self._ensure_connect_thread()
-        return self.status(live=True, wait_s=20.0)
+        return self.status(live=False)
 
     def _wait_session_ready(self, timeout_s: float) -> None:
         """Aguarda login + socket após pair (ex.: código 515 e reconnect do whatsmeow)."""
@@ -2259,7 +2263,7 @@ class NeonizeWorker:
                 "ignore_count": len(ignore),
                 "runtime_file": str(self._runtime.path),
                 "transcriber_ready": (
-                    self._transcriber._ready if self._transcriber else False
+                    self._transcriber.ready if self._transcriber else False
                 ),
             }
         if method == "shutdown":
