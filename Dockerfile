@@ -7,6 +7,10 @@
 ARG UV_VERSION=0.8.17
 ARG PYTHON_IMAGE=python:3.12-slim-bookworm
 
+# Pinned uv stage — never use ${UV_VERSION} in COPY --from image refs.
+# Coolify injects bare ARG lines without values; empty UV_VERSION breaks BuildKit.
+FROM ghcr.io/astral-sh/uv:0.8.17 AS uv-bin
+
 # ─── Stage 1: build main venv ────────────────────────────────────────────────
 FROM ${PYTHON_IMAGE} AS builder
 
@@ -16,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
+COPY --from=uv-bin /uv /usr/local/bin/uv
 
 ENV UV_LINK_MODE=copy \
     UV_NO_CACHE=1
@@ -34,7 +38,7 @@ FROM ${PYTHON_IMAGE} AS bridge-builder
 
 WORKDIR /bridge
 
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
+COPY --from=uv-bin /uv /usr/local/bin/uv
 
 ENV UV_LINK_MODE=copy \
     UV_NO_CACHE=1
@@ -63,10 +67,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# uv is kept at runtime only to launch the bridge subprocess via
-# "uv run --directory bridges/whatsapp-neonize python worker.py"
-ARG UV_VERSION=0.8.17
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
+# uv kept at runtime for bridge subprocess (uv run --directory bridges/whatsapp-neonize …)
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
 WORKDIR /app
 
