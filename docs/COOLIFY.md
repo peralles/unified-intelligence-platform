@@ -117,6 +117,8 @@ Dois processos (Mac + Coolify) disputam `worker.lock` e quebram WhatsApp.
 | Google OAuth `redirect_uri_mismatch` | URI no Google ≠ URL pública | Conferir `INTEGRATOR_OAUTH_PUBLIC_BASE_URL` |
 | WhatsApp despareado após deploy | Sem volume `/app/data` | Adicionar Persistent Storage |
 | Admin trava no QR | Worker lock duplo | Parar LaunchAgent local |
-| OOM na transcrição | Modelo grande em VPS pequena | `TRANSCRIBE_MODEL=small` ou desligar auto-transcrição |
+| OOM na transcrição | Modelo grande em VPS pequena | `INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL=small` ou desligar auto-transcrição |
+| `No space left on device` ao transcrever | Cache/modelo em `/tmp` ou disco cheio | Volume em `/app/data` (≥2 GB livres); modelo `small`; cache em `/app/data/cache` |
+| Admin config 500 ao salvar | `.env` read-only no container | Normal no Docker — config persiste em `runtime.json`; ignore `env_persist_skipped` |
 
 Ver também [DOCKER.md](./DOCKER.md).

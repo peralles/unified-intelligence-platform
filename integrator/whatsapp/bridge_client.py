@@ -167,9 +167,31 @@ class WhatsAppBridgeClient:
         from integrator.admin.runtime import runtime_file_path
 
         env["INTEGRATOR_ADMIN_RUNTIME_FILE"] = str(runtime_file_path().resolve())
-        env.setdefault("UV_CACHE_DIR", "/tmp/uv-cache")
-        env.setdefault("XDG_CACHE_HOME", "/tmp")
-        env.setdefault("HOME", "/tmp")
+        cache_root = settings.root_dir / "data" / "cache"
+        hf_home = cache_root / "huggingface"
+        whisper_cache = settings.whatsapp_transcribe_cache_path
+        for path in (cache_root, hf_home, whisper_cache):
+            path.mkdir(parents=True, exist_ok=True)
+        env["HF_HOME"] = str(hf_home.resolve())
+        env["HUGGINGFACE_HUB_CACHE"] = str(hf_home.resolve())
+        env["XDG_CACHE_HOME"] = str(cache_root.resolve())
+        env["INTEGRATOR_WHATSAPP_TRANSCRIBE_CACHE_DIR"] = str(whisper_cache.resolve())
+        env["HOME"] = str(cache_root.resolve())
+        env["UV_CACHE_DIR"] = str((cache_root / "uv").resolve())
+        # #region agent log
+        from integrator.agent_debug import agent_debug_log
+
+        agent_debug_log(
+            "H3",
+            "bridge_client.py:_ensure_process",
+            "worker cache env",
+            {
+                "whisper_cache": str(whisper_cache),
+                "hf_home": str(hf_home),
+                "transcribe_model": settings.whatsapp_transcribe_model,
+            },
+        )
+        # #endregion
         cmd = resolve_worker_command(bridge)
         try:
             LOGGER.info(

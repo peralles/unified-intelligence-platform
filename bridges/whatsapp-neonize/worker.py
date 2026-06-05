@@ -41,6 +41,7 @@ from neonize.utils.enum import ReceiptType
 
 from runtime_config import RuntimeConfig
 from chat_search import chat_haystack, normalize_phone_digits, phone_digits_match
+from transcribe_model import resolve_model_id as _resolve_model_id
 
 
 class WorkerError(Exception):
@@ -189,11 +190,50 @@ class StoredMessage:
     is_audio: bool = False
 
 
-def _resolve_model_id(model_id: str) -> str:
-    """Strip mlx-community/ prefix for migration from mlx-whisper model names."""
-    if model_id.startswith("mlx-community/"):
-        return model_id[len("mlx-community/"):]
-    return model_id
+def _agent_debug(
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: dict[str, Any] | None = None,
+) -> None:
+    payload = {
+        "sessionId": "6cef0e",
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data or {},
+        "timestamp": int(time.time() * 1000),
+    }
+    logging.info("[agent-debug] %s", json.dumps(payload, default=str))
+
+
+def _disk_free_mb(path: str | Path) -> int | None:
+    try:
+        usage = os.statvfs(str(path))
+        return int((usage.f_bavail * usage.f_frsize) / (1024 * 1024))
+    except OSError:
+        return None
+
+
+def _transcribe_cache_dir() -> Path:
+    raw = os.environ.get("INTEGRATOR_WHATSAPP_TRANSCRIBE_CACHE_DIR", "").strip()
+    if raw:
+        cache = Path(raw)
+    else:
+        session = os.environ.get("INTEGRATOR_WHATSAPP_SESSION_DIR", "").strip()
+        if session:
+            cache = Path(session).parent / "cache" / "whisper"
+        else:
+            cache = Path(tempfile.gettempdir()) / "integrator-whisper"
+    cache.mkdir(parents=True, exist_ok=True)
+    return cache
+
+
+def _transcribe_temp_dir() -> str:
+    tmp = _transcribe_cache_dir() / "tmp"
+    tmp.mkdir(parents=True, exist_ok=True)
+    return str(tmp)
+
 
 
 class AudioTranscriber:
@@ -203,10 +243,43 @@ class AudioTranscriber:
         self.model_id = _resolve_model_id(model_id)
         self.language = language or None
         self._model: Any = None
+        self._download_root = str(_transcribe_cache_dir())
+        # #region agent log
+        _agent_debug(
+            "H2",
+            "worker.py:AudioTranscriber.__init__",
+            "transcriber init",
+            {
+                "raw_model": model_id,
+                "resolved_model": self.model_id,
+                "download_root": self._download_root,
+                "free_mb": _disk_free_mb(self._download_root),
+            },
+        )
+        # #endregion
 
     def _ensure_model(self) -> None:
         if self._model is not None:
             return
+        free_mb = _disk_free_mb(self._download_root)
+        # #region agent log
+        _agent_debug(
+            "H1",
+            "worker.py:AudioTranscriber._ensure_model",
+            "loading whisper model",
+            {
+                "model": self.model_id,
+                "download_root": self._download_root,
+                "free_mb": free_mb,
+            },
+        )
+        # #endregion
+        if free_mb is not None and free_mb < 512:
+            raise RuntimeError(
+                f"Espaço insuficiente em {self._download_root} "
+                f"({free_mb} MB livres; modelo Whisper precisa de ~500 MB+). "
+                "Monte /app/data com volume maior ou use INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL=small."
+            )
         try:
             from faster_whisper import WhisperModel
 
@@ -214,12 +287,37 @@ class AudioTranscriber:
                 self.model_id,
                 device="cpu",
                 compute_type="int8",
+                download_root=self._download_root,
             )
-            logging.info("[transcribe] faster-whisper model loaded | model=%s", self.model_id)
+            logging.info(
+                "[transcribe] faster-whisper model loaded | model=%s | cache=%s",
+                self.model_id,
+                self._download_root,
+            )
         except ImportError as exc:
             raise RuntimeError(
                 f"faster-whisper não instalado no venv do bridge. "
                 f"Execute: cd bridges/whatsapp-neonize && uv sync  ({exc})"
+            ) from exc
+        except OSError as exc:
+            # #region agent log
+            _agent_debug(
+                "H1",
+                "worker.py:AudioTranscriber._ensure_model",
+                "model load OSError",
+                {
+                    "model": self.model_id,
+                    "download_root": self._download_root,
+                    "free_mb": _disk_free_mb(self._download_root),
+                    "errno": getattr(exc, "errno", None),
+                    "error": str(exc),
+                },
+            )
+            # #endregion
+            raise RuntimeError(
+                f"Falha ao baixar/carregar modelo Whisper ({self.model_id}): {exc}. "
+                f"Cache: {self._download_root}. "
+                "Verifique espaço em /app/data e use modelo 'small' em VPS."
             ) from exc
 
     @property
@@ -289,9 +387,8 @@ class NeonizeWorker:
         self._auto_transcribe: bool = os.environ.get(
             "INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE", ""
         ).lower() in ("1", "true", "yes")
-        self._transcribe_model: str = os.environ.get(
-            "INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL",
-            "mlx-community/whisper-large-v3-turbo",
+        self._transcribe_model: str = _resolve_model_id(
+            os.environ.get("INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL", "small")
         )
         self._transcribe_language: str | None = (
             os.environ.get("INTEGRATOR_WHATSAPP_TRANSCRIBE_LANGUAGE") or None
@@ -678,11 +775,26 @@ class NeonizeWorker:
             logging.error("[transcribe] download failed | chat=%s | %s", chat_id, exc)
             return
         try:
-            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as fh:
+            with tempfile.NamedTemporaryFile(
+                suffix=".ogg", delete=False, dir=_transcribe_temp_dir()
+            ) as fh:
                 fh.write(audio_bytes)
                 tmp_path = fh.name
             text = self._transcriber.transcribe(tmp_path)
         except Exception as exc:
+            # #region agent log
+            _agent_debug(
+                "H1",
+                "worker.py:_do_transcribe_and_reply",
+                "transcription failed",
+                {
+                    "chat_id": chat_id,
+                    "model": self._transcriber.model_id,
+                    "free_mb": _disk_free_mb(_transcribe_cache_dir()),
+                    "error": str(exc),
+                },
+            )
+            # #endregion
             logging.error("[transcribe] transcription failed | chat=%s | %s", chat_id, exc)
             return
         finally:
@@ -729,7 +841,9 @@ class NeonizeWorker:
         except Exception as exc:
             raise WorkerError(f"Falha ao baixar áudio: {exc}") from exc
         try:
-            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as fh:
+            with tempfile.NamedTemporaryFile(
+                suffix=".ogg", delete=False, dir=_transcribe_temp_dir()
+            ) as fh:
                 fh.write(audio_bytes)
                 tmp_path = fh.name
             text = transcriber.transcribe(tmp_path)

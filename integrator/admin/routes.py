@@ -14,7 +14,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from integrator.admin import handlers as admin_handlers
-from integrator.admin.env_file import PERSISTABLE_ENV, bool_env, env_file_path, upsert_env
+from integrator.admin.env_file import PERSISTABLE_ENV, bool_env, env_file_path, env_file_writable, upsert_env
 from integrator.admin.runtime import RuntimeStore, runtime_file_path
 from integrator.config import settings
 from integrator.logging_setup import get_logger
@@ -400,6 +400,7 @@ async def admin_api_config(request: Request) -> Response:
     }
     persist_env = bool(body.get("persist_env", True))
     env_keys = _persist_env_from_effective(effective, persist=persist_env)
+    env_persist_skipped = persist_env and not env_file_writable()
 
     restart_hints: list[str] = []
     if persist_env:
@@ -419,6 +420,7 @@ async def admin_api_config(request: Request) -> Response:
             "effective": effective,
             "ignore_numbers_text": store.ignore_numbers_text(updated),
             "env_updated": env_keys,
+            "env_persist_skipped": env_persist_skipped,
             "restart_recommended": bool(restart_hints),
             "restart_hints": restart_hints,
         }

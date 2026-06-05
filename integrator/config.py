@@ -75,7 +75,7 @@ class Settings(BaseSettings):
 
     # WhatsApp auto-transcription (faster-whisper, CPU-compatible; or mlx-whisper on Apple Silicon)
     whatsapp_auto_transcribe: bool = False
-    whatsapp_transcribe_model: str = "large-v3-turbo"
+    whatsapp_transcribe_model: str = "small"
     whatsapp_transcribe_language: str | None = None
     whatsapp_transcribe_prefix: str = "🎙️ "
     whatsapp_transcribe_only_incoming: bool = False
@@ -119,8 +119,15 @@ class Settings(BaseSettings):
         self.credentials_path.parent.mkdir(parents=True, exist_ok=True)
         self.whatsapp_session_path.mkdir(parents=True, exist_ok=True)
         self.admin_runtime_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_root = self.root_dir / "data" / "cache"
+        (cache_root / "whisper").mkdir(parents=True, exist_ok=True)
+        (cache_root / "huggingface").mkdir(parents=True, exist_ok=True)
         if self.audit_log_enabled:
             self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def whatsapp_transcribe_cache_path(self) -> Path:
+        return self.root_dir / "data" / "cache" / "whisper"
 
 
 settings = Settings()

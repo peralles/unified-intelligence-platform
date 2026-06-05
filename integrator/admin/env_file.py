@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -33,8 +34,24 @@ def read_env_map() -> dict[str, str]:
     return out
 
 
-def upsert_env(updates: dict[str, str | None]) -> None:
-    """Set or remove keys in .env. None value removes the key."""
+def env_file_writable() -> bool:
+    """False when .env lives on a read-only layer (typical Docker/Coolify)."""
+    path = env_file_path()
+    if path.is_file():
+        return os.access(path, os.W_OK)
+    parent = path.parent
+    return parent.exists() and os.access(parent, os.W_OK)
+
+
+def upsert_env(updates: dict[str, str | None]) -> list[str]:
+    """Set or remove keys in .env. None value removes the key.
+
+    Returns env keys touched. Skips silently when .env is not writable (Docker).
+    """
+    if not updates:
+        return []
+    if not env_file_writable():
+        return []
     path = env_file_path()
     lines = read_env_lines() if path.is_file() else []
     remaining = dict(updates)
@@ -66,6 +83,7 @@ def upsert_env(updates: dict[str, str | None]) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(new_lines) + ("\n" if new_lines else ""), encoding="utf-8")
+    return list(updates.keys())
 
 
 # Keys the admin UI may persist to .env (survive service restart).

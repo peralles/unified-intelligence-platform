@@ -87,6 +87,8 @@ RUN mkdir -p \
         /app/data/admin \
         /app/data/tokens \
         /app/data/whatsapp \
+        /app/data/cache/whisper \
+        /app/data/cache/huggingface \
         /app/credentials \
     && chown -R app:app /app
 
@@ -97,6 +99,10 @@ ENV INTEGRATOR_SERVICE_HOST=0.0.0.0 \
     INTEGRATOR_SERVICE_PORT=17320 \
     INTEGRATOR_SKIP_MACOS_SERVICE=1 \
     INTEGRATOR_ADMIN_RUNTIME_FILE=/app/data/admin/runtime.json \
+    INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL=small \
+    HF_HOME=/app/data/cache/huggingface \
+    HUGGINGFACE_HUB_CACHE=/app/data/cache/huggingface \
+    XDG_CACHE_HOME=/app/data/cache \
     PATH="/app/.venv/bin:$PATH" \
     # uv: don't sync at runtime (venv already built), no cache writes
     UV_FROZEN=1 \
