@@ -68,7 +68,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# uv kept at runtime for bridge subprocess (uv run --directory bridges/whatsapp-neonize …)
+# uv kept for local dev fallback; Docker bridge uses bridges/whatsapp-neonize/.venv/bin/python
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
 WORKDIR /app

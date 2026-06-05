@@ -453,11 +453,15 @@ class NeonizeWorker:
                     self.state.last_error = evt.Status
 
         @self.client.qr
-        def on_qr(_client: NewClient, qr_data: bytes) -> None:
+        def on_qr(_client: NewClient, qr_data: bytes | str) -> None:
             with self.state.lock:
                 self.state.state = "qr"
                 if self._pairing:
                     self.state.qr_displayed = True
+            if isinstance(qr_data, (bytes, bytearray, memoryview)):
+                qr_payload = bytes(qr_data).decode("utf-8", errors="replace")
+            else:
+                qr_payload = str(qr_data)
             png_b64 = ""
             try:
                 import base64
@@ -466,10 +470,12 @@ class NeonizeWorker:
                 import segno
 
                 buf = io.BytesIO()
-                segno.make_qr(qr_data).save(buf, kind="png", scale=8, border=2)
+                segno.make_qr(qr_payload).save(buf, kind="png", scale=8, border=2)
                 png_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-            except Exception:
+            except Exception as exc:
                 png_b64 = ""
+                sys.stderr.write(f"[integrator] Falha ao gerar PNG do QR: {exc}\n")
+                sys.stderr.flush()
             with self.state.lock:
                 if png_b64:
                     self.state.qr_png_base64 = png_b64
@@ -478,7 +484,7 @@ class NeonizeWorker:
                 try:
                     import segno
 
-                    segno.make_qr(qr_data).terminal(compact=True, out=sys.stderr)
+                    segno.make_qr(qr_payload).terminal(compact=True, out=sys.stderr)
                     sys.stderr.flush()
                 except Exception:
                     sys.stderr.write(

@@ -951,11 +951,18 @@ function showQr(b64) {
   );
 }
 
+let pairPollFailures = 0;
+
 async function pollPair() {
   try {
     const r = await api("/admin/api/whatsapp/pair?action=poll");
     const d = r.data || {};
+    pairPollFailures = 0;
+    if (d.error && !d.qr_png_base64 && !d.logged_in) {
+      refs.qrBox?.replaceChildren(hint(`Erro WhatsApp: ${d.error}`));
+    }
     if (d.qr_png_base64) showQr(d.qr_png_base64);
+    else if (d.state === "qr") showQr(null);
     if (d.logged_in) {
       clearInterval(pairTimer);
       pairTimer = null;
@@ -963,17 +970,32 @@ async function pollPair() {
       refs.qrBox?.replaceChildren(el("p", { className: "card__hint" }, ["✓ Dispositivo conectado."]));
       refreshAll();
     }
-  } catch { /* transient */ }
+  } catch (err) {
+    pairPollFailures += 1;
+    if (pairPollFailures >= 3) {
+      clearInterval(pairTimer);
+      pairTimer = null;
+      refs.qrBox?.replaceChildren(hint(err.message || "Falha ao gerar QR code."));
+      toast(err.message || "Falha ao gerar QR code.", "err");
+    }
+  }
 }
 
 async function startPair(fresh) {
   if (pairTimer) clearInterval(pairTimer);
+  pairPollFailures = 0;
   showQr(null);
-  await api("/admin/api/whatsapp/pair?action=start", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fresh: !!fresh }),
-  });
+  try {
+    await api("/admin/api/whatsapp/pair?action=start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fresh: !!fresh }),
+    });
+  } catch (err) {
+    refs.qrBox?.replaceChildren(hint(err.message || "Não foi possível iniciar pareamento."));
+    toast(err.message || "Não foi possível iniciar pareamento.", "err");
+    return;
+  }
   pairTimer = setInterval(pollPair, 1500);
   pollPair();
   toast("QR code sendo gerado — escaneie com o WhatsApp.");

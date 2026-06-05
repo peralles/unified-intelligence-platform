@@ -29,8 +29,14 @@ export function toast(msg, kind = "", dur) {
 }
 
 export async function api(path, opts = {}) {
-  const res = await fetch(path, opts);
+  const res = await fetch(path, {
+    credentials: "same-origin",
+    ...opts,
+  });
   const data = await res.json().catch(() => ({}));
+  if (data.ok === false && data.error) {
+    throw new Error(data.error);
+  }
   if (!res.ok && data.error && data.ok !== true) {
     throw new Error(data.error);
   }

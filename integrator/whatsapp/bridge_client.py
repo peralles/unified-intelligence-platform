@@ -42,6 +42,21 @@ def resolve_session_dir(explicit: Path | None = None) -> Path:
     return explicit or settings.whatsapp_session_path
 
 
+def resolve_worker_command(bridge: Path) -> list[str]:
+    """Launch bridge worker without uv at runtime (Docker read_only + UV_FROZEN safe)."""
+    venv_python = bridge / ".venv" / "bin" / "python"
+    if venv_python.is_file():
+        return [str(venv_python), "worker.py"]
+    return [
+        "uv",
+        "run",
+        "--directory",
+        str(bridge),
+        "python",
+        "worker.py",
+    ]
+
+
 class WhatsAppBridgeClient:
     """JSON-RPC over stdin/stdout to bridges/whatsapp-neonize worker."""
 
@@ -137,19 +152,16 @@ class WhatsAppBridgeClient:
         from integrator.admin.runtime import runtime_file_path
 
         env["INTEGRATOR_ADMIN_RUNTIME_FILE"] = str(runtime_file_path().resolve())
-        cmd = [
-            "uv",
-            "run",
-            "--directory",
-            str(bridge),
-            "python",
-            "worker.py",
-        ]
+        env.setdefault("UV_CACHE_DIR", "/tmp/uv-cache")
+        env.setdefault("XDG_CACHE_HOME", "/tmp")
+        env.setdefault("HOME", "/tmp")
+        cmd = resolve_worker_command(bridge)
         try:
-            LOGGER.debug(
-                "bridge start | session=%s | bridge=%s",
+            LOGGER.info(
+                "bridge start | session=%s | bridge=%s | cmd=%s",
                 self.session_dir,
                 bridge,
+                " ".join(cmd),
             )
             # stderr inherited so pair QR (worker writes to stderr) is visible in the terminal
             self._proc = subprocess.Popen(

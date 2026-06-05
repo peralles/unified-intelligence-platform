@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from integrator.whatsapp.bridge_client import WhatsAppBridgeClient, _read_rpc_response
+from integrator.whatsapp.bridge_client import (
+    WhatsAppBridgeClient,
+    _read_rpc_response,
+    resolve_worker_command,
+)
 from integrator.whatsapp.errors import WhatsAppApiError
 
 
@@ -23,6 +27,28 @@ def test_read_rpc_response_eof_raises() -> None:
     stdout = io.StringIO("\n")
     with pytest.raises(WhatsAppApiError, match="encerrou sem resposta"):
         _read_rpc_response(stdout, "1", method="pair")
+
+
+def test_resolve_worker_command_prefers_venv_python(tmp_path: Path) -> None:
+    bridge = tmp_path / "bridge"
+    venv_bin = bridge / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    python = venv_bin / "python"
+    python.write_text("", encoding="utf-8")
+    assert resolve_worker_command(bridge) == [str(python), "worker.py"]
+
+
+def test_resolve_worker_command_falls_back_to_uv(tmp_path: Path) -> None:
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    assert resolve_worker_command(bridge) == [
+        "uv",
+        "run",
+        "--directory",
+        str(bridge),
+        "python",
+        "worker.py",
+    ]
 
 
 @patch("integrator.whatsapp.bridge_client.subprocess.Popen")
