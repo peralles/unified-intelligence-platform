@@ -14,11 +14,10 @@ from mcp.server.sse import SseServerTransport
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from integrator.admin.routes import admin_routes
 from integrator.config import settings
@@ -36,36 +35,65 @@ DEFAULT_PORT = 17320
 _AUTH_BYPASS_PATHS = frozenset({"/health"})
 
 
-class _BasicAuthMiddleware(BaseHTTPMiddleware):
-    """HTTP Basic Auth protecting all routes; only /health is exempt for Docker health checks."""
+class _AlreadySentResponse(Response):
+    """No-op response — SSE EventSourceResponse already sent http.response.start."""
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        return
+
+
+def _header(scope: Scope, name: str) -> str:
+    key = name.lower().encode()
+    for header, value in scope.get("headers", []):
+        if header.lower() == key:
+            return value.decode("latin-1")
+    return ""
+
+
+def _basic_auth_ok(scope: Scope, username: str, password: str) -> bool:
+    auth = _header(scope, "authorization")
+    if not auth.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(auth[6:]).decode("utf-8", errors="replace")
+        user, _, pwd = decoded.partition(":")
+        return secrets.compare_digest(user, username) and secrets.compare_digest(
+            pwd, password
+        )
+    except Exception:
+        return False
+
+
+class _BasicAuthMiddleware:
+    """HTTP Basic Auth for all routes except /health.
+
+    Pure ASGI middleware — ``BaseHTTPMiddleware`` breaks SSE/streaming because
+    MCP ``/sse`` sends the response via ``request._send`` before returning.
+    """
 
     def __init__(self, app: ASGIApp, username: str, password: str) -> None:
-        super().__init__(app)
+        self.app = app
         self._username = username
         self._password = password
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-        path = request.url.path
-        if path in _AUTH_BYPASS_PATHS:
-            return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Basic "):
-            try:
-                decoded = base64.b64decode(auth[6:]).decode("utf-8", errors="replace")
-                user, _, pwd = decoded.partition(":")
-                if secrets.compare_digest(user, self._username) and secrets.compare_digest(
-                    pwd, self._password
-                ):
-                    return await call_next(request)
-            except Exception:
-                pass
+        path = scope.get("path", "")
+        if path in _AUTH_BYPASS_PATHS or _basic_auth_ok(
+            scope, self._username, self._password
+        ):
+            await self.app(scope, receive, send)
+            return
 
-        return Response(
+        response = Response(
             "Unauthorized",
             status_code=401,
             headers={"WWW-Authenticate": 'Basic realm="Integrator Admin"'},
         )
+        await response(scope, receive, send)
 
 
 def _security_settings(host: str, port: int) -> TransportSecuritySettings:
@@ -152,7 +180,7 @@ def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> 
                 streams[1],
                 mcp_server.create_initialization_options(),
             )
-        return Response()
+        return _AlreadySentResponse()
 
     @asynccontextmanager
     async def lifespan(_app: Starlette):

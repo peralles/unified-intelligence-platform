@@ -7,8 +7,13 @@ import base64
 from starlette.testclient import TestClient
 
 from integrator.config import settings
-from integrator.mcp.http_server import _BasicAuthMiddleware, _security_settings
+from integrator.mcp.http_server import (
+    _AlreadySentResponse,
+    _BasicAuthMiddleware,
+    _security_settings,
+)
 from starlette.applications import Starlette
+from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Route
 
@@ -92,6 +97,28 @@ def test_malformed_auth_header_rejected() -> None:
     client = TestClient(_make_app("u", "p"), raise_server_exceptions=True)
     resp = client.get("/admin", headers={"Authorization": "Basic !!not-base64!!"})
     assert resp.status_code == 401
+
+
+def test_auth_middleware_allows_sse_style_direct_send() -> None:
+    """SSE sends response via request._send before return; middleware must passthrough."""
+
+    async def sse_like(request: Request) -> Response:
+        await request._send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/event-stream")],
+            }
+        )
+        await request._send({"type": "http.response.body", "body": b"", "more_body": False})
+        return _AlreadySentResponse()
+
+    app = Starlette(routes=[Route("/sse", endpoint=sse_like)])
+    wrapped = _BasicAuthMiddleware(app, username="admin", password="secret")
+
+    client = TestClient(wrapped, raise_server_exceptions=True)
+    resp = client.get("/sse", headers={"Authorization": _basic_header("admin", "secret")})
+    assert resp.status_code == 200
 
 
 # ─── _security_settings ─────────────────────────────────────────────────────
