@@ -16,6 +16,10 @@ require_uv() {
   command -v uv >/dev/null 2>&1 || die "Instale uv: https://docs.astral.sh/uv/"
 }
 
+require_npx() {
+  command -v npx >/dev/null 2>&1 || die "Claude Desktop precisa de Node/npx (mcp-remote). Instale: https://nodejs.org/"
+}
+
 banner() {
   echo ""
   echo "============================================================"
@@ -23,8 +27,39 @@ banner() {
   echo "============================================================"
   echo ""
   echo "  Configure Hermes e Claude Desktop neste computador."
+  echo "  Hermes: SSE direto. Claude: bridge npx mcp-remote (stdio)."
   echo "  O servidor (Coolify/VPN) continua só com o console /admin."
   echo ""
+}
+
+run_doctor() {
+  uv run python -c "
+from integrator.admin.handlers import hermes_doctor
+
+d = hermes_doctor(mode='sse')
+for c in d.get('checks') or []:
+    print(f\"{c['status']:6} {c['label']}: {c.get('detail') or ''}\")
+print(f\"(critical={d.get('critical', 0)})\")
+"
+}
+
+run_setup() {
+  local url="$1"
+  uv run python -c "
+import sys
+
+from integrator.admin.handlers import hermes_setup
+
+result = hermes_setup(mode='sse', yes=True, force=True, sse_url=sys.argv[1])
+for name, info in (result.get('hosts') or {}).items():
+    if info.get('ok'):
+        print(f\"  {name}: {info.get('message', 'OK')}\")
+    else:
+        print(f\"  {name}: ERRO — {info.get('error', 'falha')}\", file=sys.stderr)
+if not result.get('ok'):
+    print(result.get('error', 'falha'), file=sys.stderr)
+    sys.exit(1)
+" "$url"
 }
 
 read_sse_url() {
@@ -43,6 +78,7 @@ read_sse_url() {
 main() {
   banner
   require_uv
+  require_npx
 
   SSE_URL="$(read_sse_url)"
 
@@ -50,10 +86,15 @@ main() {
   uv sync --all-extras
 
   echo "→ Diagnóstico (opcional)…"
-  uv run integrator hermes doctor --mode sse || true
+  run_doctor || true
 
   echo "→ Gravando MCP em ~/.hermes e Claude Desktop…"
-  uv run integrator hermes setup --mode sse --sse-url "$SSE_URL" --yes --force --skip-test
+  run_setup "$SSE_URL"
+
+  if command -v hermes >/dev/null 2>&1; then
+    echo "→ Testando MCP Hermes…"
+    hermes mcp test langchain-integrator || true
+  fi
 
   echo ""
   echo "Pronto."

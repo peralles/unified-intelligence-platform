@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -7,9 +8,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from integrator.hermes.config_merge import DEFAULT_SERVER_NAME
 from integrator.hermes.doctor import CheckResult, CheckStatus
+
+# Env var referenced by mcp-remote --header (value = "Basic …" or "Bearer …").
+_CLAUDE_MCP_AUTH_ENV = "INTEGRATOR_MCP_AUTHORIZATION"
 
 CLAUDE_APP_PATHS = (
     Path("/Applications/Claude.app"),
@@ -44,10 +49,42 @@ def discover_claude_desktop() -> ClaudeDesktopInstall:
     return ClaudeDesktopInstall(config_path=path, app_found=app_found)
 
 
+def _split_url_credentials(url: str) -> tuple[str, dict[str, str]]:
+    """Strip user:pass from URL; return env for mcp-remote Authorization header."""
+    parts = urlsplit(url)
+    if not parts.username:
+        return url, {}
+
+    username = parts.username
+    password = parts.password or ""
+    host = parts.hostname or ""
+    if parts.port is not None:
+        host = f"{host}:{parts.port}"
+    clean_url = urlunsplit(
+        (parts.scheme, host, parts.path, parts.query, parts.fragment)
+    )
+    token = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
+    return clean_url, {_CLAUDE_MCP_AUTH_ENV: f"Basic {token}"}
+
+
 def to_claude_server_block(block: dict[str, Any]) -> dict[str, Any]:
-    """Hermes YAML block → Claude Desktop mcpServers entry."""
+    """Hermes YAML block → Claude Desktop mcpServers entry.
+
+    Claude Desktop only accepts stdio servers (``command`` + ``args``). Remote
+    SSE/HTTP URLs are bridged via ``npx mcp-remote``; credentials embedded in
+    the URL become an ``Authorization`` header (env-backed, no secrets in args).
+    """
     if "url" in block:
-        return {"url": str(block["url"])}
+        remote_url, auth_env = _split_url_credentials(str(block["url"]))
+        args = ["-y", "mcp-remote", remote_url]
+        if auth_env:
+            # No space after ':' — Claude Desktop on Windows mangles spaced args.
+            args.extend(["--header", f"Authorization:${{{_CLAUDE_MCP_AUTH_ENV}}}"])
+        out: dict[str, Any] = {"command": "npx", "args": args}
+        if auth_env:
+            out["env"] = auth_env
+        return out
+
     out: dict[str, Any] = {
         "command": str(block["command"]),
         "args": [str(a) for a in block.get("args") or []],
@@ -146,6 +183,17 @@ def run_claude_desktop_checks(
             status=CheckStatus.OK if writable else CheckStatus.FAIL,
             detail=str(install.config_path),
             hint=None if writable else f"Não foi possível criar {parent}",
+        )
+    )
+
+    npx_ok = shutil.which("npx") is not None
+    results.append(
+        CheckResult(
+            id="claude_npx",
+            label="npx (mcp-remote)",
+            status=CheckStatus.OK if npx_ok else CheckStatus.FAIL,
+            detail="disponível" if npx_ok else "não encontrado",
+            hint=None if npx_ok else "Instale Node.js (https://nodejs.org/) — Claude usa npx mcp-remote",
         )
     )
 

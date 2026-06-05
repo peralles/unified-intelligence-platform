@@ -72,3 +72,8 @@ def test_setup_mcp_clients_sse_remote_url(tmp_path: Path, monkeypatch: pytest.Mo
     entry = load_hermes_config(hermes_cfg)["mcp_servers"][DEFAULT_SERVER_NAME]
     assert entry["url"] == remote
     assert entry["transport"] == "sse"
+    claude_entry = json.loads(claude_cfg.read_text())["mcpServers"][DEFAULT_SERVER_NAME]
+    assert claude_entry["command"] == "npx"
+    assert claude_entry["args"][2] == "https://mcp.example.com/sse"
+    assert "url" not in claude_entry
+    assert claude_entry["env"]["INTEGRATOR_MCP_AUTHORIZATION"].startswith("Basic ")
