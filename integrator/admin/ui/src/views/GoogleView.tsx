@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,8 +9,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { toast } from "@/api/client";
 import { useApp } from "@/context/AppContext";
-import { ExternalLink, Upload } from "lucide-react";
+import { ExternalLink, FileJson, Upload } from "lucide-react";
 
 export function GoogleView() {
   const {
@@ -23,9 +25,12 @@ export function GoogleView() {
     onSaveCreds,
     setActiveView,
   } = useApp();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [accountId, setAccountId] = useState("pessoal");
   const [label, setLabel] = useState("");
   const [credsJson, setCredsJson] = useState("");
+  const [uploadName, setUploadName] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
   if (!state) return null;
@@ -33,16 +38,57 @@ export function GoogleView() {
   const setup = state.setup || {};
   const defaultAccount = accounts.find((a) => a.is_default);
   const redirectUri = `${window.location.origin}/admin/oauth/google/callback`;
+  const isDocker = !!state.deployment?.docker;
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key);
     try {
       await fn();
     } catch (e) {
-      console.error(e);
+      toast(e instanceof Error ? e.message : "Operação falhou", "err");
     } finally {
       setBusy(null);
     }
+  }
+
+  async function saveCredentialsFromText(text: string, sourceLabel: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    try {
+      JSON.parse(trimmed);
+    } catch {
+      throw new Error("Arquivo não é JSON válido.");
+    }
+    setCredsJson(trimmed);
+    await onSaveCreds(trimmed);
+    setUploadName(sourceLabel);
+  }
+
+  async function handleFile(file: File | null | undefined) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".json") && file.type !== "application/json") {
+      throw new Error("Selecione um arquivo .json (client_secret.json).");
+    }
+    if (file.size > 512_000) {
+      throw new Error("Arquivo muito grande (máx. 512 KB).");
+    }
+    const text = await file.text();
+    await saveCredentialsFromText(text, file.name);
+  }
+
+  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    void run("upload", async () => {
+      await handleFile(file);
+      e.target.value = "";
+    });
+  }
+
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    void run("upload", () => handleFile(file));
   }
 
   return (
@@ -204,15 +250,58 @@ export function GoogleView() {
             >
               Abrir Google Cloud
             </Button>
-            <Button
-              variant="secondary"
-              loading={busy === "import"}
-              onClick={() => run("import", onImportCreds)}
-            >
-              <Upload className="h-4 w-4" />
-              Importar de ~/Downloads
-            </Button>
+            {!isDocker ? (
+              <Button
+                variant="secondary"
+                loading={busy === "import"}
+                onClick={() => run("import", onImportCreds)}
+              >
+                <Upload className="h-4 w-4" />
+                Importar de ~/Downloads
+              </Button>
+            ) : null}
           </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="sr-only"
+            onChange={onFileInputChange}
+          />
+          <div
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
+            }}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center transition-colors",
+              dragOver
+                ? "border-primary bg-primary/5"
+                : "border-border bg-background/50 hover:border-primary/40 hover:bg-secondary/20",
+              busy === "upload" && "pointer-events-none opacity-60",
+            )}
+          >
+            <FileJson className="h-8 w-8 text-muted" />
+            <p className="text-sm font-medium">
+              {busy === "upload"
+                ? "Enviando…"
+                : "Arraste client_secret.json ou clique para escolher"}
+            </p>
+            <p className="text-xs text-muted">Arquivo OAuth Web do Google Cloud (.json)</p>
+            {uploadName ? (
+              <p className="text-xs text-success">Último envio: {uploadName}</p>
+            ) : null}
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="creds-json">Ou cole o JSON aqui</Label>
             <Textarea
@@ -226,13 +315,15 @@ export function GoogleView() {
           </div>
           <Button
             loading={busy === "save-creds"}
-            onClick={() => run("save-creds", () => onSaveCreds(credsJson))}
+            onClick={() =>
+              run("save-creds", () => saveCredentialsFromText(credsJson, "JSON colado"))
+            }
           >
             Salvar JSON colado
           </Button>
           {setup.credentials_ready ? (
             <p className="text-xs text-muted">
-              Credencial já salva. Para trocar, cole o novo JSON acima.
+              Credencial já salva no servidor. Envie outro arquivo ou cole JSON para substituir.
             </p>
           ) : null}
         </CardContent>

@@ -26,7 +26,7 @@ Backup recomendado:
 1. No Google Cloud: credencial OAuth **Web** com redirect  
    `https://SEU-DOMINIO/admin/oauth/google/callback`
 2. Env no Coolify: `INTEGRATOR_OAUTH_PUBLIC_BASE_URL=https://SEU-DOMINIO`
-3. No admin → **Google**: cole `client_secret.json` ou importe
+3. No admin → **Google**: arraste `client_secret.json`, clique para enviar pelo navegador, ou cole o JSON
 4. **Conectar nova conta** → autorize no navegador
 
 ### WhatsApp

@@ -85,16 +85,17 @@ Antes de dar por concluído, verificar e alinhar:
 - Após correções integrador/WhatsApp: `./scripts/validate.sh`, atualizar docs/README se contagens ou comportamento mudaram, push `main`, reiniciar serviço SSE/LaunchAgent local ou redeploy Coolify se ativo, apagar branches feature já mergeadas (local e remoto)
 - Produção em Coolify (`https://mcp.peralles.com/admin`); ao migrar do Mac, desinstalar LaunchAgent local (`integrator service uninstall`) para evitar conflito com deploy remoto
 - Comandos operacionais (`status`, `login`, `whatsapp`, `hermes`, `logs`) foram **removidos** da CLI — use o console admin
-- Pareamento WhatsApp e Google OAuth no console admin (`/admin`); Hermes não faz QR
+- Pareamento WhatsApp e Google OAuth no console admin (`/admin`); credencial OAuth Google via upload de `client_secret.json` no navegador (sem import `~/Downloads` em Docker/Coolify); Hermes não faz QR
+- Deploy remoto (Coolify): admin web para Google/WhatsApp/Ferramentas/Logs; agentes Hermes/Claude Desktop no Mac via `./scripts/setup-local-agents.sh`, não pelo admin remoto
 - Se `~/.hermes/config.yaml` já aponta para este repo: não refazer `integrator hermes setup` — `uv sync` + `/reload-mcp` basta
 - Hermes como agente com WhatsApp (tools + auto-transcrição): serviço SSE persistente (`integrator service` + `hermes setup --mode sse`); parar `watch-service` — evita conflito de lock
 
 ## Learned Workspace Facts
 
 - Hermes doc padrão: MCP **stdio**; WhatsApp persistente (tools + auto-transcrição): **`integrator service`** (SSE `127.0.0.1:17320`) + `integrator hermes setup --mode sse` — um worker neonize, Hermes só conecta
-- Console admin **`http://127.0.0.1:17320/admin`** (local `serve-http`/LaunchAgent) ou **`https://mcp.peralles.com/admin`** (Coolify) — Google, WhatsApp (QR), Hermes, config, logs; ver `docs/ADMIN.md`
-- CLI bootstrap: `init`, `serve`, `serve-http`, `service` — operação diária só via admin web
-- Deploy produção **Coolify** + `docker-compose.yml` (`read_only: true`): env `INTEGRATOR_ADMIN_PASSWORD`, `INTEGRATOR_ALLOWED_HOSTS` (domínio sem `https://`), `INTEGRATOR_SERVICE_HOST=0.0.0.0`; volume `/app/data`; health `GET /health` — ver `docs/DOCKER.md`, `config/integrator.docker.env`
+- Console admin **`http://127.0.0.1:17320/admin`** (local) ou **`https://mcp.peralles.com/admin`** (Coolify); menu **Painel · Google · WhatsApp · Ferramentas · Logs · Guia** (Guia = `docs/ADMIN_OPERACAO.md`); deploy/persistência **`docs/COOLIFY.md`**
+- CLI bootstrap: `init`, `serve`, `serve-http`, `service` — operação diária só via admin web; mudanças na UI admin → `./scripts/build-admin.sh` (ou `./scripts/validate.sh`)
+- Deploy produção **Coolify** + `docker-compose.yml` (`read_only: true`): env `INTEGRATOR_ADMIN_PASSWORD`, `INTEGRATOR_ALLOWED_HOSTS`, `INTEGRATOR_OAUTH_PUBLIC_BASE_URL` (OAuth browser), `INTEGRATOR_SERVICE_HOST=0.0.0.0`, `INTEGRATOR_SKIP_MACOS_SERVICE=1`; volume `/app/data`; health `GET /health` — ver `docs/DOCKER.md`, `config/integrator.docker.env`
 - Schemas MCP: inline de `$ref`/`$defs` antes de expor tools (evita `PointerToNowhere` no Hermes)
 - Diagnóstico Hermes+integrador: `~/.hermes/logs/mcp-stderr.log`, `agent.log`; `/reload-mcp` pode parecer lento; falhas no admin → Logs ou `data/logs/errors.log`
 - WhatsApp (MVP): **neonize** em worker isolado `bridges/whatsapp-neonize/` (protobuf 7.x; venv principal em protobuf 6); sessão `data/whatsapp/`; em Docker `read_only` lançar com `bridges/whatsapp-neonize/.venv/bin/python worker.py` (não `uv run` em runtime); ver `docs/WHATSAPP.md`
@@ -102,4 +103,4 @@ Antes de dar por concluído, verificar e alinhar:
 - Tools WhatsApp: usar `display_name`/`phone`/`chat_display_name` (não JIDs `@lid` crus; `chat_id` só follow-up); `find_whatsapp_chats` sem `query` lista recentes; com telefone/nome usa `bridges/whatsapp-neonize/chat_search.py` (dígitos normalizados, cache `@lid`, reidratação pós-restart do cache SQLite); query ≥10 dígitos sem match local retorna candidato sintético `{digits}@s.whatsapp.net`
 - `watch-service`, `serve` stdio e SSE compartilham `data/whatsapp/worker.lock` — só uma instância neonize por sessão; não reativar watch com serviço SSE ativo
 - `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true` transcreve no worker MCP; `serve-http` warm-connecta na subida; hot-reload em `data/admin/runtime.json` (ex.: `transcribe_ignore_numbers`); `TRANSCRIBE_PRIVATE_ONLY=true` ignora `@g.us`; `TRANSCRIBE_ONLY_INCOMING=false` transcreve enviados e recebidos em privado
-- Admin **Configurar MCP** (`integrator/clients/mcp_setup.py`) grava Hermes (`~/.hermes/config.yaml`, SSE com serviço persistente) e Claude Desktop (`claude_desktop_config.json`, preserva `preferences`); após setup Claude, reiniciar o app (⌘Q)
+- **Configurar MCP** no Mac: admin web (serviço local) ou `./scripts/setup-local-agents.sh` (SSE remoto Coolify) — grava `~/.hermes/config.yaml` e Claude Desktop (`claude_desktop_config.json`); após setup Claude, reiniciar o app (⌘Q); Google OAuth web usa redirect `/admin/oauth/google/callback`
