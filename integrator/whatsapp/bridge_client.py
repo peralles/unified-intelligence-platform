@@ -48,11 +48,8 @@ def _bridge_venv_executable(bridge: Path, name: str) -> Path | None:
 
 
 def resolve_worker_command(bridge: Path) -> list[str]:
-    """Launch bridge worker without uv at runtime (Docker read_only + UV_FROZEN safe)."""
-    worker_entry = _bridge_venv_executable(bridge, "whatsapp-neonize-worker")
-    if worker_entry is not None:
-        return [str(worker_entry)]
-    for name in ("python", "python3", "python3.12"):
+    """Launch bridge worker via venv Python + worker.py (relocatable; no console-script shebangs)."""
+    for name in ("python3.12", "python3", "python"):
         py = _bridge_venv_executable(bridge, name)
         if py is not None:
             return [str(py), "worker.py"]

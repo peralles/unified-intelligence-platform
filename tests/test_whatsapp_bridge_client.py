@@ -29,23 +29,15 @@ def test_read_rpc_response_eof_raises() -> None:
         _read_rpc_response(stdout, "1", method="pair")
 
 
-def test_resolve_worker_command_prefers_worker_script(tmp_path: Path) -> None:
-    bridge = tmp_path / "bridge"
-    venv_bin = bridge / ".venv" / "bin"
-    venv_bin.mkdir(parents=True)
-    worker = venv_bin / "whatsapp-neonize-worker"
-    worker.write_text("", encoding="utf-8")
-    python = venv_bin / "python"
-    python.write_text("", encoding="utf-8")
-    assert resolve_worker_command(bridge) == [str(worker)]
-
-
 def test_resolve_worker_command_prefers_venv_python(tmp_path: Path) -> None:
     bridge = tmp_path / "bridge"
     venv_bin = bridge / ".venv" / "bin"
     venv_bin.mkdir(parents=True)
-    python = venv_bin / "python3"
+    python = venv_bin / "python3.12"
     python.write_text("", encoding="utf-8")
+    # Console scripts keep build-time shebangs; must not be used after venv copy.
+    worker = venv_bin / "whatsapp-neonize-worker"
+    worker.write_text("#!/build/.venv/bin/python3\n", encoding="utf-8")
     assert resolve_worker_command(bridge) == [str(python), "worker.py"]
 
 
