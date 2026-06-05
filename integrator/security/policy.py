@@ -32,6 +32,9 @@ DEFAULT_CONFIRM_REQUIRED = frozenset({
     "join_whatsapp_group_link",
     "send_gmail_draft",
     "batch_modify_gmail_labels",
+    "create_google_contact",
+    "update_google_contact",
+    "delete_google_contact",
     "leave_whatsapp_group_and_purge",
     "edit_whatsapp_text",
     "whatsapp_react_message",
@@ -80,7 +83,7 @@ def _enrich_account_property(properties: dict[str, Any]) -> None:
     prop: dict[str, Any] = {
         "type": "string",
         "description": (
-            f"Conta Google (Gmail + Calendar). IDs: {', '.join(account_ids)}. "
+            f"Conta Google (Gmail, Calendar, Contacts). IDs: {', '.join(account_ids)}. "
             f"Padrão: {default_hint}."
         ),
     }

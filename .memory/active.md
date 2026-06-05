@@ -4,7 +4,7 @@
 
 ## Estado
 
-- MVP: MCP **66 tools** (12 Google + 13 Gmail extra + 1 Calendar + 40 WhatsApp), Fase 2
+- MVP: MCP **71 tools** (12 Google + 13 Gmail extra + 1 Calendar + 5 Contacts + 40 WhatsApp), Fase 2
 - **Produção Coolify:** `https://mcp.peralles.com/admin` — volume `/app/data` obrigatório, `read_only`
 - **Google OAuth produção:** redirect `/admin/oauth/google/callback` (Web client); credenciais em `/app/data/credentials/`
 - **Runtime container:** auto via `/.dockerenv` (sem env extra)

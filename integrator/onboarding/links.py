@@ -18,6 +18,9 @@ GMAIL_API_LIBRARY = (
 CALENDAR_API_LIBRARY = (
     "https://console.cloud.google.com/apis/library/calendar-json.googleapis.com"
 )
+PEOPLE_API_LIBRARY = (
+    "https://console.cloud.google.com/apis/library/people.googleapis.com"
+)
 OAUTH_CONSENT = "https://console.cloud.google.com/apis/credentials/consent"
 OAUTH_CREATE_DESKTOP = (
     "https://console.cloud.google.com/apis/credentials/oauthclient"
@@ -45,6 +48,11 @@ GOOGLE_SETUP_STEPS: tuple[GoogleSetupLink, ...] = (
     GoogleSetupLink(
         "Ativar Google Calendar API",
         CALENDAR_API_LIBRARY,
+        "Clique em Ativar (ou Enable).",
+    ),
+    GoogleSetupLink(
+        "Ativar People API (Contatos)",
+        PEOPLE_API_LIBRARY,
         "Clique em Ativar (ou Enable).",
     ),
     GoogleSetupLink(

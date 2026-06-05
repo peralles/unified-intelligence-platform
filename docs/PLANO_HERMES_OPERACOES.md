@@ -1,6 +1,6 @@
 # Plano de implementação — operações Hermes (ordem de velocidade)
 
-**Status:** 66 tools na `main` (incl. busca WhatsApp por telefone).
+**Status:** 71 tools na `main` (incl. Contatos Google + busca WhatsApp por telefone).
 
 ## Fase 4 — Lote 3 (mídia e Gmail)
 

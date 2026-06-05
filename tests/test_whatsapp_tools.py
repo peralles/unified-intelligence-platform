@@ -7,6 +7,7 @@ import pytest
 
 from integrator.providers.tools import (
     CALENDAR_EXTRA_TOOL_COUNT,
+    CONTACTS_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
@@ -29,6 +30,7 @@ def test_tool_counts():
         GOOGLE_TOOL_COUNT
         + GMAIL_EXTRA_TOOL_COUNT
         + CALENDAR_EXTRA_TOOL_COUNT
+        + CONTACTS_EXTRA_TOOL_COUNT
         + WHATSAPP_TOOL_COUNT
     )
     assert len(meta) == TOTAL_TOOL_COUNT == expected
@@ -458,4 +460,10 @@ def test_get_group_invite_revoke_with_confirm(mock_get: MagicMock) -> None:
 
 def test_whatsapp_total_tool_count() -> None:
     assert WHATSAPP_TOOL_COUNT == 40
-    assert TOTAL_TOOL_COUNT == GOOGLE_TOOL_COUNT + GMAIL_EXTRA_TOOL_COUNT + 40 + 1  # +1 calendar extra
+    assert TOTAL_TOOL_COUNT == (
+        GOOGLE_TOOL_COUNT
+        + GMAIL_EXTRA_TOOL_COUNT
+        + CALENDAR_EXTRA_TOOL_COUNT
+        + CONTACTS_EXTRA_TOOL_COUNT
+        + WHATSAPP_TOOL_COUNT
+    )

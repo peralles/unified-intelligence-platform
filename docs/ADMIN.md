@@ -50,7 +50,7 @@ cd integrator/admin/ui && npm run dev
 | **Hermes** | doctor, setup MCP (stdio ou SSE) |
 | **Claude Desktop** | Configurar MCP (SSE) |
 | **Config** | `.env` / runtime (ignore transcrição, flags WhatsApp) |
-| **Tools** | lista 66 tools MCP |
+| **Tools** | lista 71 tools MCP |
 | **Logs / falhas** | tail e falhas de audit |
 
 ## Runtime (hot reload)

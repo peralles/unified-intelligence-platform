@@ -84,7 +84,7 @@ Diagnóstico: `integrator logs --failures`
 | `archive_whatsapp_chat` / `pin_whatsapp_chat` / `mark_whatsapp_read` / `mute_whatsapp_chat` | não |
 | `send_whatsapp_typing` | não (usar com moderação) |
 
-Total com Google: **66 tools** (12 LangChain + 13 Gmail extra + 1 Calendar extra + 40 WhatsApp).
+Total com Google: **71 tools** (12 LangChain + 13 Gmail extra + 1 Calendar extra + 5 Contacts extra + 40 WhatsApp).
 
 ### Busca de chats (`find_whatsapp_chats`)
 

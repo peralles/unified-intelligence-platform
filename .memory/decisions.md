@@ -14,12 +14,12 @@ Resumo das escolhas já documentadas em `docs/PLANO_LANGCHAIN_HERMES.md` e `READ
 - OAuth Google (InstalledAppFlow) no integrador; refresh fora da sessão do LLM
 - `credentials/credentials.json` (OAuth client); tokens em `data/tokens/{account_id}.json`
 - Multi-conta: registry `data/accounts.yaml`; argumento MCP `"account"` ou conta padrão (`integrator use`)
-- Scopes: Gmail + Calendar completos (`GOOGLE_SCOPES` em `integrator/config.py`)
+- Scopes: Gmail + Calendar + Contacts completos (`GOOGLE_SCOPES` em `integrator/config.py`)
 - Fail closed: sem token válido → erro claro, sem acesso inventado
 
 ## Superfície de tools
 
-- **66 tools** MCP via agregador `integrator/providers/tools.py`: 12 Google LangChain + 13 Gmail extra + 1 Calendar extra + 40 WhatsApp
+- **71 tools** MCP via agregador `integrator/providers/tools.py`: 12 Google LangChain + 13 Gmail extra + 1 Calendar extra + 5 Contacts extra + 40 WhatsApp
 - WhatsApp: inclui `transcribe_whatsapp_audio` (on-demand via MCP) e auto-transcrição no worker
 - Extensão futura: padrão `ToolProvider` para outros OAuth
 

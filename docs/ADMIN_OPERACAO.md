@@ -70,7 +70,7 @@ Depois:
 
 ## Ferramentas MCP
 
-66 tools (Google + Gmail extra + Calendar + WhatsApp). Em **Ferramentas** você vê a lista e define allowlist/denylist e confirmação para envio/apagar.
+71 tools (Google + Gmail extra + Calendar + Contacts + WhatsApp). Em **Ferramentas** você vê a lista e define allowlist/denylist e confirmação para envio/apagar.
 
 ## Logs
 

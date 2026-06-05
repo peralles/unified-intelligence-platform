@@ -37,7 +37,7 @@ Antes de dar por concluído, verificar e alinhar:
 
 - Settings: prefixo env `INTEGRATOR_*` — ver `integrator/config.py`, `config/integrator.example.env`
 - Account IDs: `^[a-z][a-z0-9_-]{0,31}$`; entrada normalizada com `.strip().lower()`
-- Superfície MCP: **12** Google (LangChain) + **13** Gmail extra + **1** Calendar extra + **40** WhatsApp; `validate.sh` asserta **66** total
+- Superfície MCP: **12** Google (LangChain) + **13** Gmail extra + **1** Calendar extra + **5** Contacts extra + **40** WhatsApp; `validate.sh` asserta **71** total
 - Confirmação: envio/edição/apagar (Gmail e WhatsApp) — ver `get_confirm_required_tools()` em `integrator/security/policy.py`
 - Erros MCP: prefixo `[integrator]` em `integrator/mcp/server.py`
 - Nunca commitar `credentials/`, `data/`, `.env`; tokens fora do contexto do LLM
@@ -99,7 +99,7 @@ Antes de dar por concluído, verificar e alinhar:
 - Schemas MCP: inline de `$ref`/`$defs` antes de expor tools (evita `PointerToNowhere` no Hermes)
 - Diagnóstico Hermes+integrador: `~/.hermes/logs/mcp-stderr.log`, `agent.log`; `/reload-mcp` pode parecer lento; falhas no admin → Logs ou `data/logs/errors.log`
 - WhatsApp (MVP): **neonize** em worker isolado `bridges/whatsapp-neonize/` (protobuf 7.x; venv principal em protobuf 6); sessão `data/whatsapp/`; em Docker `read_only` lançar com `bridges/whatsapp-neonize/.venv/bin/python worker.py` (não `uv run` em runtime); ver `docs/WHATSAPP.md`
-- Hermes: **um** `mcp_servers.langchain-integrator` — **66 tools** (12 Google + 13 Gmail extra + 1 Calendar + 40 WhatsApp); sem segundo MCP nem Evolution HTTP no MVP
+- Hermes: **um** `mcp_servers.langchain-integrator` — **71 tools** (12 Google + 13 Gmail extra + 1 Calendar + 5 Contacts + 40 WhatsApp); sem segundo MCP nem Evolution HTTP no MVP
 - Tools WhatsApp: usar `display_name`/`phone`/`chat_display_name` (não JIDs `@lid` crus; `chat_id` só follow-up); `find_whatsapp_chats` sem `query` lista recentes; com telefone/nome usa `bridges/whatsapp-neonize/chat_search.py` (dígitos normalizados, cache `@lid`, reidratação pós-restart do cache SQLite); query ≥10 dígitos sem match local retorna candidato sintético `{digits}@s.whatsapp.net`
 - `serve` stdio e SSE compartilham `data/whatsapp/worker.lock` — só uma instância neonize por sessão
 - `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true` transcreve no worker MCP; `serve-http` warm-connecta na subida; hot-reload em `data/admin/runtime.json` (ex.: `transcribe_ignore_numbers`); `TRANSCRIBE_PRIVATE_ONLY=true` ignora `@g.us`; `TRANSCRIBE_ONLY_INCOMING=false` transcreve enviados e recebidos em privado

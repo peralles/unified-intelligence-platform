@@ -7,6 +7,7 @@ import pytest
 
 from integrator.providers.tools import (
     CALENDAR_EXTRA_TOOL_COUNT,
+    CONTACTS_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
@@ -26,6 +27,7 @@ def test_total_tool_count():
         GOOGLE_TOOL_COUNT
         + GMAIL_EXTRA_TOOL_COUNT
         + CALENDAR_EXTRA_TOOL_COUNT
+        + CONTACTS_EXTRA_TOOL_COUNT
         + WHATSAPP_TOOL_COUNT
     )
     assert len(list_all_tool_metadata()) == TOTAL_TOOL_COUNT

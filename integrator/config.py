@@ -11,6 +11,7 @@ def is_container() -> bool:
 GOOGLE_SCOPES = [
     "https://mail.google.com/",
     "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/contacts",
 ]
 
 

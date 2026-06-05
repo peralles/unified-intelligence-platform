@@ -17,6 +17,7 @@ echo "==> import smoke"
 uv run python -c "
 from integrator.providers.tools import (
     CALENDAR_EXTRA_TOOL_COUNT,
+    CONTACTS_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
@@ -32,6 +33,7 @@ expected_total = (
     GOOGLE_TOOL_COUNT
     + GMAIL_EXTRA_TOOL_COUNT
     + CALENDAR_EXTRA_TOOL_COUNT
+    + CONTACTS_EXTRA_TOOL_COUNT
     + WHATSAPP_TOOL_COUNT
 )
 assert len(meta) == TOTAL_TOOL_COUNT == expected_total, (len(meta), expected_total)
@@ -63,6 +65,9 @@ for required in (
     'join_whatsapp_group_link',
     'send_gmail_draft',
     'batch_modify_gmail_labels',
+    'create_google_contact',
+    'update_google_contact',
+    'delete_google_contact',
     'leave_whatsapp_group_and_purge',
 ):
     assert required in confirm, required
@@ -74,7 +79,8 @@ assert validate_account_id('Profissional') == 'profissional'
 print(
     'OK:', len(meta), 'tools (',
     GOOGLE_TOOL_COUNT, 'Google +', GMAIL_EXTRA_TOOL_COUNT, 'Gmail extra +',
-    CALENDAR_EXTRA_TOOL_COUNT, 'Calendar extra +', WHATSAPP_TOOL_COUNT, 'WhatsApp)',
+    CALENDAR_EXTRA_TOOL_COUNT, 'Calendar extra +', CONTACTS_EXTRA_TOOL_COUNT,
+    'Contacts extra +', WHATSAPP_TOOL_COUNT, 'WhatsApp)',
 )
 "
 
