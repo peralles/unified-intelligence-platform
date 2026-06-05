@@ -4,6 +4,7 @@ import atexit
 from pathlib import Path
 from typing import Any
 
+from integrator.admin.runtime import RuntimeStore, runtime_file_path
 from integrator.config import settings
 from integrator.whatsapp.bridge_client import WhatsAppBridgeClient, resolve_session_dir
 from integrator.whatsapp.logging_whatsapp import LOGGER
@@ -548,11 +549,38 @@ class WhatsAppSession:
         )
         return str((result or {}).get("text", ""))
 
+    def _transcription_status_local(self) -> dict[str, Any]:
+        """Settings/runtime snapshot when the bridge worker is not running."""
+        store = RuntimeStore()
+        wa = store.effective_whatsapp(store.load())
+        ignore = sorted(str(n) for n in (wa.get("transcribe_ignore_numbers") or []))
+        return {
+            "auto_transcribe": wa.get("auto_transcribe", settings.whatsapp_auto_transcribe),
+            "model": wa.get("transcribe_model") or settings.whatsapp_transcribe_model,
+            "language": wa.get("transcribe_language") or settings.whatsapp_transcribe_language,
+            "prefix": wa.get("transcribe_prefix") or settings.whatsapp_transcribe_prefix,
+            "only_incoming": wa.get(
+                "transcribe_only_incoming", settings.whatsapp_transcribe_only_incoming
+            ),
+            "private_only": wa.get(
+                "transcribe_private_only", settings.whatsapp_transcribe_private_only
+            ),
+            "ignore_numbers": ignore,
+            "ignore_count": len(ignore),
+            "runtime_file": str(runtime_file_path()),
+            "transcriber_ready": False,
+        }
+
     def transcription_status(self) -> dict[str, Any]:
         """Return transcription configuration from the active worker."""
-        self.ensure_background_connection()
-        result = self._bridge.call("transcription_status")
-        return dict(result or {})
+        if not self._bridge.is_worker_alive():
+            return self._transcription_status_local()
+        try:
+            self.ensure_background_connection()
+            result = self._bridge.call("transcription_status")
+            return dict(result or {})
+        except Exception:
+            return self._transcription_status_local()
 
     def delete_messages_for_me(
         self,

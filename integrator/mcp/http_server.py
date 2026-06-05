@@ -167,6 +167,12 @@ def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> 
         app = _BasicAuthMiddleware(app, settings.admin_username, settings.admin_password)
         logger.info("admin basic auth enabled | user=%s", settings.admin_username)
 
+    if host in ("0.0.0.0", "::") and not (settings.allowed_hosts or "").strip():
+        logger.warning(
+            "INTEGRATOR_ALLOWED_HOSTS vazio com bind público — defina o domínio do proxy "
+            "(ex.: mcp.example.com) ou Hermes/MCP pode falhar por DNS rebinding"
+        )
+
     return app  # type: ignore[return-value]
 
 

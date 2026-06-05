@@ -270,6 +270,42 @@ docker restart <container>
 
 ---
 
+## Solução de problemas
+
+### Admin trava ao parear WhatsApp (QR só nos logs)
+
+**Sintoma:** após "Iniciar pareamento", a página para de responder; o QR aparece como ASCII nos logs do container, não na UI.
+
+**Causa:** versões antigas bloqueavam o worker neonize com `status(live=True)` enquanto o admin fazia poll de `/admin/api/state`.
+
+**Correção:** use imagem com commit `b3f7ce9` ou mais recente. O QR deve aparecer na UI em poucos segundos; `/health` continua respondendo durante o pareamento.
+
+### `bridge RPC FAIL | transcription_status | ... _ready`
+
+**Sintoma:** warning no log na subida com auto-transcrição.
+
+**Correção:** commit `b3f7ce9+` — propriedade `transcriber_ready` no worker. Reinicie o container após deploy.
+
+### Hermes/MCP não conecta atrás do proxy
+
+**Sintoma:** erro de DNS rebinding ou host inválido no Hermes.
+
+**Correção:** defina `INTEGRATOR_ALLOWED_HOSTS=mcp.seudominio.com` (sem `https://`) no Coolify. Confira o warning no log se estiver vazio com bind `0.0.0.0`.
+
+### Worker WhatsApp não sobe (`Read-only file system` / `uv run`)
+
+**Sintoma:** logs mencionam `uv sync` ou shebang quebrado no container.
+
+**Correção:** imagem recente lança `bridges/whatsapp-neonize/.venv/bin/python worker.py` com `UV_FROZEN=1`. Rebuild completo no Coolify (sem cache stale).
+
+### Perda de sessão após redeploy
+
+**Sintoma:** WhatsApp pede QR de novo; Google pede login.
+
+**Correção:** volume persistente `/app/data` no Coolify. Sem volume, cada redeploy apaga tokens e sessão.
+
+---
+
 ## Variáveis de ambiente completas
 
 Veja `config/integrator.docker.env` para o template completo com todos os valores padrão e comentários.

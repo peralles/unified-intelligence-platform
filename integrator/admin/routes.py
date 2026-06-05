@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -189,10 +190,13 @@ async def admin_api_whatsapp_pair(request: Request) -> Response:
     if action == "start":
         body = await _json_body(request) if request.method == "POST" else {}
         fresh = bool(body.get("fresh"))
-        return JSONResponse(admin_handlers.whatsapp_pair_start(fresh=fresh))
+        result = await asyncio.to_thread(admin_handlers.whatsapp_pair_start, fresh=fresh)
+        return JSONResponse(result)
     if action == "stop":
-        return JSONResponse(admin_handlers.whatsapp_pair_stop())
-    return JSONResponse(admin_handlers.whatsapp_pair_poll())
+        result = await asyncio.to_thread(admin_handlers.whatsapp_pair_stop)
+        return JSONResponse(result)
+    result = await asyncio.to_thread(admin_handlers.whatsapp_pair_poll)
+    return JSONResponse(result)
 
 
 async def admin_api_whatsapp_session(request: Request) -> Response:
@@ -296,7 +300,8 @@ async def admin_index(_: Request) -> Response:
 
 
 async def admin_api_state(_: Request) -> Response:
-    return JSONResponse(_build_state())
+    payload = await asyncio.to_thread(_build_state)
+    return JSONResponse(payload)
 
 
 async def admin_api_config(request: Request) -> Response:

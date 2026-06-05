@@ -247,13 +247,16 @@ def whatsapp_snapshot() -> dict[str, Any]:
     snap = local_status_snapshot()
     out: dict[str, Any] = {"local": snap, "enabled": settings.whatsapp_enabled}
     if settings.whatsapp_enabled:
+        session = WhatsAppSession.get()
         try:
-            session = WhatsAppSession.get()
             # Fast path: live=True blocks up to wait_s on bridge lock and freezes pair_poll.
             out["live"] = session.status(live=False)
-            out["transcription"] = session.transcription_status()
         except Exception as exc:
             out["error"] = str(exc)
+        try:
+            out["transcription"] = session.transcription_status()
+        except Exception as exc:
+            out["transcription_error"] = str(exc)
     return out
 
 

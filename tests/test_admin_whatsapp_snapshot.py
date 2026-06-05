@@ -8,7 +8,7 @@ from integrator.admin import handlers
 def test_whatsapp_snapshot_uses_non_blocking_status() -> None:
     session = MagicMock()
     session.status.return_value = {"state": "qr", "logged_in": False}
-    session.transcription_status.return_value = {"auto_transcribe": True}
+    session.transcription_status.side_effect = RuntimeError("bridge down")
 
     with (
         patch("integrator.admin.handlers.settings") as mock_settings,
@@ -20,4 +20,5 @@ def test_whatsapp_snapshot_uses_non_blocking_status() -> None:
 
     session.status.assert_called_once_with(live=False)
     assert out["live"]["state"] == "qr"
-    assert out["transcription"]["auto_transcribe"] is True
+    assert "transcription_error" in out
+    assert "error" not in out

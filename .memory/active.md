@@ -1,11 +1,12 @@
 # Contexto ativo
 
-Última atualização: merge `fix(whatsapp)` na `main` — busca de chats por telefone/`@lid` + docs 66 tools.
+Última atualização: hardening admin produção (Coolify) + fix pareamento QR (`b3f7ce9`).
 
 ## Estado
 
 - MVP: MCP **66 tools** (12 Google + 13 Gmail extra + 1 Calendar + 40 WhatsApp), Fase 2
-- **Admin UI** (`http://127.0.0.1:17320/admin`): Vite build em `static/dist/`; sidebar, pills status, wizard setup
+- **Produção Coolify:** `https://mcp.peralles.com/admin` — volume `/app/data`, `read_only`, env `INTEGRATOR_ALLOWED_HOSTS` + `INTEGRATOR_ADMIN_PASSWORD`
+- **Admin UI** (`http://127.0.0.1:17320/admin` local): Vite build em `static/dist/`; sidebar, pills status, wizard setup
 - **Seams:** `integrator/setup/status.py`, `integrator/onboarding/preflight.py` — admin não importa `cli/`
 - **CLI operador:** removida — só bootstrap (`init`, `serve`, `serve-http`, `service`); operação via admin
 - **`./setup.sh status`:** aponta admin (não chama CLI legado)
