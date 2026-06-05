@@ -6,9 +6,10 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
@@ -115,6 +116,11 @@ def _build_state() -> dict[str, Any]:
                 "(sem reiniciar)."
             ),
             "cli": "Operação diária via /admin; bootstrap: ./setup.sh ou service install",
+        },
+        "deployment": {
+            "docker": settings.skip_macos_service,
+            "oauth_redirect": "/admin/oauth/google/callback",
+            "persist_path": "/app/data",
         },
     }
 
@@ -304,6 +310,67 @@ async def admin_api_state(_: Request) -> Response:
     return JSONResponse(payload)
 
 
+async def admin_oauth_google_start(request: Request) -> Response:
+    account_id = request.query_params.get("account_id", "pessoal")
+    label = request.query_params.get("label") or None
+    from integrator.auth.google_oauth_web import (
+        resolve_public_base_url,
+        start_oauth_authorization,
+    )
+
+    public_base = resolve_public_base_url(
+        forwarded_proto=request.headers.get("x-forwarded-proto"),
+        forwarded_host=request.headers.get("x-forwarded-host"),
+        host=request.headers.get("host"),
+    )
+    try:
+        auth_url = await asyncio.to_thread(
+            start_oauth_authorization,
+            public_base=public_base,
+            account_id=account_id,
+            label=label,
+        )
+    except Exception as exc:
+        logger.warning("admin oauth start failed: %s", exc)
+        return RedirectResponse(
+            f"/admin?oauth=error&message={quote(str(exc)[:200])}",
+            status_code=302,
+        )
+    return RedirectResponse(auth_url, status_code=302)
+
+
+async def admin_oauth_google_callback(request: Request) -> Response:
+    from integrator.auth.google_oauth_web import complete_oauth_authorization
+
+    oauth_error = request.query_params.get("error")
+    if oauth_error:
+        detail = request.query_params.get("error_description") or oauth_error
+        return RedirectResponse(
+            f"/admin?oauth=error&message={quote(detail[:200])}",
+            status_code=302,
+        )
+    state = request.query_params.get("state", "")
+    code = request.query_params.get("code", "")
+    if not state or not code:
+        return RedirectResponse(
+            "/admin?oauth=error&message=Resposta+OAuth+incompleta",
+            status_code=302,
+        )
+    try:
+        await asyncio.to_thread(
+            complete_oauth_authorization,
+            state=state,
+            code=code,
+        )
+    except Exception as exc:
+        logger.warning("admin oauth callback failed: %s", exc)
+        return RedirectResponse(
+            f"/admin?oauth=error&message={quote(str(exc)[:200])}",
+            status_code=302,
+        )
+    return RedirectResponse("/admin?oauth=ok", status_code=302)
+
+
 async def admin_api_config(request: Request) -> Response:
     try:
         body = await request.json()
@@ -378,6 +445,8 @@ def admin_routes() -> list[Route | Mount]:
         Route("/admin/api/setup/credentials", endpoint=admin_api_setup_credentials, methods=["POST"]),
         Route("/admin/api/accounts", endpoint=admin_api_accounts, methods=["GET"]),
         Route("/admin/api/google/login", endpoint=admin_api_google_login, methods=["GET", "POST"]),
+        Route("/admin/oauth/google/start", endpoint=admin_oauth_google_start, methods=["GET"]),
+        Route("/admin/oauth/google/callback", endpoint=admin_oauth_google_callback, methods=["GET"]),
         Route("/admin/api/google/default", endpoint=admin_api_google_default, methods=["POST"]),
         Route("/admin/api/google/logout", endpoint=admin_api_google_logout, methods=["POST"]),
         Route("/admin/api/whatsapp/pair", endpoint=admin_api_whatsapp_pair, methods=["GET", "POST"]),

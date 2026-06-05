@@ -67,6 +67,7 @@ export function mountApp(root) {
   }
 
   bindGlobalActions();
+  handleOAuthReturn();
   showView("painel");
   refreshAll().catch((e) => toast(e.message, "err"));
   setInterval(() => refreshAll().catch(() => {}), 30_000);
@@ -405,7 +406,11 @@ function renderGoogle() {
       ]),
     ]),
     Card("Conectar nova conta Google", [
-      hint("Abrirá o navegador para autorização OAuth. Conclua no navegador e aguarde."),
+      hint(
+        "Abre Google OAuth na mesma aba (ou nova aba do Google). "
+        + "Credencial OAuth tipo Web com redirect "
+        + `${window.location.origin}/admin/oauth/google/callback .`,
+      ),
       el("div", { className: "grid-2", style: "margin-top:0.5rem" }, [
         field("login_account", "ID da conta (ex: pessoal, trabalho)", loginId),
         field("login_label", "Nome amigável (opcional)", loginLabel),
@@ -479,6 +484,24 @@ function renderWhatsApp() {
 
 function renderServico() {
   const svc = state.mac_service || {};
+  const deploy = state.deployment || {};
+
+  if (deploy.docker) {
+    views.servico.replaceChildren(
+      Card("Serviço (Docker / Coolify)", [
+        hint(
+          "Produção roda no container. Não use LaunchAgent local no Mac — "
+          + "dois workers neonize disputam worker.lock e quebram WhatsApp.",
+        ),
+        hint(
+          "Persistência: monte volume Coolify em /app/data (WhatsApp + tokens Google). "
+          + "Ver docs/COOLIFY.md no repositório.",
+        ),
+        el("pre", { className: "code-block" }, ["docker compose up -d   # ou redeploy no Coolify"]),
+      ]),
+    );
+    return;
+  }
 
   if (!svc.available) {
     views.servico.replaceChildren(
@@ -877,43 +900,26 @@ async function onSaveCreds(textarea) {
 
 async function onGoogleLogin(loginIdEl, loginLabelEl) {
   const account_id = loginIdEl.value.trim() || "pessoal";
-  const label = loginLabelEl.value.trim() || null;
-  await api("/admin/api/google/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ account_id, label }),
-  });
-  toast("Aguardando autorização no navegador…");
-  let retries = 0;
-  await new Promise((resolve) => {
-    const poll = setInterval(async () => {
-      try {
-        const j = await api("/admin/api/google/login");
-        if (refs.loginStatus) {
-          refs.loginStatus.textContent =
-            j.status === "running" ? "Aguardando conclusão da autorização no navegador…" : "";
-        }
-        if (j.status === "ok") {
-          clearInterval(poll);
-          toast(`Conta "${account_id}" conectada com sucesso.`);
-          await refreshAll();
-          resolve();
-        } else if (j.status === "error") {
-          clearInterval(poll);
-          toast(j.error || "Falha na autorização.", "err");
-          if (refs.loginStatus) refs.loginStatus.textContent = "";
-          resolve();
-        } else if (++retries > 80) { // ~2 min timeout
-          clearInterval(poll);
-          toast("Tempo esgotado. Tente novamente.", "warn");
-          if (refs.loginStatus) refs.loginStatus.textContent = "";
-          resolve();
-        }
-      } catch {
-        if (++retries > 80) { clearInterval(poll); resolve(); }
-      }
-    }, 1500);
-  });
+  const label = loginLabelEl.value.trim();
+  const params = new URLSearchParams({ account_id });
+  if (label) params.set("label", label);
+  window.location.href = `/admin/oauth/google/start?${params.toString()}`;
+}
+
+function handleOAuthReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const oauth = params.get("oauth");
+  if (!oauth) return;
+  const message = params.get("message");
+  if (oauth === "ok") {
+    toast("Conta Google conectada com sucesso.");
+    showView("google");
+    refreshAll().catch(() => {});
+  } else {
+    const detail = message ? decodeURIComponent(message.replace(/\+/g, " ")) : "Falha na autorização Google.";
+    toast(detail, "err");
+  }
+  window.history.replaceState({}, "", window.location.pathname);
 }
 
 async function setDefault(id) {

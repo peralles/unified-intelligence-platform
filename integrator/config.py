@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     # Example: "myapp.coolify.io,myapp.example.com"
     allowed_hosts: str | None = None
 
+    # Public URL for OAuth redirect (Coolify/proxy). Example: https://mcp.example.com
+    oauth_public_base_url: str | None = None
+
+    # Docker/Coolify: hide macOS LaunchAgent paths in admin
+    skip_macos_service: bool = False
+
     @property
     def admin_runtime_path(self) -> Path:
         if self.admin_runtime_file:

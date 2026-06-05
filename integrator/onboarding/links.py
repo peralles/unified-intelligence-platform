@@ -23,6 +23,10 @@ OAUTH_CREATE_DESKTOP = (
     "https://console.cloud.google.com/apis/credentials/oauthclient"
     "?authuser=0"
 )
+OAUTH_CREATE_WEB = (
+    "https://console.cloud.google.com/apis/credentials/oauthclient"
+    "?authuser=0"
+)
 
 
 @dataclass(frozen=True)
@@ -49,8 +53,10 @@ GOOGLE_SETUP_STEPS: tuple[GoogleSetupLink, ...] = (
         "Se pedido, configure o app como Interno ou Externo e salve.",
     ),
     GoogleSetupLink(
-        "Criar credencial OAuth (Desktop)",
-        OAUTH_CREATE_DESKTOP,
-        "Tipo: Aplicativo para computador (Desktop). Baixe o JSON.",
+        "Criar credencial OAuth (Desktop ou Web)",
+        OAUTH_CREATE_WEB,
+        "Coolify/produção: tipo Web e adicione redirect "
+        "https://SEU-DOMINIO/admin/oauth/google/callback . "
+        "Mac local: Desktop também funciona.",
     ),
 )
