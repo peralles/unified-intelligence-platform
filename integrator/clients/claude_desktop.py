@@ -76,7 +76,7 @@ def to_claude_server_block(block: dict[str, Any]) -> dict[str, Any]:
     """
     if "url" in block:
         remote_url, auth_env = _split_url_credentials(str(block["url"]))
-        args = ["-y", "mcp-remote", remote_url]
+        args = ["-y", "mcp-remote", remote_url, "--transport", "sse-only"]
         if auth_env:
             # No space after ':' — Claude Desktop on Windows mangles spaced args.
             args.extend(["--header", f"Authorization:${{{_CLAUDE_MCP_AUTH_ENV}}}"])

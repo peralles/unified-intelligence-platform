@@ -21,7 +21,7 @@ def test_to_claude_server_block_sse() -> None:
     claude = to_claude_server_block(block)
     assert claude == {
         "command": "npx",
-        "args": ["-y", "mcp-remote", "http://127.0.0.1:17320/sse"],
+        "args": ["-y", "mcp-remote", "http://127.0.0.1:17320/sse", "--transport", "sse-only"],
     }
     assert "url" not in claude
 
@@ -30,7 +30,13 @@ def test_to_claude_server_block_sse_with_basic_auth() -> None:
     block = {"url": "https://admin:secr%40et@mcp.example.com/sse", "transport": "sse"}
     claude = to_claude_server_block(block)
     assert claude["command"] == "npx"
-    assert claude["args"][:3] == ["-y", "mcp-remote", "https://mcp.example.com/sse"]
+    assert claude["args"][:5] == [
+        "-y",
+        "mcp-remote",
+        "https://mcp.example.com/sse",
+        "--transport",
+        "sse-only",
+    ]
     assert "--header" in claude["args"]
     assert claude["args"][-1] == "Authorization:${INTEGRATOR_MCP_AUTHORIZATION}"
     assert claude["env"]["INTEGRATOR_MCP_AUTHORIZATION"].startswith("Basic ")
@@ -74,4 +80,8 @@ def test_merge_claude_preserves_preferences(tmp_path: Path) -> None:
     assert data["preferences"]["sidebarMode"] == "task"
     entry = data["mcpServers"][DEFAULT_SERVER_NAME]
     assert entry["command"] == "npx"
-    assert entry["args"][2] == "http://127.0.0.1:17320/sse"
+    assert entry["args"][2:6] == [
+        "http://127.0.0.1:17320/sse",
+        "--transport",
+        "sse-only",
+    ]
