@@ -111,14 +111,14 @@ def _build_state() -> dict[str, Any]:
         },
         "notes": {
             "restart_for": (
-                "Alterações em modelo MLX, política de tools ou .env exigem "
-                "reiniciar o serviço (Admin → Serviço ou serve-http)."
+                "Alterações em modelo de transcrição ou política de tools podem exigir "
+                "reinício do container."
             ),
             "ignore_list": (
                 "Números ignorados aplicam-se em tempo real à auto-transcrição "
                 "(sem reiniciar)."
             ),
-            "cli": "Operação diária via /admin; bootstrap: ./setup.sh ou service install",
+            "local_agents": "./scripts/setup-local-agents.sh no PC com Hermes/Claude",
         },
         "deployment": {
             "docker": settings.skip_macos_service,
@@ -234,14 +234,20 @@ async def admin_api_hermes_doctor(_: Request) -> Response:
 
 async def admin_api_hermes_setup(request: Request) -> Response:
     body = await _json_body(request)
+    sse_url = body.get("sse_url")
     return JSONResponse(
         admin_handlers.hermes_setup(
             mode=str(body.get("mode", "sse")),
             yes=bool(body.get("yes", True)),
             force=bool(body.get("force")),
             dry_run=bool(body.get("dry_run")),
+            sse_url=str(sse_url).strip() if isinstance(sse_url, str) and sse_url.strip() else None,
         )
     )
+
+
+async def admin_api_guide(_: Request) -> Response:
+    return JSONResponse(admin_handlers.operator_guide_markdown())
 
 
 async def admin_api_hermes_install_link(_: Request) -> Response:
@@ -460,6 +466,7 @@ def admin_routes() -> list[Route | Mount]:
     routes: list[Route | Mount] = [
         Route("/admin", endpoint=admin_index, methods=["GET"]),
         Route("/admin/api/state", endpoint=admin_api_state, methods=["GET"]),
+        Route("/admin/api/guide", endpoint=admin_api_guide, methods=["GET"]),
         Route("/admin/api/config", endpoint=admin_api_config, methods=["PUT"]),
         Route("/admin/api/logs", endpoint=admin_api_logs, methods=["GET"]),
         Route("/admin/api/setup/status", endpoint=admin_api_setup_status, methods=["GET"]),

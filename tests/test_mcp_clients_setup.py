@@ -39,3 +39,36 @@ def test_setup_mcp_clients_stdio_writes_both(tmp_path: Path, monkeypatch: pytest
     assert DEFAULT_SERVER_NAME in hermes["mcp_servers"]
     assert claude_cfg.is_file()
     assert DEFAULT_SERVER_NAME in json.loads(claude_cfg.read_text())["mcpServers"]
+
+
+def test_setup_mcp_clients_sse_remote_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hermes_cfg = tmp_path / "hermes" / "config.yaml"
+    claude_cfg = tmp_path / "claude" / "claude_desktop_config.json"
+    monkeypatch.setattr(
+        "integrator.clients.mcp_setup.discover_hermes",
+        lambda: __import__(
+            "integrator.hermes.discovery", fromlist=["HermesInstall"]
+        ).HermesInstall(None, tmp_path / "hermes", hermes_cfg),
+    )
+    monkeypatch.setattr(
+        "integrator.clients.mcp_setup.discover_claude_desktop",
+        lambda: __import__(
+            "integrator.clients.claude_desktop", fromlist=["ClaudeDesktopInstall"]
+        ).ClaudeDesktopInstall(claude_cfg, False),
+    )
+    monkeypatch.setattr(
+        "integrator.clients.mcp_setup.run_all_client_checks",
+        lambda **_: [],
+    )
+
+    remote = "https://user:pass@mcp.example.com/sse"
+    result = setup_mcp_clients(
+        mode="sse",
+        yes=True,
+        force=True,
+        sse_url=remote,
+    )
+    assert result["ok"] is True
+    entry = load_hermes_config(hermes_cfg)["mcp_servers"][DEFAULT_SERVER_NAME]
+    assert entry["url"] == remote
+    assert entry["transport"] == "sse"

@@ -24,10 +24,14 @@ from integrator.hermes.doctor import CheckResult, critical_failures, run_checks
 from integrator.service.macos import is_macos
 
 
-def build_server_block(*, mode: str) -> dict[str, Any]:
+def build_server_block(*, mode: str, sse_url: str | None = None) -> dict[str, Any]:
     if mode == "sse":
+        if sse_url and sse_url.strip():
+            return {"url": sse_url.strip(), "transport": "sse"}
         if not is_macos():
-            raise ValueError("Modo SSE requer macOS")
+            raise ValueError(
+                "Modo SSE local requer macOS; use --sse-url para servidor remoto (Coolify/VPN)"
+            )
         return build_sse_server_config()
     return build_stdio_server_config()
 
@@ -49,6 +53,7 @@ def setup_mcp_clients(
     yes: bool = True,
     force: bool = False,
     dry_run: bool = False,
+    sse_url: str | None = None,
 ) -> dict[str, Any]:
     checks = run_all_client_checks(server_name=server_name, mode=mode)
     crit = critical_failures(checks)
@@ -69,7 +74,7 @@ def setup_mcp_clients(
         }
 
     try:
-        block = build_server_block(mode=mode)
+        block = build_server_block(mode=mode, sse_url=sse_url)
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
 

@@ -1,12 +1,10 @@
 import { Sidebar, ToastHost, TopBar } from "@/components/layout/Shell";
 import { useApp } from "@/context/AppContext";
-import { ConfigView } from "@/views/ConfigView";
 import { FerramentasView } from "@/views/FerramentasView";
 import { GoogleView } from "@/views/GoogleView";
+import { GuiaView } from "@/views/GuiaView";
 import { LogsView } from "@/views/LogsView";
-import { McpView } from "@/views/McpView";
 import { PainelView } from "@/views/PainelView";
-import { ServicoView } from "@/views/ServicoView";
 import { WhatsAppView } from "@/views/WhatsAppView";
 import type { ViewId } from "@/types";
 
@@ -14,11 +12,9 @@ const VIEWS: Record<ViewId, React.ComponentType> = {
   painel: PainelView,
   google: GoogleView,
   whatsapp: WhatsAppView,
-  servico: ServicoView,
-  mcp: McpView,
-  config: ConfigView,
   ferramentas: FerramentasView,
   logs: LogsView,
+  guia: GuiaView,
 };
 
 function ActiveView() {

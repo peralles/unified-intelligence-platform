@@ -8,8 +8,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, registerToast, toast } from "@/api/client";
-import type { AppState, CheckItem, Tone, ViewId } from "@/types";
+import { api, registerToast } from "@/api/client";
+import type { AppState, Tone, ViewId } from "@/types";
 
 interface ToastState {
   message: string;
@@ -22,21 +22,15 @@ interface AppContextValue {
   lastUpdated: string;
   loading: boolean;
   toast: ToastState | null;
-  configDirty: boolean;
-  setConfigDirty: (v: boolean) => void;
   setActiveView: (id: ViewId) => void;
   refreshAll: () => Promise<void>;
   navBadgeTone: (id: ViewId) => Tone;
-  // Setup
-  onSyncDeps: () => Promise<void>;
   onGoogleSteps: () => Promise<void>;
   onImportCreds: () => Promise<void>;
   onSaveCreds: (json: string) => Promise<void>;
-  // Google
   onGoogleLogin: (accountId: string, label: string) => void;
   setDefaultAccount: (id: string) => Promise<void>;
   logoutAccount: (id: string) => Promise<void>;
-  // WhatsApp
   qrBase64: string | null;
   qrHint: string;
   pairActive: boolean;
@@ -45,23 +39,11 @@ interface AppContextValue {
   confirmFreshPair: () => void;
   onWaDisconnect: () => Promise<void>;
   onWaRemove: () => Promise<void>;
-  // Service
-  svcAction: (action: string) => Promise<void>;
-  confirmUninstallSvc: () => void;
-  // MCP
-  mcpChecks: CheckItem[] | null;
-  mcpLoading: boolean;
-  onHermesDoctor: () => Promise<void>;
-  onHermesSetup: () => Promise<void>;
-  onHermesInstall: () => Promise<void>;
-  // Config
   saveConfig: (payload: Record<string, unknown>) => Promise<void>;
-  // Logs
   logText: string;
   currentLog: string | null;
   loadLog: (name: string) => Promise<void>;
   loadFailures: () => Promise<void>;
-  // Tools
   toolsLoaded: boolean;
   loadTools: () => Promise<{ name: string; description?: string }[] | null>;
 }
@@ -74,9 +56,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastUpdated, setLastUpdated] = useState("");
   const [loading, setLoading] = useState(false);
   const [toastState, setToastState] = useState<ToastState | null>(null);
-  const [configDirty, setConfigDirty] = useState(false);
-  const [mcpChecks, setMcpChecks] = useState<CheckItem[] | null>(null);
-  const [mcpLoading, setMcpLoading] = useState(false);
   const [toolsLoaded, setToolsLoaded] = useState(false);
   const [logText, setLogText] = useState("Clique em um botão abaixo para carregar o log.");
   const [currentLog, setCurrentLog] = useState<string | null>(null);
@@ -88,7 +67,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const pairTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pairPollFailures = useRef(0);
-  const mcpDoctorLoaded = useRef(false);
 
   const showToast = useCallback((message: string, tone: Tone = "", dur = 3200) => {
     setToastState({ message, tone });
@@ -139,69 +117,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const setup = state.setup || {};
       const wa = state.whatsapp_live || {};
       const st = wa.live || wa.status || {};
-      const svc = state.mac_service || {};
-      const fails = setup.critical_failures ?? 0;
       if (id === "google") return setup.configured ? "ok" : "warn";
       if (id === "whatsapp") return wa.error ? "err" : st.logged_in ? "ok" : "warn";
-      if (id === "mcp") return fails === 0 ? "ok" : "warn";
-      if (id === "servico") return svc.running ? "ok" : "";
       return "";
     },
     [state],
   );
-
-  const onHermesDoctor = useCallback(async () => {
-    setMcpLoading(true);
-    try {
-      const d = await api<{ checks: CheckItem[] }>("/admin/api/hermes/doctor");
-      setMcpChecks(d.checks || []);
-    } catch {
-      setMcpChecks([]);
-      toast("Falha ao rodar diagnóstico.", "err");
-    } finally {
-      setMcpLoading(false);
-    }
-  }, []);
-
-  const svcAction = useCallback(
-    async (action: string) => {
-      const data = await api<{ ok?: boolean; error?: string }>("/admin/api/service", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      if (!data.ok) {
-        showToast(data.error || `Falha: ${action}`, "err");
-        return;
-      }
-      const msgs: Record<string, string> = {
-        install: "Serviço instalado e iniciado.",
-        start: "Serviço iniciado.",
-        stop: "Serviço parado.",
-        uninstall: "Serviço desinstalado.",
-      };
-      showToast(msgs[action] || `Ação executada: ${action}`);
-      await refreshAll();
-    },
-    [refreshAll, showToast],
-  );
-
-  const confirmUninstallSvc = useCallback(() => {
-    if (
-      confirm(
-        "Desinstalar o LaunchAgent?\nO servidor não iniciará automaticamente no próximo login.",
-      )
-    ) {
-      void svcAction("uninstall");
-    }
-  }, [svcAction]);
-
-  useEffect(() => {
-    if (activeView === "mcp" && !mcpDoctorLoaded.current) {
-      mcpDoctorLoaded.current = true;
-      void onHermesDoctor();
-    }
-  }, [activeView, onHermesDoctor]);
 
   const pollPair = useCallback(async () => {
     try {
@@ -290,39 +211,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastUpdated,
       loading,
       toast: toastState,
-      configDirty,
-      setConfigDirty,
       setActiveView,
       refreshAll,
       navBadgeTone,
-      onSyncDeps: async () => {
-        await api("/admin/api/setup/sync", { method: "POST", body: "{}" });
-        showToast("Instalando dependências…");
-        let retries = 0;
-        await new Promise<void>((resolve) => {
-          const poll = setInterval(async () => {
-            try {
-              const j = await api<{ status?: string }>("/admin/api/setup/sync");
-              if (j.status !== "running") {
-                clearInterval(poll);
-                showToast(
-                  j.status === "ok"
-                    ? "Dependências instaladas com sucesso."
-                    : "Falha ao instalar dependências.",
-                  j.status === "ok" ? "" : "err",
-                );
-                await refreshAll();
-                resolve();
-              }
-            } catch {
-              if (++retries > 15) {
-                clearInterval(poll);
-                resolve();
-              }
-            }
-          }, 2000);
-        });
-      },
       onGoogleSteps: async () => {
         await api("/admin/api/setup/google-steps", { method: "POST", body: "{}" });
         showToast("Passos do Google Cloud abertos no navegador.");
@@ -409,47 +300,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         showToast("Sessão removida.");
         await refreshAll();
       },
-      svcAction,
-      confirmUninstallSvc,
-      mcpChecks,
-      mcpLoading,
-      onHermesDoctor,
-      onHermesSetup: async () => {
-        const r = await api<{ ok?: boolean; error?: string; restart_hints?: string[] }>(
-          "/admin/api/hermes/setup",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "sse", yes: true }),
-          },
-        );
-        if (r.ok) {
-          showToast("Integração MCP configurada com sucesso.");
-          if (r.restart_hints?.length) {
-            setTimeout(
-              () => showToast("Reinicie o Claude Desktop (⌘Q) ou use /reload-mcp no Hermes.", "warn"),
-              4100,
-            );
-          }
-        } else {
-          showToast(r.error || "Falha ao configurar MCP.", "err");
-        }
-      },
-      onHermesInstall: async () => {
-        await api("/admin/api/hermes/install", { method: "POST", body: "{}" });
-        showToast("Link de instalação do Hermes aberto no navegador.");
-      },
       saveConfig: async (payload) => {
         const data = await api<{ restart_recommended?: boolean }>("/admin/api/config", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        setConfigDirty(false);
         await refreshAll();
         showToast(
           data.restart_recommended
-            ? "Salvo. Reinicie o serviço para aplicar mudanças de modelo ou ferramentas."
+            ? "Salvo. Reinicie o container para aplicar mudanças de modelo ou ferramentas."
             : "Configurações salvas com sucesso.",
           data.restart_recommended ? "warn" : "",
         );
@@ -497,7 +357,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastUpdated,
       loading,
       toastState,
-      configDirty,
       refreshAll,
       navBadgeTone,
       qrBase64,
@@ -505,15 +364,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       pairActive,
       startPair,
       stopPair,
-      mcpChecks,
-      mcpLoading,
       logText,
       currentLog,
       toolsLoaded,
       showToast,
-      svcAction,
-      confirmUninstallSvc,
-      onHermesDoctor,
     ],
   );
 

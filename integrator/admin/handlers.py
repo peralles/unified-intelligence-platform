@@ -370,12 +370,14 @@ def hermes_setup(
     yes: bool = True,
     force: bool = False,
     dry_run: bool = False,
+    sse_url: str | None = None,
 ) -> dict[str, Any]:
     return setup_mcp_clients(
         mode=mode,
         yes=yes,
         force=force,
         dry_run=dry_run,
+        sse_url=sse_url,
     )
 
 
@@ -395,3 +397,10 @@ def open_hermes_install() -> dict[str, Any]:
     except Exception:
         pass
     return {"ok": True, "url": HERMES_INSTALL}
+
+
+def operator_guide_markdown() -> dict[str, Any]:
+    path = settings.root_dir / "docs" / "ADMIN_OPERACAO.md"
+    if not path.is_file():
+        return {"markdown": "# Guia\n\nArquivo docs/ADMIN_OPERACAO.md não encontrado.\n"}
+    return {"markdown": path.read_text(encoding="utf-8")}

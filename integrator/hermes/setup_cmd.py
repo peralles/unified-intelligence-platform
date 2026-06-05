@@ -27,6 +27,7 @@ def cmd_hermes_setup(args: argparse.Namespace) -> int:
         yes=bool(args.yes),
         force=bool(args.force),
         dry_run=bool(args.dry_run),
+        sse_url=getattr(args, "sse_url", None),
     )
 
     if not result.get("ok"):
@@ -146,6 +147,12 @@ def add_hermes_subparser(sub: argparse._SubParsersAction) -> None:
         "--skip-test",
         action="store_true",
         help="Não executar hermes mcp test após gravar",
+    )
+    p_setup.add_argument(
+        "--sse-url",
+        default=None,
+        metavar="URL",
+        help="URL SSE remota (ex.: https://user:pass@host/sse) — Coolify/VPN",
     )
     p_setup.set_defaults(func=cmd_hermes_setup)
 

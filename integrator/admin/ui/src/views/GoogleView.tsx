@@ -21,6 +21,7 @@ export function GoogleView() {
     onGoogleSteps,
     onImportCreds,
     onSaveCreds,
+    setActiveView,
   } = useApp();
   const [accountId, setAccountId] = useState("pessoal");
   const [label, setLabel] = useState("");
@@ -30,6 +31,8 @@ export function GoogleView() {
   if (!state) return null;
   const accounts = state.accounts?.accounts || [];
   const setup = state.setup || {};
+  const defaultAccount = accounts.find((a) => a.is_default);
+  const redirectUri = `${window.location.origin}/admin/oauth/google/callback`;
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key);
@@ -44,6 +47,32 @@ export function GoogleView() {
 
   return (
     <div className="space-y-5">
+      <Card>
+        <CardHeader>
+          <CardTitle>Resumo</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-md border border-border bg-background/40 px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-muted">OAuth JSON</p>
+            <p className="mt-1 font-medium">
+              <Badge tone={setup.credentials_ready ? "ok" : "warn"}>
+                {setup.credentials_ready ? "Configurado" : "Pendente"}
+              </Badge>
+            </p>
+          </div>
+          <div className="rounded-md border border-border bg-background/40 px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-muted">Contas</p>
+            <p className="mt-1 font-medium">{accounts.length} conectada(s)</p>
+          </div>
+          <div className="rounded-md border border-border bg-background/40 px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-muted">Padrão</p>
+            <p className="mt-1 truncate font-medium text-sm">
+              {defaultAccount?.email || defaultAccount?.id || "—"}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Contas Google conectadas</CardTitle>
@@ -121,9 +150,9 @@ export function GoogleView() {
         <CardHeader>
           <CardTitle>Conectar nova conta Google</CardTitle>
           <CardDescription>
-            Abre Google OAuth na mesma aba. Credencial OAuth tipo Web com redirect{" "}
+            Redirect OAuth autorizado no Google Cloud:{" "}
             <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
-              {window.location.origin}/admin/oauth/google/callback
+              {redirectUri}
             </code>
           </CardDescription>
         </CardHeader>
@@ -155,53 +184,71 @@ export function GoogleView() {
         </CardContent>
       </Card>
 
-      {!setup.credentials_ready ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Arquivo OAuth (client_secret.json)</CardTitle>
-            <CardDescription>
-              Baixe do Google Cloud Console (APIs &amp; Services → Credentials) e cole o
-              conteúdo abaixo, ou use Importar.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                loading={busy === "steps"}
-                onClick={() => run("steps", onGoogleSteps)}
-              >
-                Abrir Google Cloud
-              </Button>
-              <Button
-                variant="secondary"
-                loading={busy === "import"}
-                onClick={() => run("import", onImportCreds)}
-              >
-                <Upload className="h-4 w-4" />
-                Importar de ~/Downloads
-              </Button>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="creds-json">Ou cole o JSON aqui</Label>
-              <Textarea
-                id="creds-json"
-                rows={4}
-                value={credsJson}
-                onChange={(e) => setCredsJson(e.target.value)}
-                placeholder='{"installed":{"client_id":"...","client_secret":"...",...}}'
-                className="font-mono text-xs"
-              />
-            </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Credencial OAuth (client_secret.json)</CardTitle>
+          <CardDescription>
+            Tipo <strong>Web application</strong> no Google Cloud. Em produção, defina também{" "}
+            <code className="rounded bg-secondary px-1 font-mono text-xs">
+              INTEGRATOR_OAUTH_PUBLIC_BASE_URL
+            </code>{" "}
+            no Coolify.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
             <Button
-              loading={busy === "save-creds"}
-              onClick={() => run("save-creds", () => onSaveCreds(credsJson))}
+              variant="secondary"
+              loading={busy === "steps"}
+              onClick={() => run("steps", onGoogleSteps)}
             >
-              Salvar JSON colado
+              Abrir Google Cloud
             </Button>
-          </CardContent>
-        </Card>
-      ) : null}
+            <Button
+              variant="secondary"
+              loading={busy === "import"}
+              onClick={() => run("import", onImportCreds)}
+            >
+              <Upload className="h-4 w-4" />
+              Importar de ~/Downloads
+            </Button>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="creds-json">Ou cole o JSON aqui</Label>
+            <Textarea
+              id="creds-json"
+              rows={4}
+              value={credsJson}
+              onChange={(e) => setCredsJson(e.target.value)}
+              placeholder='{"web":{"client_id":"...","client_secret":"...",...}}'
+              className="font-mono text-xs"
+            />
+          </div>
+          <Button
+            loading={busy === "save-creds"}
+            onClick={() => run("save-creds", () => onSaveCreds(credsJson))}
+          >
+            Salvar JSON colado
+          </Button>
+          {setup.credentials_ready ? (
+            <p className="text-xs text-muted">
+              Credencial já salva. Para trocar, cole o novo JSON acima.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <p className="text-xs text-muted">
+        Dúvidas sobre redirect ou Coolify? Veja o menu{" "}
+        <button
+          type="button"
+          className="text-primary underline-offset-2 hover:underline"
+          onClick={() => setActiveView("guia")}
+        >
+          Guia
+        </button>
+        .
+      </p>
     </div>
   );
 }

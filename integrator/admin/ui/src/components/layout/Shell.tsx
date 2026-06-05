@@ -16,7 +16,7 @@ export function Sidebar() {
         </div>
         <div>
           <h1 className="text-base font-semibold tracking-tight">Integrator</h1>
-          <p className="text-xs text-muted">Console local</p>
+          <p className="text-xs text-muted">Console admin</p>
         </div>
       </div>
 
@@ -74,7 +74,6 @@ export function TopBar() {
   const setup = state?.setup || {};
   const wa = state?.whatsapp_live || {};
   const st = wa.live || wa.status || {};
-  const fails = setup.critical_failures ?? 0;
 
   return (
     <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-6 py-5">
@@ -94,9 +93,6 @@ export function TopBar() {
         {st.logged_in && state?.effective?.whatsapp?.auto_transcribe ? (
           <Badge tone="ok">Transcrição</Badge>
         ) : null}
-        <Badge tone={fails ? "warn" : "ok"}>
-          MCP {fails ? `${fails} problema(s)` : "OK"}
-        </Badge>
       </div>
     </header>
   );

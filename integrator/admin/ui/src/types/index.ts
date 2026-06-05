@@ -2,11 +2,9 @@ export type ViewId =
   | "painel"
   | "google"
   | "whatsapp"
-  | "servico"
-  | "mcp"
-  | "config"
   | "ferramentas"
-  | "logs";
+  | "logs"
+  | "guia";
 
 export type Tone = "ok" | "warn" | "err" | "info" | "";
 
@@ -28,6 +26,14 @@ export interface GoogleAccount {
   is_default?: boolean;
 }
 
+export interface TranscriptionStatus {
+  auto_transcribe?: boolean;
+  model?: string;
+  language?: string;
+  transcriber_ready?: boolean;
+  ignore_count?: number;
+}
+
 export interface AppState {
   service?: {
     url_admin?: string;
@@ -47,6 +53,7 @@ export interface AppState {
   whatsapp_live?: {
     live?: { logged_in?: boolean; state?: string; push_name?: string };
     status?: { logged_in?: boolean; state?: string; push_name?: string };
+    transcription?: TranscriptionStatus;
     error?: string;
   };
   effective?: {
@@ -58,13 +65,6 @@ export interface AppState {
   mac_service?: Record<string, unknown> & { available?: boolean; running?: boolean };
   deployment?: { docker?: boolean };
   persistence?: PersistenceState;
-}
-
-export interface CheckItem {
-  label: string;
-  status: string;
-  detail?: string;
-  hint?: string;
 }
 
 export interface ToolMeta {
