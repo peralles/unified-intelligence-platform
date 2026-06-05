@@ -70,18 +70,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy pre-built main venv + source; bridge venv last so COPY . . cannot shadow it
-COPY --from=builder /app/.venv ./.venv
-COPY --from=builder /app/integrator ./integrator
-COPY . .
-COPY --from=bridge-builder /bridge/.venv ./bridges/whatsapp-neonize/.venv
-
-# Non-root user — reduces attack surface if a dependency is compromised
+# Non-root user — create before COPY --chown so layers get correct ownership
+# without a slow `chown -R` over both venvs (OOM/timeout on small VPS builders).
 RUN groupadd --gid 1000 app && \
     useradd  --uid 1000 --gid app --no-create-home --shell /sbin/nologin app
 
-# Pre-create data dirs and assign ownership so Docker seeds named volumes
-# with the correct permissions on first mount
+# Copy pre-built main venv + source; bridge venv last so COPY . . cannot shadow it
+COPY --from=builder --chown=app:app /app/.venv ./.venv
+COPY --from=builder --chown=app:app /app/integrator ./integrator
+COPY --chown=app:app . .
+COPY --from=bridge-builder --chown=app:app /bridge/.venv ./bridges/whatsapp-neonize/.venv
+
+# Pre-create data dirs for named-volume seeding (small chown scope only)
 RUN mkdir -p \
         /app/data/logs \
         /app/data/admin \
@@ -91,7 +91,7 @@ RUN mkdir -p \
         /app/data/cache/huggingface \
         /app/data/credentials \
         /app/credentials \
-    && chown -R app:app /app
+    && chown -R app:app /app/data /app/credentials
 
 USER app
 
