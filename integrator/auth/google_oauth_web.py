@@ -77,13 +77,6 @@ def start_oauth_authorization(
 
     redirect_uri = build_redirect_uri(public_base)
     state = secrets.token_urlsafe(32)
-    with _pending_lock:
-        _purge_expired()
-        _pending[state] = {
-            "account_id": aid,
-            "redirect_uri": redirect_uri,
-            "created_at": time.time(),
-        }
 
     from google_auth_oauthlib.flow import Flow
 
@@ -98,6 +91,14 @@ def start_oauth_authorization(
         state=state,
         prompt="consent",
     )
+    with _pending_lock:
+        _purge_expired()
+        _pending[state] = {
+            "account_id": aid,
+            "redirect_uri": redirect_uri,
+            "created_at": time.time(),
+            "code_verifier": flow.code_verifier,
+        }
     return auth_url
 
 
@@ -111,6 +112,9 @@ def complete_oauth_authorization(*, state: str, code: str) -> Path:
 
     redirect_uri = str(pending["redirect_uri"])
     account_id = str(pending["account_id"])
+    code_verifier = pending.get("code_verifier")
+    if not code_verifier:
+        raise GoogleAuthError("Sessão OAuth expirada ou inválida. Tente conectar novamente.")
 
     from google_auth_oauthlib.flow import Flow
 
@@ -119,6 +123,8 @@ def complete_oauth_authorization(*, state: str, code: str) -> Path:
         scopes=list(GOOGLE_SCOPES),
         redirect_uri=redirect_uri,
         state=state,
+        code_verifier=str(code_verifier),
+        autogenerate_code_verifier=False,
     )
     flow.fetch_token(code=code)
     creds = flow.credentials

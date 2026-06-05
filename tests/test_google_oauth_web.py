@@ -46,6 +46,7 @@ def test_resolve_public_base_url_from_forwarded_headers() -> None:
 
 def test_start_oauth_authorization_returns_auth_url() -> None:
     flow = MagicMock()
+    flow.code_verifier = "pkce-verifier"
     flow.authorization_url.return_value = ("https://accounts.google.com/o/oauth2/auth?x=1", None)
 
     with (
@@ -67,15 +68,21 @@ def test_start_oauth_authorization_returns_auth_url() -> None:
     assert kwargs["access_type"] == "offline"
     assert kwargs["prompt"] == "consent"
     assert kwargs["state"]
+    assert oauth_web._pending[kwargs["state"]]["code_verifier"] == "pkce-verifier"
 
 
 def test_complete_oauth_authorization_persists_token(tmp_path) -> None:
     token_path = tmp_path / "pessoal.json"
     creds = MagicMock()
     creds.to_json.return_value = '{"token": "x"}'
-    flow = MagicMock()
-    flow.credentials = creds
-    flow.authorization_url.return_value = ("https://accounts.google.com/o/oauth2/auth", None)
+    start_flow = MagicMock()
+    start_flow.code_verifier = "pkce-verifier"
+    start_flow.authorization_url.return_value = (
+        "https://accounts.google.com/o/oauth2/auth",
+        None,
+    )
+    complete_flow = MagicMock()
+    complete_flow.credentials = creds
 
     account = MagicMock()
     account.token_path = token_path
@@ -88,7 +95,10 @@ def test_complete_oauth_authorization_persists_token(tmp_path) -> None:
         patch("integrator.auth.google_oauth_web.update_account_email") as mock_update_email,
         patch("integrator.auth.google_oauth_web.secure_token_file") as mock_secure,
         patch("integrator.providers.tool_cache.invalidate_live_tools"),
-        patch("google_auth_oauthlib.flow.Flow.from_client_secrets_file", return_value=flow),
+        patch(
+            "google_auth_oauthlib.flow.Flow.from_client_secrets_file",
+            side_effect=[start_flow, complete_flow],
+        ) as mock_from_secrets,
     ):
         mock_settings.credentials_path = "/tmp/credentials.json"
         mock_settings.ensure_data_dirs = MagicMock()
@@ -97,14 +107,17 @@ def test_complete_oauth_authorization_persists_token(tmp_path) -> None:
             account_id="pessoal",
             label=None,
         )
-        state = flow.authorization_url.call_args.kwargs["state"]
+        state = start_flow.authorization_url.call_args.kwargs["state"]
         out = complete_oauth_authorization(state=state, code="auth-code")
 
     assert token_path.is_file()
     mock_secure.assert_called_once_with(token_path)
     mock_update_email.assert_called_once_with("pessoal", "a@b.com")
     assert out == token_path
-    flow.fetch_token.assert_called_once_with(code="auth-code")
+    complete_flow.fetch_token.assert_called_once_with(code="auth-code")
+    complete_kwargs = mock_from_secrets.call_args_list[1].kwargs
+    assert complete_kwargs["code_verifier"] == "pkce-verifier"
+    assert complete_kwargs["autogenerate_code_verifier"] is False
 
 
 def test_complete_oauth_invalid_state_raises() -> None:
