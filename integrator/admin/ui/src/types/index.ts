@@ -62,9 +62,8 @@ export interface AppState {
     logging?: Record<string, unknown>;
   };
   ignore_numbers_text?: string;
-  mac_service?: Record<string, unknown> & { available?: boolean; running?: boolean };
   deployment?: {
-    docker?: boolean;
+    container?: boolean;
     oauth_public_base_url?: string | null;
     oauth_redirect?: string;
   };

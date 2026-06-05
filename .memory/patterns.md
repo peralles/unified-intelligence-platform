@@ -23,7 +23,7 @@ Seguir o que já existe em `integrator/` e `tests/`.
 ## CLI e serviço
 
 - Entrada: `integrator/cli/main.py` — subcomandos `status`, `login`, `serve`, `service`, etc.
-- macOS LaunchAgent: `integrator/service/macos.py`
+- Container runtime: `is_container()` → `/.dockerenv`
 
 ## Testes
 

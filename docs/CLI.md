@@ -1,6 +1,6 @@
 # CLI — `integrator`
 
-> **Operadores:** use o [console admin](ADMIN.md) em `http://127.0.0.1:17320/admin` (`./setup.sh admin`).
+> **Operadores:** use o [console admin](ADMIN.md) em `http://127.0.0.1:17320/admin` (local) ou `https://SEU-DOMINIO/admin` (Coolify). `./setup.sh admin` abre o painel local.
 
 A CLI expõe apenas **bootstrap** e **runtime** do integrador. Google, WhatsApp, Hermes, logs e configuração ficam no admin web.
 
@@ -11,7 +11,6 @@ A CLI expõe apenas **bootstrap** e **runtime** do integrador. Google, WhatsApp,
 | `integrator init` | Assistente guiado: deps, Google OAuth, login, Hermes MCP |
 | `integrator serve` | Servidor MCP stdio (Hermes inicia o processo) |
 | `integrator serve-http` | Servidor HTTP/SSE local + console `/admin` |
-| `integrator service …` | **macOS:** LaunchAgent (instalar/ativar/desativar) |
 
 ## Aliases legados
 
@@ -25,9 +24,10 @@ A CLI expõe apenas **bootstrap** e **runtime** do integrador. Google, WhatsApp,
 ```bash
 ./setup.sh                    # init interativo
 integrator init -y            # init não interativo
-integrator service install    # macOS: serviço persistente + admin
-integrator serve-http         # foreground SSE + admin
+integrator serve-http         # foreground SSE + admin (dev local)
 open http://127.0.0.1:17320/admin
 ```
+
+Produção: deploy Docker/Coolify — ver [COOLIFY.md](COOLIFY.md), [DOCKER.md](DOCKER.md).
 
 Ver também: [ADMIN.md](ADMIN.md), [WHATSAPP.md](WHATSAPP.md).

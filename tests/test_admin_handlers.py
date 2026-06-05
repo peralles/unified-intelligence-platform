@@ -22,8 +22,3 @@ def test_list_tools_count() -> None:
     data = handlers.list_tools()
     assert data["count"] >= 60
     assert len(data["tools"]) == data["count"]
-
-
-def test_mac_service_info() -> None:
-    data = handlers.mac_service_info()
-    assert "available" in data or "platform" in data

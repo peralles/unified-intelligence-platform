@@ -78,7 +78,6 @@ Certifique-se de que o `Dockerfile` está na raiz do repositório (já está).
 | `INTEGRATOR_ADMIN_PASSWORD` | *(senha forte)* |
 | `INTEGRATOR_ALLOWED_HOSTS` | `mcp.seudominio.com` |
 | `INTEGRATOR_OAUTH_PUBLIC_BASE_URL` | `https://mcp.seudominio.com` |
-| `INTEGRATOR_SKIP_MACOS_SERVICE` | `1` |
 | `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE` | `false` *(ative após parear)* |
 | `INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL` | `small` *(VPS CPU; `large-v3-turbo` ~3 GB RAM)* |
 | `INTEGRATOR_LOG_LEVEL` | `INFO` |

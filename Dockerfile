@@ -98,7 +98,6 @@ USER app
 # ─── Runtime environment ─────────────────────────────────────────────────────
 ENV INTEGRATOR_SERVICE_HOST=0.0.0.0 \
     INTEGRATOR_SERVICE_PORT=17320 \
-    INTEGRATOR_SKIP_MACOS_SERVICE=1 \
     INTEGRATOR_ADMIN_RUNTIME_FILE=/app/data/admin/runtime.json \
     INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL=small \
     HF_HOME=/app/data/cache/huggingface \

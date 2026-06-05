@@ -27,22 +27,11 @@ from integrator.logging_setup import get_logger, read_audit_failures
 from integrator.ops_log import log_event
 from integrator.onboarding.google_cloud import (
     credentials_ready,
-    find_downloads_candidates,
-    install_credentials_from,
     open_google_setup_sequence,
     validate_credentials_file,
 )
 from integrator.onboarding.links import GOOGLE_SETUP_STEPS, HERMES_INSTALL, UV_INSTALL
 from integrator.providers.tools import list_all_tool_metadata
-from integrator.service.macos import (
-    MacServiceError,
-    disable_service,
-    enable_service,
-    install_service,
-    is_macos,
-    service_status,
-    uninstall_service,
-)
 from integrator.whatsapp.session import WhatsAppSession
 from integrator.whatsapp.session_store import (
     has_persisted_session,
@@ -131,28 +120,6 @@ def sync_deps_status() -> dict[str, Any]:
 def open_google_cloud_steps() -> dict[str, Any]:
     open_google_setup_sequence(interactive=False)
     return {"ok": True, "steps": len(GOOGLE_SETUP_STEPS)}
-
-
-def import_credentials(*, from_downloads: bool = True, index: int = 0) -> dict[str, Any]:
-    if credentials_ready():
-        return {"ok": True, "path": str(settings.credentials_path), "already": True}
-    if not from_downloads:
-        return {"ok": False, "error": "from_downloads=false não suportado; use upload JSON"}
-    candidates = find_downloads_candidates()
-    if not candidates:
-        return {
-            "ok": False,
-            "error": "Nenhum client_secret*.json em Downloads",
-            "candidates": [],
-        }
-    if index < 0 or index >= len(candidates):
-        return {
-            "ok": False,
-            "error": "Índice inválido",
-            "candidates": [p.name for p in candidates[:10]],
-        }
-    dest = install_credentials_from(candidates[index])
-    return {"ok": True, "path": str(dest), "source": candidates[index].name}
 
 
 def save_credentials_json(content: str) -> dict[str, Any]:
@@ -325,39 +292,6 @@ def whatsapp_disconnect() -> dict[str, Any]:
     except Exception:
         WhatsAppSession.reset()
     return {"ok": True}
-
-
-def mac_service_info() -> dict[str, Any]:
-    if not is_macos():
-        return {"platform": "other", "available": False}
-    try:
-        info = service_status(port=settings.service_port)
-        info["available"] = True
-        return info
-    except MacServiceError as exc:
-        return {"platform": "macOS", "available": True, "error": str(exc)}
-
-
-def mac_service_action(action: str, *, port: int | None = None) -> dict[str, Any]:
-    if not is_macos():
-        return {"ok": False, "error": "LaunchAgent só no macOS"}
-    p = port or settings.service_port
-    try:
-        if action == "install":
-            path = install_service(port=p, start=True)
-            return {"ok": True, "plist": str(path), "status": mac_service_info()}
-        if action in ("start", "enable"):
-            enable_service()
-            return {"ok": True, "status": mac_service_info()}
-        if action in ("stop", "disable"):
-            disable_service()
-            return {"ok": True, "status": mac_service_info()}
-        if action == "uninstall":
-            uninstall_service()
-            return {"ok": True, "status": mac_service_info()}
-        return {"ok": False, "error": f"Ação desconhecida: {action}"}
-    except MacServiceError as exc:
-        return {"ok": False, "error": str(exc)}
 
 
 def hermes_doctor(*, mode: str = "sse") -> dict[str, Any]:

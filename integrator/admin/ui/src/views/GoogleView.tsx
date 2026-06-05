@@ -12,7 +12,7 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "@/api/client";
 import { useApp } from "@/context/AppContext";
-import { CheckCircle2, Circle, ExternalLink, FileJson, Upload } from "lucide-react";
+import { CheckCircle2, Circle, ExternalLink, FileJson } from "lucide-react";
 
 export function GoogleView() {
   const {
@@ -21,7 +21,6 @@ export function GoogleView() {
     setDefaultAccount,
     logoutAccount,
     onGoogleSteps,
-    onImportCreds,
     onSaveCreds,
     setActiveView,
   } = useApp();
@@ -37,7 +36,6 @@ export function GoogleView() {
   const accounts = state.accounts?.accounts || [];
   const setup = state.setup || {};
   const defaultAccount = accounts.find((a) => a.is_default);
-  const isDocker = !!state.deployment?.docker;
   const oauthBase =
     state.deployment?.oauth_public_base_url?.replace(/\/$/, "") ||
     window.location.origin;
@@ -128,13 +126,11 @@ export function GoogleView() {
               <span className={step.done ? "text-muted line-through" : ""}>{step.label}</span>
             </div>
           ))}
-          {isDocker ? (
-            <p className="pt-2 text-xs text-muted">
-              Coolify: credencial fica no volume <code>/app/data</code> (persistente). Redirect
-              OAuth:{" "}
-              <code className="rounded bg-secondary px-1 font-mono text-[11px]">{redirectUri}</code>
-            </p>
-          ) : null}
+          <p className="pt-2 text-xs text-muted">
+            Credencial fica em <code>/app/data/credentials</code> (volume persistente). Redirect
+            OAuth:{" "}
+            <code className="rounded bg-secondary px-1 font-mono text-[11px]">{redirectUri}</code>
+          </p>
         </CardContent>
       </Card>
 
@@ -172,16 +168,12 @@ export function GoogleView() {
             <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
               {redirectUri}
             </code>
-            {isDocker ? (
-              <>
-                {" "}
-                — defina{" "}
-                <code className="rounded bg-secondary px-1 font-mono text-xs">
-                  INTEGRATOR_OAUTH_PUBLIC_BASE_URL
-                </code>{" "}
-                no Coolify se o domínio público for diferente.
-              </>
-            ) : null}
+            {" "}
+            — defina{" "}
+            <code className="rounded bg-secondary px-1 font-mono text-xs">
+              INTEGRATOR_OAUTH_PUBLIC_BASE_URL
+            </code>{" "}
+            no Coolify se o domínio público for diferente.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -193,16 +185,6 @@ export function GoogleView() {
             >
               Abrir Google Cloud
             </Button>
-            {!isDocker ? (
-              <Button
-                variant="secondary"
-                loading={busy === "import"}
-                onClick={() => run("import", onImportCreds)}
-              >
-                <Upload className="h-4 w-4" />
-                Importar de ~/Downloads
-              </Button>
-            ) : null}
           </div>
 
           <input

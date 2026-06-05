@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from integrator.config import settings
+from integrator.config import is_container, settings
 from integrator.logging_setup import get_logger
 
 logger = get_logger("persistence")
@@ -44,7 +44,7 @@ def data_dir() -> Path:
 def check_data_persistence(*, refresh_marker: bool = False) -> PersistenceReport:
     """Return persistence health; optionally update the volume marker file."""
     path = data_dir()
-    docker_mode = settings.skip_macos_service
+    docker_mode = is_container()
     writable = _probe_writable(path)
     mounted = _is_mount(path) if path.exists() else False
     marker = _read_marker(path) if writable else None

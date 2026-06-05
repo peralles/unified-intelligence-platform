@@ -1,4 +1,4 @@
-"""MCP HTTP/SSE server — runs as background service (macOS LaunchAgent or Docker)."""
+"""MCP HTTP/SSE server — Docker/Coolify or integrator serve-http."""
 
 from __future__ import annotations
 

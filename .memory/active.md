@@ -1,27 +1,27 @@
 # Contexto ativo
 
-Última atualização: CI + OAuth browser + docs Coolify + defaults VPS.
+Última atualização: remoção legado macOS (LaunchAgent/service); foco Linux/Docker/Coolify.
 
 ## Estado
 
 - MVP: MCP **66 tools** (12 Google + 13 Gmail extra + 1 Calendar + 40 WhatsApp), Fase 2
-- **Produção Coolify:** `https://mcp.peralles.com/admin` — volume `/app/data` obrigatório (Storages UI ou compose), `read_only`
-- **Google OAuth produção:** redirect `/admin/oauth/google/callback` (Web client); `INTEGRATOR_OAUTH_PUBLIC_BASE_URL`
-- **CI:** `.github/workflows/validate.sh` em push/PR `main`
-- **Admin UI:** OAuth mesma aba; hint LaunchAgent quando `INTEGRATOR_SKIP_MACOS_SERVICE=1`
+- **Produção Coolify:** `https://mcp.peralles.com/admin` — volume `/app/data` obrigatório, `read_only`
+- **Google OAuth produção:** redirect `/admin/oauth/google/callback` (Web client); credenciais em `/app/data/credentials/`
+- **Runtime container:** auto via `/.dockerenv` (sem env extra)
+- **CLI bootstrap:** `init`, `serve`, `serve-http` — operação diária só admin web
 - **Transcrição default Docker:** `small` (VPS CPU)
 
-## Operacional (este ambiente)
+## Operacional
 
-- **Hermes:** SSE → `http://127.0.0.1:17320/sse`
-- **Mac local:** LaunchAgent só se **não** houver Coolify ativo (evitar lock duplo neonize)
+- **Hermes produção:** SSE → URL pública `/sse` (Coolify)
+- **Dev local:** `integrator serve-http` + admin `127.0.0.1:17320`
 - **Reload:** `/reload-mcp` após mudanças MCP
 
 ## Pendências operador
 
-- Coolify: confirmar Storages `/app/data`, env `INTEGRATOR_ALLOWED_HOSTS=mcp.peralles.com`
-- Google Cloud: redirect URI Web + JSON em credentials
-- Mac prod-only Coolify: `integrator service uninstall`
+- Coolify: Storages `/app/data`, env `INTEGRATOR_ALLOWED_HOSTS`, `INTEGRATOR_OAUTH_PUBLIC_BASE_URL`
+- Google Cloud: redirect URI Web + JSON via admin upload
+- Redeploy após push com `./scripts/build-admin.sh` incluído no pipeline se UI mudou
 
 ## Bloqueios
 

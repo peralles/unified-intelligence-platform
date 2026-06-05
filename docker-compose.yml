@@ -72,7 +72,6 @@ services:
 
       # OAuth redirect base (Coolify public URL). Falls back to X-Forwarded-* headers.
       INTEGRATOR_OAUTH_PUBLIC_BASE_URL: "${INTEGRATOR_OAUTH_PUBLIC_BASE_URL:-}"
-      INTEGRATOR_SKIP_MACOS_SERVICE: "${INTEGRATOR_SKIP_MACOS_SERVICE:-1}"
 
       # WhatsApp transcription via faster-whisper (CPU).
       # Model is downloaded on first audio message (~1–6 GB depending on size).

@@ -15,14 +15,7 @@ from integrator.whatsapp.session_store import (
     remove_session_data,
     session_path,
 )
-from integrator.whatsapp.watch_daemon import (
-    WatchDaemonError,
-    disable_watch_service,
-    install_watch_service,
-    run_watch_foreground,
-    uninstall_watch_service,
-    watch_service_status,
-)
+from integrator.whatsapp.watch_daemon import WatchDaemonError, run_watch_foreground
 
 
 def _print_local_status() -> None:
@@ -141,7 +134,6 @@ def _cmd_configure(_: argparse.Namespace) -> int:
     print("    integrator whatsapp remove             # apagar sessão local")
     print("    integrator whatsapp disconnect         # encerra worker em memória (MCP serve)")
     print("    integrator whatsapp watch              # daemon de transcrição autônomo (sem Hermes)")
-    print("    integrator whatsapp watch-service install  # instalar como LaunchAgent macOS")
     print("\n  Hermes: mesmo MCP stdio; /reload-mcp após mudanças.")
     print("  Documentação: docs/WHATSAPP.md")
     if not has_persisted_session():
@@ -268,91 +260,6 @@ def _cmd_watch(args: argparse.Namespace) -> int:
     return exit_code if exit_code is not None else 0
 
 
-def _cmd_watch_service(args: argparse.Namespace) -> int:
-    """Manage the macOS LaunchAgent for the watch daemon."""
-    import sys as _sys
-
-    action = args.watch_service_action
-
-    if action == "install":
-        model = getattr(args, "model", None) or None
-        language = getattr(args, "language", None) or None
-        no_start = getattr(args, "no_start", False)
-        try:
-            path = install_watch_service(
-                model=model, language=language, start=not no_start
-            )
-            print(f"Instalado: {path}")
-            svc = watch_service_status()
-            print(f"  Modelo:  {svc['model']}")
-            print(f"  Idioma:  {svc['language']}")
-            print(f"  Logs:    {svc['logs']}")
-            if not no_start:
-                print("\nServiço iniciado. Para parar:")
-                print("  integrator whatsapp watch-service stop")
-            else:
-                print("\nPara iniciar: integrator whatsapp watch-service start")
-        except WatchDaemonError as exc:
-            print(f"Erro: {exc}", file=sys.stderr)
-            return 1
-        return 0
-
-    if action in ("start", "enable"):
-        try:
-            from integrator.whatsapp.watch_daemon import enable_watch_service
-
-            enable_watch_service()
-            print("Serviço de transcrição ativado.")
-        except WatchDaemonError as exc:
-            print(f"Erro: {exc}", file=sys.stderr)
-            return 1
-        return 0
-
-    if action in ("stop", "disable"):
-        try:
-            disable_watch_service()
-            print("Serviço de transcrição desativado (plist mantido).")
-            print("Reativar: integrator whatsapp watch-service start")
-        except WatchDaemonError as exc:
-            print(f"Erro: {exc}", file=sys.stderr)
-            return 1
-        return 0
-
-    if action == "uninstall":
-        try:
-            uninstall_watch_service()
-            print("Serviço de transcrição desinstalado.")
-        except WatchDaemonError as exc:
-            print(f"Erro: {exc}", file=sys.stderr)
-            return 1
-        return 0
-
-    if action == "status":
-        try:
-            info = watch_service_status()
-        except WatchDaemonError as exc:
-            print(f"Erro: {exc}", file=sys.stderr)
-            return 1
-        print("Serviço de transcrição WhatsApp (LaunchAgent)\n")
-        for key, value in info.items():
-            print(f"  {key}: {value}")
-        if _sys.platform == "darwin":
-            if info["plist_exists"] and not info["loaded"]:
-                print(
-                    "\nPlist existe mas não carregado. Rode: "
-                    "integrator whatsapp watch-service start"
-                )
-            elif not info["plist_exists"]:
-                print(
-                    "\nNão instalado. Rode: "
-                    "integrator whatsapp watch-service install"
-                )
-        return 0
-
-    print(f"Ação desconhecida: {action}", file=sys.stderr)
-    return 1
-
-
 def add_whatsapp_subparser(sub: argparse._SubParsersAction) -> None:
     wa = sub.add_parser(
         "whatsapp",
@@ -428,46 +335,3 @@ def add_whatsapp_subparser(sub: argparse._SubParsersAction) -> None:
         help="Código de idioma (ex: pt, en). Padrão: auto-detect.",
     )
     p_watch.set_defaults(func=_cmd_watch)
-
-    # watch-service: macOS LaunchAgent management
-    p_ws = wa_sub.add_parser(
-        "watch-service",
-        help="macOS: instalar/gerenciar LaunchAgent do daemon de transcrição",
-    )
-    ws_sub = p_ws.add_subparsers(
-        dest="watch_service_action", metavar="ação", required=True
-    )
-
-    _ws_model_args = dict(
-        dest="model",
-        metavar="MODEL",
-        default=None,
-        help="Modelo mlx-whisper para a transcrição.",
-    )
-    _ws_lang_args = dict(
-        dest="language",
-        metavar="LANG",
-        default=None,
-        help="Código de idioma (ex: pt). Padrão: auto-detect.",
-    )
-
-    p_ws_install = ws_sub.add_parser("install", help="Instalar plist e iniciar serviço")
-    p_ws_install.add_argument("--model", **_ws_model_args)
-    p_ws_install.add_argument("--language", **_ws_lang_args)
-    p_ws_install.add_argument(
-        "--no-start",
-        action="store_true",
-        help="Só instala o plist, sem iniciar",
-    )
-    p_ws_install.set_defaults(func=_cmd_watch_service, watch_service_action="install")
-
-    for _action, _help in (
-        ("start", "Iniciar/reativar serviço"),
-        ("enable", "Alias de start"),
-        ("stop", "Parar serviço (mantém plist)"),
-        ("disable", "Alias de stop"),
-        ("status", "Estado do serviço de transcrição"),
-        ("uninstall", "Remover plist e parar serviço"),
-    ):
-        _p = ws_sub.add_parser(_action, help=_help)
-        _p.set_defaults(func=_cmd_watch_service, watch_service_action=_action)

@@ -105,8 +105,7 @@ run_status() {
     fi
   else
     echo "  Serviço: inativo"
-    echo "  Suba com: uv run integrator service install   (macOS)"
-    echo "         ou: uv run integrator serve-http"
+    echo "  Suba com: uv run integrator serve-http"
     echo ""
     echo "  Bootstrap inicial (sem serviço): uv run integrator init"
   fi
@@ -131,7 +130,7 @@ case "$1" in
     URL="http://127.0.0.1:${PORT}/admin"
     echo ""
     echo "  Admin: ${URL}"
-    echo "  (Serviço deve estar ativo: integrator service install ou serve-http)"
+    echo "  (Serviço deve estar ativo: integrator serve-http ou deploy Coolify)"
     echo ""
     if command -v open >/dev/null 2>&1; then
       open "${URL}" || true

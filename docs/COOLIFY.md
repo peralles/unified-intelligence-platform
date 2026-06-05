@@ -15,7 +15,7 @@ Guia para rodar o integrator em produção no [Coolify](https://coolify.io) com 
 
 Sem volume em `/app/data`, cada redeploy apaga sessão WhatsApp, tokens Google e logs.
 
-O admin mostra alerta no **Painel** e em **Serviço** quando `/app/data` não é mount Docker (`INTEGRATOR_SKIP_MACOS_SERVICE=1`). Após configurar o volume, o banner some no próximo refresh.
+O admin mostra alerta no **Painel** quando `/app/data` não é volume gravável (detectado via `/.dockerenv`). Após configurar o volume, o banner some no próximo refresh.
 
 ## Persistência no Coolify
 
@@ -73,8 +73,6 @@ INTEGRATOR_ALLOWED_HOSTS=mcp.peralles.com
 # OAuth redirect — URL pública COM https://
 INTEGRATOR_OAUTH_PUBLIC_BASE_URL=https://mcp.peralles.com
 
-INTEGRATOR_SKIP_MACOS_SERVICE=1
-
 # VPS pequena (CPU): small ~1 GB RAM; large-v3-turbo ~3 GB
 INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=false
 INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL=small
@@ -94,16 +92,6 @@ Não use fluxo Desktop (`run_local_server`) no container — não há browser lo
 
 Pareamento pelo admin (`/admin` → WhatsApp). Sessão fica em `/app/data/whatsapp/`. Sem volume, novo QR a cada deploy.
 
-## LaunchAgent local (Mac)
-
-Se produção é só Coolify, **desinstale** o LaunchAgent no Mac:
-
-```bash
-uv run integrator service uninstall
-```
-
-Dois processos (Mac + Coolify) disputam `worker.lock` e quebram WhatsApp.
-
 ## CI e deploy
 
 - GitHub Actions roda `./scripts/validate.sh` em push/PR para `main`.
@@ -116,7 +104,7 @@ Dois processos (Mac + Coolify) disputam `worker.lock` e quebram WhatsApp.
 | MCP/Hermes recusa host | `INTEGRATOR_ALLOWED_HOSTS` vazio ou errado | Definir domínio exato |
 | Google OAuth `redirect_uri_mismatch` | URI no Google ≠ URL pública | Conferir `INTEGRATOR_OAUTH_PUBLIC_BASE_URL` |
 | WhatsApp despareado após deploy | Sem volume `/app/data` | Adicionar Persistent Storage |
-| Admin trava no QR | Worker lock duplo | Parar LaunchAgent local |
+| Admin trava no QR | Dois workers na mesma sessão | Uma instância SSE por deploy; não duplicar `serve-http` + Coolify na mesma sessão |
 | OOM na transcrição | Modelo grande em VPS pequena | `INTEGRATOR_WHATSAPP_TRANSCRIBE_MODEL=small` ou desligar auto-transcrição |
 | `No space left on device` ao transcrever | Cache/modelo em `/tmp` ou disco cheio | Volume em `/app/data` (≥2 GB livres); modelo `small`; cache em `/app/data/cache` |
 | Admin config 500 ao salvar | `.env` read-only no container | Normal no Docker — config persiste em `runtime.json`; ignore `env_persist_skipped` |

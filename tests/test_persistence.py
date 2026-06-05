@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
-from integrator.config import settings
+from integrator.config import is_container, settings
 from integrator.persistence import check_data_persistence, ensure_volume_marker
 
 
 def test_local_dev_not_mounted_is_ok(tmp_path) -> None:
     with (
+        patch("integrator.persistence.is_container", return_value=False),
         patch("integrator.persistence.settings") as mock_settings,
         patch("integrator.persistence.os.path.ismount", return_value=False),
     ):
         mock_settings.root_dir = tmp_path
-        mock_settings.skip_macos_service = False
         report = check_data_persistence(refresh_marker=True)
 
     assert report.status == "ok"
@@ -21,13 +22,13 @@ def test_local_dev_not_mounted_is_ok(tmp_path) -> None:
     assert report.volume_id
 
 
-def test_docker_without_mount_warns(tmp_path) -> None:
+def test_container_without_mount_warns(tmp_path) -> None:
     with (
+        patch("integrator.persistence.is_container", return_value=True),
         patch("integrator.persistence.settings") as mock_settings,
         patch("integrator.persistence.os.path.ismount", return_value=False),
     ):
         mock_settings.root_dir = tmp_path
-        mock_settings.skip_macos_service = True
         report = check_data_persistence()
 
     assert report.status == "warn"
@@ -35,13 +36,13 @@ def test_docker_without_mount_warns(tmp_path) -> None:
     assert "redeploy" in report.message.lower()
 
 
-def test_docker_with_mount_ok(tmp_path) -> None:
+def test_container_with_mount_ok(tmp_path) -> None:
     with (
+        patch("integrator.persistence.is_container", return_value=True),
         patch("integrator.persistence.settings") as mock_settings,
         patch("integrator.persistence.os.path.ismount", return_value=True),
     ):
         mock_settings.root_dir = tmp_path
-        mock_settings.skip_macos_service = True
         report = check_data_persistence(refresh_marker=True)
 
     assert report.status == "ok"
@@ -53,12 +54,12 @@ def test_not_writable_errors(tmp_path) -> None:
     data.mkdir()
 
     with (
+        patch("integrator.persistence.is_container", return_value=True),
         patch("integrator.persistence.settings") as mock_settings,
         patch("integrator.persistence._probe_writable", return_value=False),
         patch("integrator.persistence.os.path.ismount", return_value=False),
     ):
         mock_settings.root_dir = tmp_path
-        mock_settings.skip_macos_service = True
         report = check_data_persistence()
 
     assert report.status == "error"
@@ -66,9 +67,11 @@ def test_not_writable_errors(tmp_path) -> None:
 
 
 def test_marker_stable_across_refresh(tmp_path) -> None:
-    with patch("integrator.persistence.settings") as mock_settings:
+    with (
+        patch("integrator.persistence.is_container", return_value=False),
+        patch("integrator.persistence.settings") as mock_settings,
+    ):
         mock_settings.root_dir = tmp_path
-        mock_settings.skip_macos_service = False
         first = check_data_persistence(refresh_marker=True)
         second = check_data_persistence(refresh_marker=True)
 
@@ -76,14 +79,21 @@ def test_marker_stable_across_refresh(tmp_path) -> None:
 
 
 def test_ensure_volume_marker_returns_report(tmp_path) -> None:
-    with patch("integrator.persistence.settings") as mock_settings:
+    with (
+        patch("integrator.persistence.is_container", return_value=False),
+        patch("integrator.persistence.settings") as mock_settings,
+    ):
         mock_settings.root_dir = tmp_path
-        mock_settings.skip_macos_service = False
         report = ensure_volume_marker()
 
     assert report.status == "ok"
     marker = tmp_path / "data" / ".integrator" / "volume_marker.json"
     assert marker.is_file()
+
+
+def test_is_container_matches_dockerenv() -> None:
+    expected = Path("/.dockerenv").is_file()
+    assert is_container() is expected
 
 
 def test_health_endpoint_includes_persistence(monkeypatch) -> None:

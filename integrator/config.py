@@ -2,6 +2,11 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
+def is_container() -> bool:
+    """True when running inside Docker (Coolify, compose, etc.)."""
+    return Path("/.dockerenv").is_file()
+
 # Full access scopes (decision: acesso completo)
 GOOGLE_SCOPES = [
     "https://mail.google.com/",
@@ -57,9 +62,6 @@ class Settings(BaseSettings):
     # Public URL for OAuth redirect (Coolify/proxy). Example: https://mcp.example.com
     oauth_public_base_url: str | None = None
 
-    # Docker/Coolify: hide macOS LaunchAgent paths in admin
-    skip_macos_service: bool = False
-
     @property
     def admin_runtime_path(self) -> Path:
         if self.admin_runtime_file:
@@ -91,10 +93,7 @@ class Settings(BaseSettings):
     def credentials_path(self) -> Path:
         if self.credentials_file:
             return self.credentials_file
-        # Docker/Coolify: bind-mount ./credentials is often read-only; persist under /app/data.
-        if self.skip_macos_service:
-            return self.root_dir / "data" / "credentials" / "credentials.json"
-        return self.root_dir / "credentials" / "credentials.json"
+        return self.root_dir / "data" / "credentials" / "credentials.json"
 
     default_account: str | None = None
 
@@ -120,7 +119,7 @@ class Settings(BaseSettings):
     def ensure_data_dirs(self) -> None:
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
         self.credentials_path.parent.mkdir(parents=True, exist_ok=True)
-        self._bootstrap_docker_credentials()
+        self._bootstrap_bind_mount_credentials()
         self.whatsapp_session_path.mkdir(parents=True, exist_ok=True)
         self.admin_runtime_path.parent.mkdir(parents=True, exist_ok=True)
         cache_root = self.root_dir / "data" / "cache"
@@ -133,9 +132,9 @@ class Settings(BaseSettings):
     def whatsapp_transcribe_cache_path(self) -> Path:
         return self.root_dir / "data" / "cache" / "whisper"
 
-    def _bootstrap_docker_credentials(self) -> None:
+    def _bootstrap_bind_mount_credentials(self) -> None:
         """One-time copy from read-only bind-mount into the writable data volume."""
-        if not self.skip_macos_service or self.credentials_file:
+        if self.credentials_file:
             return
         dest = self.credentials_path
         if dest.is_file():

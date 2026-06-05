@@ -26,7 +26,6 @@ interface AppContextValue {
   refreshAll: () => Promise<void>;
   navBadgeTone: (id: ViewId) => Tone;
   onGoogleSteps: () => Promise<void>;
-  onImportCreds: () => Promise<void>;
   onSaveCreds: (json: string) => Promise<boolean>;
   onGoogleLogin: (accountId: string, label: string) => void;
   setDefaultAccount: (id: string) => Promise<void>;
@@ -223,17 +222,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       onGoogleSteps: async () => {
         await api("/admin/api/setup/google-steps", { method: "POST", body: "{}" });
         showToast("Passos do Google Cloud abertos no navegador.");
-      },
-      onImportCreds: async () => {
-        const r = await api<{ ok?: boolean; error?: string }>(
-          "/admin/api/setup/credentials",
-          { method: "POST", body: "{}" },
-        );
-        showToast(
-          r.ok ? "Credenciais importadas com sucesso." : r.error || "Falha ao importar.",
-          r.ok ? "" : "err",
-        );
-        if (r.ok) await refreshAll();
       },
       onSaveCreds: async (json: string) => {
         if (!json.trim()) {

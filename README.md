@@ -7,7 +7,7 @@ Servidor **MCP local** (Python) com **66 tools** — **Gmail** e **Google Calend
 | Pacote | `langchain-hermes-integrator` v0.1.0 |
 | Python | ≥ 3.11 (recomendado 3.12, ver `.python-version`) |
 | Gerenciador | [uv](https://docs.astral.sh/uv/) |
-| Transporte MCP | **stdio** (Hermes spawn) ou **HTTP/SSE** (serviço macOS) |
+| Transporte MCP | **stdio** (Hermes spawn) ou **HTTP/SSE** (`serve-http` / Docker) |
 | Porta HTTP padrão | `17320` |
 
 ## Por que Python
@@ -24,7 +24,6 @@ integrator/           # Pacote principal
   auth/               # OAuth Google
   accounts/           # Registry multi-conta
   security/           # Allow/deny, confirm, audit
-  service/            # LaunchAgent macOS
 config/               # Exemplos Hermes + env
 credentials/          # OAuth client (gitignored)
 data/                 # tokens, accounts.yaml, logs (gitignored)
@@ -53,7 +52,7 @@ Alternativa equivalente:
 
 ```bash
 uv run integrator init
-./setup.sh admin    # após: integrator service install ou serve-http
+./setup.sh admin    # após: integrator serve-http ou deploy Coolify
 ```
 
 O assistente:
@@ -122,9 +121,8 @@ uv run integrator <comando> --help   # quando existir subcomandos
 | `integrator hermes doctor` | Verificar pré-requisitos (integrador + Hermes) |
 | `integrator hermes setup` | Gravar MCP em `~/.hermes/config.yaml` automaticamente |
 | `integrator serve` | Servidor MCP **stdio** (Hermes inicia o processo) |
-| `integrator serve-http` | Servidor MCP **HTTP/SSE** em primeiro plano |
+| `integrator serve-http` | Servidor MCP **HTTP/SSE** em primeiro plano (dev local) |
 | `integrator logs` | Listar arquivos de log + resumo de falhas |
-| `integrator service <ação>` | **macOS:** LaunchAgent (install/start/…) |
 
 ### `status`
 
@@ -217,29 +215,6 @@ uv run integrator logs --tail --errors      # final de errors.log
 uv run integrator logs --tail -n 80
 ```
 
-### `service` — macOS LaunchAgent
-
-Mantém o integrador **sempre rodando** em HTTP/SSE (Hermes conecta por URL, não stdio).
-
-```bash
-uv run integrator service install              # plist + inicia
-uv run integrator service install --no-start   # só grava plist
-uv run integrator service install --port 18000
-uv run integrator service start                # alias: enable
-uv run integrator service stop                 # alias: disable (mantém plist)
-uv run integrator service status
-uv run integrator service uninstall            # remove plist e para
-```
-
-| Detalhe | Valor |
-|---------|--------|
-| Plist | `~/Library/LaunchAgents/com.peralles.langchain-integrator.plist` |
-| SSE | `http://127.0.0.1:17320/sse` |
-| Health | `curl http://127.0.0.1:17320/health` |
-| Logs do serviço | `data/logs/service/stdout.log`, `stderr.log` |
-
-Fora do macOS o subcomando `service` retorna erro.
-
 ### Aliases legados (entry points)
 
 | Alias | Equivalente |
@@ -261,9 +236,8 @@ uv run integrator tools
 # Hermes stdio (outro terminal só para teste manual)
 uv run integrator serve
 
-# macOS: serviço em background
-uv run integrator service install
-uv run integrator service status
+# Dev local: SSE + admin em foreground
+uv run integrator serve-http
 
 # Depois de erro em tool
 uv run integrator logs --failures
@@ -286,7 +260,7 @@ uv run integrator hermes setup --yes     # substituir entrada existente
 ```
 
 **stdio (padrão):** Hermes faz spawn de `uv run --directory <este-repo> integrator serve`.  
-**SSE:** `integrator service install` e depois `integrator hermes setup --mode sse`.
+**SSE (produção):** deploy Docker/Coolify ou `integrator serve-http` local + `integrator hermes setup --mode sse` apontando para a URL pública ou `127.0.0.1:17320`.
 
 Após o setup: **nova sessão Hermes** ou `/reload-mcp`. Modelo/API do Hermes continua manual (`hermes model`, `~/.hermes/.env`).
 
@@ -294,7 +268,7 @@ Alternativa manual (com UI de tools): `hermes mcp add langchain-integrator --com
 
 ### Referência YAML (manual)
 
-[`config/hermes.example.yaml`](config/hermes.example.yaml) (stdio) e [`config/hermes.service.example.yaml`](config/hermes.service.example.yaml) (SSE) mostram o mesmo contrato que o `setup` grava.
+[`config/hermes.example.yaml`](config/hermes.example.yaml) (stdio). Para SSE, use `integrator hermes setup --mode sse` (grava URL do serviço em `~/.hermes/config.yaml`).
 
 ---
 
@@ -386,7 +360,7 @@ Prefixo comum: `INTEGRATOR_` (ver `integrator/config.py` e `.env.example`).
 | `INTEGRATOR_AUDIT_LOG_BACKUP_COUNT` | Backups do audit |
 | `INTEGRATOR_LOG_CONSOLE_ENABLED` | Log no stderr |
 | `INTEGRATOR_LOG_TOOL_SUCCESS` | Log INFO por tool bem-sucedida |
-| `INTEGRATOR_SERVICE_HOST` | Host do `serve-http` / LaunchAgent |
+| `INTEGRATOR_SERVICE_HOST` | Host do `serve-http` / container Docker |
 | `INTEGRATOR_SERVICE_PORT` | Porta padrão (17320) |
 
 ---

@@ -32,9 +32,16 @@ def _repo_deps_ok() -> bool:
     return repo_deps_ok()
 
 
+def _sse_health_host() -> str:
+    host = settings.service_host
+    if host in ("0.0.0.0", "::"):
+        return "127.0.0.1"
+    return host
+
+
 def _sse_service_healthy(port: int | None = None) -> bool:
     p = port if port is not None else settings.service_port
-    url = f"http://{settings.service_host}:{p}/health"
+    url = f"http://{_sse_health_host()}:{p}/health"
     try:
         with urllib.request.urlopen(url, timeout=2) as resp:
             return 200 <= resp.status < 300
@@ -150,43 +157,24 @@ def run_checks(
         )
 
     if mode == "sse":
-        from integrator.service.macos import is_macos, plist_path, is_loaded
-
-        if not is_macos():
-            results.append(
-                CheckResult(
-                    id="sse_platform",
-                    label="Serviço SSE (macOS)",
-                    status=CheckStatus.FAIL,
-                    detail="modo sse requer macOS",
-                    hint="Use --mode stdio ou integrator serve no Hermes",
-                )
-            )
+        healthy = _sse_service_healthy()
+        if healthy:
+            st = CheckStatus.OK
+            detail = f"health OK em :{settings.service_port}"
+            hint = None
         else:
-            plist = plist_path().is_file()
-            loaded = is_loaded() if plist else False
-            healthy = _sse_service_healthy() if loaded else False
-            if healthy:
-                st = CheckStatus.OK
-                detail = f"health OK em :{settings.service_port}"
-            elif loaded:
-                st = CheckStatus.WARN
-                detail = "serviço carregado mas /health falhou"
-            elif plist:
-                st = CheckStatus.WARN
-                detail = "plist existe, serviço parado"
-            else:
-                st = CheckStatus.FAIL
-                detail = "serviço não instalado"
-            results.append(
-                CheckResult(
-                    id="sse_service",
-                    label="Serviço HTTP/SSE",
-                    status=st,
-                    detail=detail,
-                    hint="integrator service install && integrator service start",
-                )
+            st = CheckStatus.WARN
+            detail = "serve-http não responde em /health"
+            hint = "Coolify redeploy ou: integrator serve-http"
+        results.append(
+            CheckResult(
+                id="sse_service",
+                label="Serviço HTTP/SSE",
+                status=st,
+                detail=detail,
+                hint=hint,
             )
+        )
 
     return results
 

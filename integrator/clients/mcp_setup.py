@@ -21,17 +21,12 @@ from integrator.hermes.config_merge import (
 )
 from integrator.hermes.discovery import discover_hermes
 from integrator.hermes.doctor import CheckResult, critical_failures, run_checks
-from integrator.service.macos import is_macos
 
 
 def build_server_block(*, mode: str, sse_url: str | None = None) -> dict[str, Any]:
     if mode == "sse":
         if sse_url and sse_url.strip():
             return {"url": sse_url.strip(), "transport": "sse"}
-        if not is_macos():
-            raise ValueError(
-                "Modo SSE local requer macOS; use --sse-url para servidor remoto (Coolify/VPN)"
-            )
         return build_sse_server_config()
     return build_stdio_server_config()
 

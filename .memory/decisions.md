@@ -6,7 +6,7 @@ Resumo das escolhas já documentadas em `docs/PLANO_LANGCHAIN_HERMES.md` e `READ
 
 - **Python** + `langchain-google-community` (Gmail + Calendar) — não Node; toolkits oficiais só em Python
 - **MCP** como interface para Hermes; transporte doc padrão **stdio** (`integrator serve`)
-- HTTP/SSE (`integrator serve-http`, LaunchAgent `integrator service`, porta **17320**) para worker WhatsApp persistente quando Hermes usa tools + auto-transcrição
+- HTTP/SSE (`integrator serve-http`, Docker/Coolify, porta **17320**) para worker WhatsApp persistente quando Hermes usa tools + auto-transcrição
 - Hermes não depende de LangChain diretamente — só do servidor MCP
 
 ## Auth e dados
@@ -30,15 +30,15 @@ Resumo das escolhas já documentadas em `docs/PLANO_LANGCHAIN_HERMES.md` e `READ
 - Sessão: `data/whatsapp/` (gitignored); QR no admin (`/admin`)
 - Tools destrutivas WhatsApp (`send_*`, `delete_*`) exigem `confirm: true`; delete de terceiros via `delete_whatsapp_messages_for_me` (app state)
 - Hermes: **mesmo** `mcp_servers.langchain-integrator` stdio; sem segunda entrada MCP
-- **Lockfile**: `data/whatsapp/worker.lock` (fcntl) — uma instância neonize por sessão; `watch-service`, stdio `serve` e SSE não podem rodar em paralelo
+- **Lockfile**: `data/whatsapp/worker.lock` (fcntl) — uma instância neonize por sessão; stdio `serve` e SSE não podem rodar em paralelo na mesma sessão
 - **Transcrição pós-processamento:** `bridges/whatsapp-neonize/transcribe_cleanup.py` remove repetições de cauda do Whisper (ex.: «slang slang…») antes de responder no chat
-- **Watch daemon** (`integrator whatsapp watch` / `watch-service`): transcrição 24/7 sem Hermes; conflita com MCP serve/SSE na mesma sessão
-- **Hermes + auto-transcrição**: `integrator service` (SSE) + `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true`; `bridge_client` repassa vars de transcrição do `settings` ao worker (`.env` não chega ao subprocesso via os.environ)
+- **Watch daemon** (`integrator whatsapp watch`): transcrição foreground; conflita com MCP serve/SSE na mesma sessão
+- **Hermes + auto-transcrição**: SSE (Docker/`serve-http`) + `INTEGRATOR_WHATSAPP_AUTO_TRANSCRIBE=true`; `bridge_client` repassa vars de transcrição do `settings` ao worker (`.env` não chega ao subprocesso via os.environ)
 - Confirmação condicional: `transcribe_whatsapp_audio` com `reply=true` e `get_whatsapp_group_invite_link` com `revoke=true` exigem `confirm: true`
 
 ## Admin local (operadores)
 
-- Console **`http://127.0.0.1:17320/admin`** no mesmo processo que `serve-http` / LaunchAgent
+- Console admin no mesmo processo que `serve-http` / container Docker
 - Comandos operacionais (`status`, `login`, `whatsapp`, `hermes`, `logs`, …) **removidos** da CLI — só admin web
 - Bootstrap permanece na CLI: `init`, `serve`, `serve-http`, `service`
 - Runtime hot-reload: `data/admin/runtime.json` (ex.: ignore list transcrição)

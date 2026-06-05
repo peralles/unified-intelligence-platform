@@ -1,18 +1,24 @@
-# Console Admin — operação local
+# Console Admin — operação
 
-Interface web em **`http://127.0.0.1:17320/admin`** (mesmo host/porta do `serve-http` / LaunchAgent). Substitui a CLI para operadores: Google, WhatsApp, Hermes, serviço macOS, config e logs.
+Interface web no mesmo processo que `serve-http` (local ou Docker/Coolify).
+
+| Ambiente | URL |
+|----------|-----|
+| Dev local | `http://127.0.0.1:17320/admin` |
+| Coolify | `https://SEU-DOMINIO/admin` |
+
+Substitui comandos operacionais da CLI: Google, WhatsApp, Hermes, config e logs.
 
 ## Pré-requisito
 
-O servidor HTTP precisa estar rodando:
+Servidor HTTP ativo:
 
 ```bash
-uv run integrator service install   # macOS — recomendado (persistente)
-# ou
-uv run integrator serve-http          # terminal aberto
+uv run integrator serve-http          # dev local (terminal aberto)
+# ou deploy Coolify / docker compose up
 ```
 
-Abrir painel:
+Abrir painel local:
 
 ```bash
 ./setup.sh admin
@@ -20,13 +26,13 @@ Abrir painel:
 
 ## UI (Vite)
 
-Código fonte: `integrator/admin/ui/` (componentes ES modules + CSS tokens). Build:
+Código fonte: `integrator/admin/ui/`. Build obrigatório antes de validar/deploy:
 
 ```bash
 ./scripts/build-admin.sh
 ```
 
-Saída: `integrator/admin/static/dist/` (servida em `/admin`). Fallback: `admin.html` legado se `dist/` ausente.
+Saída: `integrator/admin/static/dist/` (servida em `/admin`).
 
 Dev com proxy para API:
 
@@ -36,17 +42,16 @@ cd integrator/admin/ui && npm run dev
 
 ## Seções do painel
 
-| Seção | Equivalente CLI legado |
-|-------|-------------------------|
-| **Instalação** | `integrator init`, sync deps, credenciais Google |
-| **Google** | `login`, `accounts`, `use`, `logout` |
-| **WhatsApp** | `whatsapp pair` (QR no browser), `remove`, `disconnect` |
-| **Serviço macOS** | `integrator service …` |
-| **Hermes** | `hermes doctor`, `hermes setup` |
-| **Claude Desktop** | mesmo botão MCP — grava `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| **Config** | `.env` + runtime (ignore transcrição, flags WhatsApp) |
-| **Tools** | `integrator tools` (66 tools MCP) |
-| **Logs / falhas** | `integrator logs --failures`, tail de logs |
+| Seção | Função |
+|-------|--------|
+| **Instalação** | sync deps, credenciais Google (upload JSON) |
+| **Google** | login OAuth web, contas, logout |
+| **WhatsApp** | pareamento QR, remove, disconnect |
+| **Hermes** | doctor, setup MCP (stdio ou SSE) |
+| **Claude Desktop** | Configurar MCP (SSE) |
+| **Config** | `.env` / runtime (ignore transcrição, flags WhatsApp) |
+| **Tools** | lista 66 tools MCP |
+| **Logs / falhas** | tail e falhas de audit |
 
 ## Runtime (hot reload)
 
@@ -58,31 +63,30 @@ Campos usados hoje:
 
 ## Segurança
 
-- Só escuta em **127.0.0.1** por padrão — não expor na rede sem firewall.
-- Sem autenticação HTTP: uso **local** na máquina do operador.
+- **Local:** escuta `127.0.0.1` por padrão — sem auth HTTP.
+- **Produção:** defina `INTEGRATOR_ADMIN_USERNAME` + `INTEGRATOR_ADMIN_PASSWORD` e `INTEGRATOR_ALLOWED_HOSTS`.
 
 ## CLI ainda necessária
 
 | Comando | Motivo |
 |---------|--------|
 | `integrator serve` | Hermes stdio spawn |
-| `integrator serve-http` | Sobe admin + MCP SSE |
-| `integrator service …` | Instalar LaunchAgent antes do admin |
-| `integrator init` | Bootstrap sem serviço (`./setup.sh`) |
+| `integrator serve-http` | Sobe admin + MCP SSE (dev) |
+| `integrator init` | Bootstrap (`./setup.sh`) |
 
-Demais operações (Google, WhatsApp, Hermes, logs, config) estão **somente** no admin web.
+Demais operações estão **somente** no admin web.
 
 ## Hermes + WhatsApp persistente
 
-1. `integrator service install` — um worker neonize, MCP SSE, admin.
-2. Admin → Hermes → **setup modo SSE**.
+1. Deploy SSE (Coolify) ou `integrator serve-http` local — um worker neonize, MCP SSE, admin.
+2. Admin → Hermes → **setup modo SSE** (URL pública ou `127.0.0.1:17320`).
 3. No Hermes: `/reload-mcp` após mudanças no integrador.
-4. **Não** usar `watch-service` junto com o serviço SSE (lock `data/whatsapp/worker.lock`).
+4. **Não** rodar dois processos com a mesma sessão WhatsApp (lock `data/whatsapp/worker.lock`).
 
-## Claude Desktop
+## Google OAuth (Coolify)
 
-- Um clique **Configurar MCP** grava Hermes **e** Claude Desktop (mesmo servidor `langchain-integrator`, modo SSE).
-- Após gravar: **⌘Q** no Claude e reabra para carregar tools.
-- Config: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS).
+1. Credencial **Web application** no Google Cloud.
+2. Redirect URI: `https://SEU-DOMINIO/admin/oauth/google/callback`
+3. Admin → Google → upload JSON (grava em `/app/data/credentials/` no volume).
 
-Ver também: [WHATSAPP.md](WHATSAPP.md), [CLI.md](CLI.md) (bootstrap).
+Ver também: [WHATSAPP.md](WHATSAPP.md), [CLI.md](CLI.md), [COOLIFY.md](COOLIFY.md).

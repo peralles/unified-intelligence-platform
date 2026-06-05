@@ -7,7 +7,6 @@ import pytest
 from integrator.onboarding.google_cloud import (
     CredentialsValidationError,
     credentials_ready,
-    find_downloads_candidates,
     install_credentials_from,
     validate_credentials_file,
     wait_for_credentials,
@@ -44,7 +43,7 @@ def test_install_credentials_from(tmp_path: Path, monkeypatch):
     src = tmp_path / "dl" / "client_secret_1.json"
     src.parent.mkdir()
     src.write_text(_valid_oauth_json(), encoding="utf-8")
-    dest_dir = tmp_path / "repo" / "credentials"
+    dest_dir = tmp_path / "repo" / "data" / "credentials"
     dest = dest_dir / "credentials.json"
     monkeypatch.setattr(
         "integrator.onboarding.google_cloud.settings",
@@ -56,43 +55,15 @@ def test_install_credentials_from(tmp_path: Path, monkeypatch):
 
 
 def test_wait_for_credentials_detects_file(tmp_path: Path, monkeypatch):
-    dest = tmp_path / "credentials" / "credentials.json"
+    dest = tmp_path / "data" / "credentials" / "credentials.json"
+    dest.parent.mkdir(parents=True)
+    dest.write_text(_valid_oauth_json(), encoding="utf-8")
     monkeypatch.setattr(
         "integrator.onboarding.google_cloud.settings",
         type("S", (), {"credentials_path": dest})(),
     )
-    monkeypatch.setattr("integrator.onboarding.google_cloud.time.sleep", lambda _: None)
-
-    calls = {"n": 0}
-
-    def poll_side_effect(**_kwargs):
-        calls["n"] += 1
-        if calls["n"] >= 2:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(_valid_oauth_json(), encoding="utf-8")
-        return None
-
-    monkeypatch.setattr(
-        "integrator.onboarding.google_cloud.try_import_from_downloads",
-        poll_side_effect,
-    )
-
     result = wait_for_credentials(poll_interval=0.01, timeout_seconds=5, auto_yes=True)
     assert result == dest
-
-
-def test_find_downloads_candidates(tmp_path: Path, monkeypatch):
-    downloads = tmp_path / "Downloads"
-    downloads.mkdir()
-    f = downloads / "client_secret_abc.json"
-    f.write_text(_valid_oauth_json(), encoding="utf-8")
-    monkeypatch.setattr(
-        "integrator.onboarding.google_cloud.Path.home",
-        lambda: tmp_path,
-    )
-    found = find_downloads_candidates()
-    assert len(found) == 1
-    assert found[0].name == "client_secret_abc.json"
 
 
 def test_run_init_wizard_all_skipped(tmp_path: Path, monkeypatch):

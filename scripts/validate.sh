@@ -95,7 +95,7 @@ else
   if command -v npm >/dev/null 2>&1; then
     ./scripts/build-admin.sh
   else
-    echo "WARN: admin dist missing (npm not available); fallback admin.html"
+    echo "WARN: admin dist missing — rode ./scripts/build-admin.sh (npm necessário)"
   fi
 fi
 

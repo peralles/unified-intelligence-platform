@@ -46,7 +46,7 @@ Caches invalidados em: `logout`, `login` (refresh token), `add_account`.
 
 - [ ] `integrator login pessoal` e `profissional`
 - [ ] `integrator status` mostra tokens OK
-- [ ] `integrator service install` + `curl localhost:17320/health`
+- [ ] `integrator serve-http` + `curl localhost:17320/health` (ou deploy Coolify)
 - [ ] Hermes lista 12 tools
 - [ ] Chamada `get_calendars_info` com `"account": "pessoal"`
 - [ ] `send_gmail_message` sem `confirm` → erro esperado

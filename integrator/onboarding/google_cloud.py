@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import time
 import webbrowser
 from pathlib import Path
@@ -48,36 +47,12 @@ def credentials_ready() -> bool:
         return False
 
 
-def find_downloads_candidates() -> list[Path]:
-    """Procura JSON típico de OAuth client na pasta Downloads."""
-    downloads = Path.home() / "Downloads"
-    if not downloads.is_dir():
-        return []
-    patterns = ("client_secret*.json", "credentials*.json", "client*.json")
-    found: list[Path] = []
-    for pattern in patterns:
-        found.extend(downloads.glob(pattern))
-    unique = []
-    seen: set[str] = set()
-    for p in sorted(found, key=lambda x: x.stat().st_mtime, reverse=True):
-        key = str(p.resolve())
-        if key in seen or not p.is_file():
-            continue
-        seen.add(key)
-        try:
-            validate_credentials_file(p)
-            unique.append(p)
-        except CredentialsValidationError:
-            continue
-    return unique
-
-
 def install_credentials_from(source: Path) -> Path:
-    """Copia JSON validado para credentials/credentials.json."""
+    """Copia JSON validado para data/credentials/credentials.json."""
     validate_credentials_file(source)
     dest = settings.credentials_path
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, dest)
+    dest.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     return dest
 
 
@@ -103,49 +78,6 @@ def open_google_setup_sequence(*, interactive: bool = True) -> None:
                 raise
 
 
-def try_import_from_downloads(*, auto_yes: bool = False) -> Path | None:
-    """Se houver um único candidato válido em Downloads, copia para credentials/."""
-    if credentials_ready():
-        return settings.credentials_path
-
-    candidates = find_downloads_candidates()
-    if not candidates:
-        return None
-
-    if len(candidates) == 1:
-        src = candidates[0]
-        if auto_yes:
-            return install_credentials_from(src)
-        print(f"\n  Encontramos o arquivo baixado: {src.name}")
-        try:
-            answer = input("  Usar este arquivo? [S/n] ").strip().lower()
-        except KeyboardInterrupt:
-            print()
-            raise
-        if answer in ("", "s", "sim", "y", "yes"):
-            return install_credentials_from(src)
-        return None
-
-    print("\n  Vários arquivos OAuth encontrados em Downloads:")
-    for idx, p in enumerate(candidates[:5], start=1):
-        print(f"    {idx}. {p.name}")
-    if auto_yes and candidates:
-        return install_credentials_from(candidates[0])
-    try:
-        choice = input("  Número do arquivo a usar (Enter = aguardar cópia manual): ").strip()
-    except KeyboardInterrupt:
-        print()
-        raise
-    if not choice:
-        return None
-    try:
-        picked = candidates[int(choice) - 1]
-    except (ValueError, IndexError):
-        print("  Opção inválida.")
-        return None
-    return install_credentials_from(picked)
-
-
 def wait_for_credentials(
     *,
     poll_interval: float = 2.0,
@@ -153,23 +85,20 @@ def wait_for_credentials(
     auto_yes: bool = False,
 ) -> Path:
     """
-    Espera credentials/credentials.json ou importa de Downloads.
+    Espera data/credentials/credentials.json (ou upload via admin).
 
     Raises:
         KeyboardInterrupt: usuário cancelou
         TimeoutError: tempo esgotado
     """
+    _ = auto_yes
     dest = settings.credentials_path
     deadline = time.monotonic() + timeout_seconds
     print("\n  Aguardando o arquivo de credenciais…")
-    print("  (Detectamos automaticamente em credentials/ ou na pasta Downloads)")
+    print(f"  Caminho: {dest}")
+    print("  Envie client_secret.json no admin (/admin → Google) ou copie manualmente.")
 
     while time.monotonic() < deadline:
-        imported = try_import_from_downloads(auto_yes=auto_yes)
-        if imported is not None:
-            print("  Credenciais Google configuradas.")
-            return imported
-
         if dest.is_file():
             try:
                 validate_credentials_file(dest)
@@ -177,13 +106,13 @@ def wait_for_credentials(
                 return dest
             except CredentialsValidationError as exc:
                 print(f"  Arquivo encontrado mas inválido: {exc}")
-                print("  Corrija o JSON ou baixe novamente do Google Cloud.")
+                print("  Corrija o JSON ou envie novamente pelo admin.")
 
         time.sleep(poll_interval)
 
     raise TimeoutError(
         "Tempo esgotado aguardando credentials.json. "
-        "Rode integrator init novamente quando tiver o arquivo."
+        "Envie o JSON no admin ou rode integrator init novamente."
     )
 
 
@@ -202,13 +131,13 @@ def run_google_credentials_wizard(*, interactive: bool, auto_yes: bool) -> Path:
             print()
             raise
         if answer not in ("", "s", "sim", "y", "yes"):
-            print("  Quando tiver o JSON, coloque em credentials/credentials.json")
+            print(f"  Quando tiver o JSON, envie no admin ou coloque em {settings.credentials_path}")
             return wait_for_credentials(auto_yes=auto_yes)
 
     open_google_setup_sequence(interactive=interactive and not auto_yes)
 
     print("\n  Depois de baixar o JSON:")
-    print("  • Renomeie para credentials.json e coloque na pasta credentials/ do projeto, ou")
-    print("  • Deixe na pasta Downloads — detectamos automaticamente.")
+    print("  • Envie no console admin (/admin → Google), ou")
+    print(f"  • Copie para {settings.credentials_path}")
 
     return wait_for_credentials(auto_yes=auto_yes)
