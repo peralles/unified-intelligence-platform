@@ -89,10 +89,10 @@ Certifique-se de que o `Dockerfile` está na raiz do repositório (já está).
 
 ### 3. Credenciais Google
 
-No Coolify, você pode injetar o `credentials.json` de duas formas:
+No Coolify, injete o `client_secret.json` assim:
 
-- **Arquivo via Volume**: monte `/app/credentials` como volume persistente e faça upload via admin UI
-- **Admin UI**: após o primeiro deploy, acesse `/admin` → Google → "Salvar JSON colado" e cole o conteúdo do `client_secret.json`
+- **Admin UI** (recomendado): `/admin` → Google → arraste ou envie o arquivo; grava em `/app/data/credentials/` (volume persistente)
+- **Bind-mount opcional**: `./credentials/credentials.json` read-only; copiado automaticamente para `/app/data` na subida
 
 ---
 

@@ -89,6 +89,7 @@ RUN mkdir -p \
         /app/data/whatsapp \
         /app/data/cache/whisper \
         /app/data/cache/huggingface \
+        /app/data/credentials \
         /app/credentials \
     && chown -R app:app /app
 

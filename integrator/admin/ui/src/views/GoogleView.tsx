@@ -12,7 +12,7 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "@/api/client";
 import { useApp } from "@/context/AppContext";
-import { ExternalLink, FileJson, Upload } from "lucide-react";
+import { CheckCircle2, Circle, ExternalLink, FileJson, Upload } from "lucide-react";
 
 export function GoogleView() {
   const {
@@ -37,8 +37,14 @@ export function GoogleView() {
   const accounts = state.accounts?.accounts || [];
   const setup = state.setup || {};
   const defaultAccount = accounts.find((a) => a.is_default);
-  const redirectUri = `${window.location.origin}/admin/oauth/google/callback`;
   const isDocker = !!state.deployment?.docker;
+  const oauthBase =
+    state.deployment?.oauth_public_base_url?.replace(/\/$/, "") ||
+    window.location.origin;
+  const redirectUri = `${oauthBase}/admin/oauth/google/callback`;
+  const credentialsReady = !!setup.credentials_ready;
+  const hasLinkedAccount = accounts.some((a) => a.has_token);
+  const canAuthorize = credentialsReady;
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key);
@@ -60,8 +66,8 @@ export function GoogleView() {
       throw new Error("Arquivo não é JSON válido.");
     }
     setCredsJson(trimmed);
-    await onSaveCreds(trimmed);
-    setUploadName(sourceLabel);
+    const ok = await onSaveCreds(trimmed);
+    if (ok) setUploadName(sourceLabel);
   }
 
   async function handleFile(file: File | null | undefined) {
@@ -91,8 +97,47 @@ export function GoogleView() {
     void run("upload", () => handleFile(file));
   }
 
+  const steps = [
+    {
+      done: credentialsReady,
+      label: "Enviar client_secret.json (tipo Web application)",
+    },
+    {
+      done: hasLinkedAccount,
+      label: "Autorizar conta no Google (redirect acima no Cloud Console)",
+    },
+  ];
+
   return (
     <div className="space-y-5">
+      <Card>
+        <CardHeader>
+          <CardTitle>Fluxo Google</CardTitle>
+          <CardDescription>
+            Dois passos: credencial OAuth no servidor, depois login da conta Gmail/Calendar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {steps.map((step) => (
+            <div key={step.label} className="flex items-start gap-2 text-sm">
+              {step.done ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+              ) : (
+                <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
+              )}
+              <span className={step.done ? "text-muted line-through" : ""}>{step.label}</span>
+            </div>
+          ))}
+          {isDocker ? (
+            <p className="pt-2 text-xs text-muted">
+              Coolify: credencial fica no volume <code>/app/data</code> (persistente). Redirect
+              OAuth:{" "}
+              <code className="rounded bg-secondary px-1 font-mono text-[11px]">{redirectUri}</code>
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Resumo</CardTitle>
@@ -101,8 +146,8 @@ export function GoogleView() {
           <div className="rounded-md border border-border bg-background/40 px-3 py-2">
             <p className="text-xs uppercase tracking-wide text-muted">OAuth JSON</p>
             <p className="mt-1 font-medium">
-              <Badge tone={setup.credentials_ready ? "ok" : "warn"}>
-                {setup.credentials_ready ? "Configurado" : "Pendente"}
+              <Badge tone={credentialsReady ? "ok" : "warn"}>
+                {credentialsReady ? "Configurado" : "Pendente"}
               </Badge>
             </p>
           </div>
@@ -112,10 +157,163 @@ export function GoogleView() {
           </div>
           <div className="rounded-md border border-border bg-background/40 px-3 py-2">
             <p className="text-xs uppercase tracking-wide text-muted">Padrão</p>
-            <p className="mt-1 truncate font-medium text-sm">
+            <p className="mt-1 truncate text-sm font-medium">
               {defaultAccount?.email || defaultAccount?.id || "—"}
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Credencial OAuth (client_secret.json)</CardTitle>
+          <CardDescription>
+            Tipo <strong>Web application</strong> no Google Cloud. Redirect autorizado:{" "}
+            <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
+              {redirectUri}
+            </code>
+            {isDocker ? (
+              <>
+                {" "}
+                — defina{" "}
+                <code className="rounded bg-secondary px-1 font-mono text-xs">
+                  INTEGRATOR_OAUTH_PUBLIC_BASE_URL
+                </code>{" "}
+                no Coolify se o domínio público for diferente.
+              </>
+            ) : null}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              loading={busy === "steps"}
+              onClick={() => run("steps", onGoogleSteps)}
+            >
+              Abrir Google Cloud
+            </Button>
+            {!isDocker ? (
+              <Button
+                variant="secondary"
+                loading={busy === "import"}
+                onClick={() => run("import", onImportCreds)}
+              >
+                <Upload className="h-4 w-4" />
+                Importar de ~/Downloads
+              </Button>
+            ) : null}
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="sr-only"
+            onChange={onFileInputChange}
+          />
+          <div
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
+            }}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center transition-colors",
+              dragOver
+                ? "border-primary bg-primary/5"
+                : "border-border bg-background/50 hover:border-primary/40 hover:bg-secondary/20",
+              busy === "upload" && "pointer-events-none opacity-60",
+            )}
+          >
+            <FileJson className="h-8 w-8 text-muted" />
+            <p className="text-sm font-medium">
+              {busy === "upload"
+                ? "Enviando…"
+                : "Arraste client_secret.json ou clique para escolher"}
+            </p>
+            <p className="text-xs text-muted">
+              JSON OAuth Web do Google Cloud — chave <code className="font-mono">web</code>, não
+              Desktop
+            </p>
+            {uploadName ? (
+              <p className="text-xs text-success">Último envio: {uploadName}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="creds-json">Ou cole o JSON aqui</Label>
+            <Textarea
+              id="creds-json"
+              rows={4}
+              value={credsJson}
+              onChange={(e) => setCredsJson(e.target.value)}
+              placeholder='{"web":{"client_id":"...","client_secret":"...",...}}'
+              className="font-mono text-xs"
+            />
+          </div>
+          <Button
+            loading={busy === "save-creds"}
+            onClick={() =>
+              run("save-creds", () => saveCredentialsFromText(credsJson, "JSON colado"))
+            }
+          >
+            Salvar JSON colado
+          </Button>
+          {credentialsReady ? (
+            <p className="text-xs text-muted">
+              Credencial salva. Envie outro arquivo ou cole JSON para substituir.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Conectar nova conta Google</CardTitle>
+          <CardDescription>
+            Após salvar o JSON, autorize Gmail e Calendar para o ID da conta abaixo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="login_account">ID da conta (ex: pessoal, trabalho)</Label>
+              <Input
+                id="login_account"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                placeholder="pessoal"
+                disabled={!canAuthorize}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="login_label">Nome amigável (opcional)</Label>
+              <Input
+                id="login_label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Pessoal"
+                disabled={!canAuthorize}
+              />
+            </div>
+          </div>
+          {!canAuthorize ? (
+            <p className="text-sm text-warning">
+              Envie o client_secret.json antes de autorizar uma conta.
+            </p>
+          ) : null}
+          <Button disabled={!canAuthorize} onClick={() => onGoogleLogin(accountId, label)}>
+            <ExternalLink className="h-4 w-4" />
+            Abrir autorização no navegador
+          </Button>
         </CardContent>
       </Card>
 
@@ -189,143 +387,6 @@ export function GoogleView() {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Conectar nova conta Google</CardTitle>
-          <CardDescription>
-            Redirect OAuth autorizado no Google Cloud:{" "}
-            <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
-              {redirectUri}
-            </code>
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="login_account">ID da conta (ex: pessoal, trabalho)</Label>
-              <Input
-                id="login_account"
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                placeholder="pessoal"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="login_label">Nome amigável (opcional)</Label>
-              <Input
-                id="login_label"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Pessoal"
-              />
-            </div>
-          </div>
-          <Button onClick={() => onGoogleLogin(accountId, label)}>
-            <ExternalLink className="h-4 w-4" />
-            Abrir autorização no navegador
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Credencial OAuth (client_secret.json)</CardTitle>
-          <CardDescription>
-            Tipo <strong>Web application</strong> no Google Cloud. Em produção, defina também{" "}
-            <code className="rounded bg-secondary px-1 font-mono text-xs">
-              INTEGRATOR_OAUTH_PUBLIC_BASE_URL
-            </code>{" "}
-            no Coolify.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              loading={busy === "steps"}
-              onClick={() => run("steps", onGoogleSteps)}
-            >
-              Abrir Google Cloud
-            </Button>
-            {!isDocker ? (
-              <Button
-                variant="secondary"
-                loading={busy === "import"}
-                onClick={() => run("import", onImportCreds)}
-              >
-                <Upload className="h-4 w-4" />
-                Importar de ~/Downloads
-              </Button>
-            ) : null}
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="sr-only"
-            onChange={onFileInputChange}
-          />
-          <div
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
-            }}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            className={cn(
-              "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center transition-colors",
-              dragOver
-                ? "border-primary bg-primary/5"
-                : "border-border bg-background/50 hover:border-primary/40 hover:bg-secondary/20",
-              busy === "upload" && "pointer-events-none opacity-60",
-            )}
-          >
-            <FileJson className="h-8 w-8 text-muted" />
-            <p className="text-sm font-medium">
-              {busy === "upload"
-                ? "Enviando…"
-                : "Arraste client_secret.json ou clique para escolher"}
-            </p>
-            <p className="text-xs text-muted">Arquivo OAuth Web do Google Cloud (.json)</p>
-            {uploadName ? (
-              <p className="text-xs text-success">Último envio: {uploadName}</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="creds-json">Ou cole o JSON aqui</Label>
-            <Textarea
-              id="creds-json"
-              rows={4}
-              value={credsJson}
-              onChange={(e) => setCredsJson(e.target.value)}
-              placeholder='{"web":{"client_id":"...","client_secret":"...",...}}'
-              className="font-mono text-xs"
-            />
-          </div>
-          <Button
-            loading={busy === "save-creds"}
-            onClick={() =>
-              run("save-creds", () => saveCredentialsFromText(credsJson, "JSON colado"))
-            }
-          >
-            Salvar JSON colado
-          </Button>
-          {setup.credentials_ready ? (
-            <p className="text-xs text-muted">
-              Credencial já salva no servidor. Envie outro arquivo ou cole JSON para substituir.
-            </p>
-          ) : null}
         </CardContent>
       </Card>
 

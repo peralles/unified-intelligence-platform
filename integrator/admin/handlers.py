@@ -24,6 +24,7 @@ from integrator.hermes.config_merge import DEFAULT_SERVER_NAME
 from integrator.hermes.discovery import discover_hermes
 from integrator.hermes.doctor import CheckResult, critical_failures
 from integrator.logging_setup import get_logger, read_audit_failures
+from integrator.ops_log import log_event
 from integrator.onboarding.google_cloud import (
     credentials_ready,
     find_downloads_candidates,
@@ -159,14 +160,27 @@ def save_credentials_json(content: str) -> dict[str, Any]:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
         return {"ok": False, "error": f"JSON inválido: {exc}"}
+    settings.ensure_data_dirs()
     dest = settings.credentials_path
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except OSError as exc:
+        logger.exception("admin credentials write failed path=%s", dest)
+        return {
+            "ok": False,
+            "error": (
+                "Não foi possível gravar o JSON OAuth no servidor. "
+                "Verifique se o volume /app/data está gravável."
+                f" ({exc})"
+            ),
+        }
     try:
         validate_credentials_file(dest)
     except Exception as exc:
         dest.unlink(missing_ok=True)
         return {"ok": False, "error": str(exc)}
+    log_event(logger, "admin.credentials.saved", path=str(dest))
     return {"ok": True, "path": str(dest)}
 
 

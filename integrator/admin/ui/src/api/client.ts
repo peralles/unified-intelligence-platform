@@ -25,8 +25,11 @@ export async function api<T = Record<string, unknown>>(
   if (data.ok === false && data.error) {
     throw new Error(data.error);
   }
-  if (!res.ok && data.error && data.ok !== true) {
-    throw new Error(data.error);
+  if (!res.ok) {
+    const msg =
+      (data as { error?: string }).error ||
+      `Erro HTTP ${res.status}`;
+    throw new Error(msg);
   }
   return data;
 }

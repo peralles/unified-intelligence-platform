@@ -52,8 +52,7 @@ services:
       # and re-authenticating Google.
       - integrator_data:/app/data
 
-      # Google OAuth client_secret.json — read-only; upload via admin UI
-      # or place the file at ./credentials/credentials.json before first run.
+      # Google OAuth client_secret — optional read-only seed; admin upload writes to /app/data
       - ./credentials:/app/credentials:ro,z
 
     # ── Environment ─────────────────────────────────────────────────────────

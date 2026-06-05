@@ -27,7 +27,7 @@ interface AppContextValue {
   navBadgeTone: (id: ViewId) => Tone;
   onGoogleSteps: () => Promise<void>;
   onImportCreds: () => Promise<void>;
-  onSaveCreds: (json: string) => Promise<void>;
+  onSaveCreds: (json: string) => Promise<boolean>;
   onGoogleLogin: (accountId: string, label: string) => void;
   setDefaultAccount: (id: string) => Promise<void>;
   logoutAccount: (id: string) => Promise<void>;
@@ -101,6 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ? decodeURIComponent(message.replace(/\+/g, " "))
           : "Falha na autorização Google.";
         showToast(detail, "err");
+        setActiveView("google");
       }
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -117,7 +118,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const setup = state.setup || {};
       const wa = state.whatsapp_live || {};
       const st = wa.live || wa.status || {};
-      if (id === "google") return setup.configured ? "ok" : "warn";
+      if (id === "google") {
+        if (!setup.credentials_ready) return "warn";
+        const accs = state.accounts?.accounts || [];
+        if (!accs.some((a) => a.has_token)) return "warn";
+        return "ok";
+      }
       if (id === "whatsapp") return wa.error ? "err" : st.logged_in ? "ok" : "warn";
       return "";
     },
@@ -232,7 +238,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       onSaveCreds: async (json: string) => {
         if (!json.trim()) {
           showToast("Cole o JSON OAuth antes de salvar.", "warn");
-          return;
+          return false;
         }
         const r = await api<{ ok?: boolean; error?: string }>(
           "/admin/api/setup/credentials",
@@ -244,6 +250,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
         showToast(r.ok ? "Credenciais salvas com sucesso." : r.error || "Erro", r.ok ? "" : "err");
         if (r.ok) await refreshAll();
+        return !!r.ok;
       },
       onGoogleLogin: (accountId, label) => {
         const id = accountId.trim() || "pessoal";

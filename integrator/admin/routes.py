@@ -123,6 +123,7 @@ def _build_state() -> dict[str, Any]:
         "deployment": {
             "docker": settings.skip_macos_service,
             "oauth_redirect": "/admin/oauth/google/callback",
+            "oauth_public_base_url": settings.oauth_public_base_url or None,
             "persist_path": "/app/data",
         },
         "persistence": check_data_persistence().to_dict(),

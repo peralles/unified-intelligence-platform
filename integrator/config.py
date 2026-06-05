@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     def credentials_path(self) -> Path:
         if self.credentials_file:
             return self.credentials_file
+        # Docker/Coolify: bind-mount ./credentials is often read-only; persist under /app/data.
+        if self.skip_macos_service:
+            return self.root_dir / "data" / "credentials" / "credentials.json"
         return self.root_dir / "credentials" / "credentials.json"
 
     default_account: str | None = None
@@ -117,6 +120,7 @@ class Settings(BaseSettings):
     def ensure_data_dirs(self) -> None:
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
         self.credentials_path.parent.mkdir(parents=True, exist_ok=True)
+        self._bootstrap_docker_credentials()
         self.whatsapp_session_path.mkdir(parents=True, exist_ok=True)
         self.admin_runtime_path.parent.mkdir(parents=True, exist_ok=True)
         cache_root = self.root_dir / "data" / "cache"
@@ -128,6 +132,27 @@ class Settings(BaseSettings):
     @property
     def whatsapp_transcribe_cache_path(self) -> Path:
         return self.root_dir / "data" / "cache" / "whisper"
+
+    def _bootstrap_docker_credentials(self) -> None:
+        """One-time copy from read-only bind-mount into the writable data volume."""
+        if not self.skip_macos_service or self.credentials_file:
+            return
+        dest = self.credentials_path
+        if dest.is_file():
+            return
+        legacy = self.root_dir / "credentials" / "credentials.json"
+        if not legacy.is_file():
+            return
+        try:
+            from integrator.onboarding.google_cloud import validate_credentials_file
+
+            validate_credentials_file(legacy)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError:
+            return
+        except Exception:
+            return
 
 
 settings = Settings()
