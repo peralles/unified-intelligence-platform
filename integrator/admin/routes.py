@@ -18,6 +18,7 @@ from integrator.admin.env_file import PERSISTABLE_ENV, bool_env, env_file_path, 
 from integrator.admin.runtime import RuntimeStore, runtime_file_path
 from integrator.config import settings
 from integrator.logging_setup import get_logger
+from integrator.persistence import check_data_persistence
 
 logger = get_logger("admin")
 
@@ -122,6 +123,7 @@ def _build_state() -> dict[str, Any]:
             "oauth_redirect": "/admin/oauth/google/callback",
             "persist_path": "/app/data",
         },
+        "persistence": check_data_persistence().to_dict(),
     }
 
 

@@ -16,7 +16,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 from starlette.types import ASGIApp
 
@@ -100,7 +100,21 @@ def _security_settings(host: str, port: int) -> TransportSecuritySettings:
 
 
 async def _health(_: Request) -> Response:
-    return Response('{"ok":true}', media_type="application/json")
+    from integrator.persistence import check_data_persistence
+
+    report = check_data_persistence()
+    return JSONResponse(
+        {
+            "ok": report.status != "error",
+            "persistence": report.to_dict(),
+        }
+    )
+
+
+def _startup_persistence_check() -> None:
+    from integrator.persistence import ensure_volume_marker
+
+    ensure_volume_marker()
 
 
 def _warm_whatsapp_for_auto_transcribe() -> None:
@@ -142,6 +156,11 @@ def create_starlette_app(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> 
 
     @asynccontextmanager
     async def lifespan(_app: Starlette):
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, _startup_persistence_check)
+        except Exception as exc:
+            logger.warning("persistence check failed: %s", exc)
         async with session_manager.run():
             if settings.whatsapp_enabled and settings.whatsapp_auto_transcribe:
                 loop = asyncio.get_running_loop()

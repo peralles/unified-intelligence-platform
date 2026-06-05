@@ -15,6 +15,8 @@ Guia para rodar o integrator em produção no [Coolify](https://coolify.io) com 
 
 Sem volume em `/app/data`, cada redeploy apaga sessão WhatsApp, tokens Google e logs.
 
+O admin mostra alerta no **Painel** e em **Serviço** quando `/app/data` não é mount Docker (`INTEGRATOR_SKIP_MACOS_SERVICE=1`). Após configurar o volume, o banner some no próximo refresh.
+
 ## Persistência no Coolify
 
 O container usa `read_only: true`; apenas volumes montados permanecem graváveis.

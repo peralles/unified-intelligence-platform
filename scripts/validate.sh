@@ -116,6 +116,7 @@ from integrator.admin.routes import _build_state
 state = _build_state()
 assert 'setup' in state
 assert 'accounts' in state
+assert 'persistence' in state
 print('OK: admin state keys', len(state))
 "
 
