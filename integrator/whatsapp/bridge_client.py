@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import threading
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from integrator.config import settings
+from integrator.ops_log import log_event
 from integrator.whatsapp.errors import WhatsAppApiError, WhatsAppNotConnectedError
 from integrator.whatsapp.logging_whatsapp import LOGGER
 
@@ -111,17 +113,21 @@ class WhatsAppBridgeClient:
                 try:
                     proc.wait(timeout=timeout)
                 except subprocess.TimeoutExpired:
-                    LOGGER.warning(
-                        "bridge worker did not exit after kill | session=%s",
-                        self.session_dir,
+                    log_event(
+                        LOGGER,
+                        "whatsapp.bridge.stop_timeout",
+                        level=logging.WARNING,
+                        session=str(self.session_dir),
                     )
         else:
             try:
                 proc.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
-                LOGGER.warning(
-                    "bridge zombie wait timed out | session=%s",
-                    self.session_dir,
+                log_event(
+                    LOGGER,
+                    "whatsapp.bridge.zombie_wait_timeout",
+                    level=logging.WARNING,
+                    session=str(self.session_dir),
                 )
 
     def _ensure_process(self) -> subprocess.Popen[str]:
@@ -178,27 +184,15 @@ class WhatsAppBridgeClient:
         env["INTEGRATOR_WHATSAPP_TRANSCRIBE_CACHE_DIR"] = str(whisper_cache.resolve())
         env["HOME"] = str(cache_root.resolve())
         env["UV_CACHE_DIR"] = str((cache_root / "uv").resolve())
-        # #region agent log
-        from integrator.agent_debug import agent_debug_log
-
-        agent_debug_log(
-            "H3",
-            "bridge_client.py:_ensure_process",
-            "worker cache env",
-            {
-                "whisper_cache": str(whisper_cache),
-                "hf_home": str(hf_home),
-                "transcribe_model": settings.whatsapp_transcribe_model,
-            },
-        )
-        # #endregion
         cmd = resolve_worker_command(bridge)
         try:
-            LOGGER.info(
-                "bridge start | session=%s | bridge=%s | cmd=%s",
-                self.session_dir,
-                bridge,
-                " ".join(cmd),
+            log_event(
+                LOGGER,
+                "whatsapp.bridge.start",
+                session=str(self.session_dir.resolve()),
+                bridge=str(bridge.resolve()),
+                transcribe_model=settings.whatsapp_transcribe_model,
+                whisper_cache=str(whisper_cache.resolve()),
             )
             # stderr inherited so pair QR (worker writes to stderr) is visible in the terminal
             self._proc = subprocess.Popen(
@@ -211,7 +205,12 @@ class WhatsAppBridgeClient:
                 cwd=str(bridge),
             )
         except OSError as exc:
-            LOGGER.warning("bridge start FAIL | %s", exc)
+            log_event(
+                LOGGER,
+                "whatsapp.bridge.start_failed",
+                level=logging.WARNING,
+                error=str(exc),
+            )
             raise WhatsAppApiError(f"Não foi possível iniciar worker WhatsApp: {exc}") from exc
         if self._proc.stdin is None or self._proc.stdout is None:
             raise WhatsAppApiError("Worker WhatsApp sem stdin/stdout")
@@ -236,7 +235,13 @@ class WhatsAppBridgeClient:
             resp = _read_rpc_response(proc.stdout, req_id, method=method)
             if not resp.get("ok"):
                 msg = str(resp.get("error", "erro desconhecido"))
-                LOGGER.warning("bridge RPC FAIL | method=%s | %s", method, msg[:200])
+                log_event(
+                    LOGGER,
+                    "whatsapp.bridge.rpc_failed",
+                    level=logging.WARNING,
+                    method=method,
+                    error=msg[:200],
+                )
                 if "não conectado" in msg.lower() or "not connected" in msg.lower():
                     raise WhatsAppNotConnectedError(f"[integrator] {msg}")
                 raise WhatsAppApiError(f"[integrator] {msg}")

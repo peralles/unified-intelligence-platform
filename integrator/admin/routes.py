@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -18,6 +19,7 @@ from integrator.admin.env_file import PERSISTABLE_ENV, bool_env, env_file_path, 
 from integrator.admin.runtime import RuntimeStore, runtime_file_path
 from integrator.config import settings
 from integrator.logging_setup import get_logger
+from integrator.ops_log import log_event
 from integrator.persistence import check_data_persistence
 
 logger = get_logger("admin")
@@ -334,6 +336,12 @@ async def admin_oauth_google_start(request: Request) -> Response:
         )
     except Exception as exc:
         logger.warning("admin oauth start failed: %s", exc)
+        log_event(
+            logger,
+            "admin.oauth.start_failed",
+            level=logging.WARNING,
+            error=str(exc),
+        )
         return RedirectResponse(
             f"/admin?oauth=error&message={quote(str(exc)[:200])}",
             status_code=302,
@@ -366,6 +374,12 @@ async def admin_oauth_google_callback(request: Request) -> Response:
         )
     except Exception as exc:
         logger.warning("admin oauth callback failed: %s", exc)
+        log_event(
+            logger,
+            "admin.oauth.callback_failed",
+            level=logging.WARNING,
+            error=str(exc),
+        )
         return RedirectResponse(
             f"/admin?oauth=error&message={quote(str(exc)[:200])}",
             status_code=302,
@@ -408,10 +422,15 @@ async def admin_api_config(request: Request) -> Response:
             if key in (body.get("whatsapp") or {}) or key in (body.get("tools") or {}):
                 restart_hints.append(key)
 
-    logger.info(
-        "admin config saved | ignore=%d | persist_env=%s",
-        len((updated.get("whatsapp") or {}).get("transcribe_ignore_numbers") or []),
-        persist_env,
+    log_event(
+        logger,
+        "admin.config.saved",
+        ignore_count=len(
+            (updated.get("whatsapp") or {}).get("transcribe_ignore_numbers") or []
+        ),
+        persist_env=persist_env,
+        env_persist_skipped=env_persist_skipped,
+        env_keys=len(env_keys),
     )
     return JSONResponse(
         {

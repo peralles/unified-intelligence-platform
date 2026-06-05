@@ -42,6 +42,7 @@ from neonize.utils.enum import ReceiptType
 from runtime_config import RuntimeConfig
 from chat_search import chat_haystack, normalize_phone_digits, phone_digits_match
 from transcribe_model import resolve_model_id as _resolve_model_id
+from ops_log import log_event, redact_jid
 
 
 class WorkerError(Exception):
@@ -190,23 +191,6 @@ class StoredMessage:
     is_audio: bool = False
 
 
-def _agent_debug(
-    hypothesis_id: str,
-    location: str,
-    message: str,
-    data: dict[str, Any] | None = None,
-) -> None:
-    payload = {
-        "sessionId": "6cef0e",
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data or {},
-        "timestamp": int(time.time() * 1000),
-    }
-    logging.info("[agent-debug] %s", json.dumps(payload, default=str))
-
-
 def _disk_free_mb(path: str | Path) -> int | None:
     try:
         usage = os.statvfs(str(path))
@@ -244,36 +228,11 @@ class AudioTranscriber:
         self.language = language or None
         self._model: Any = None
         self._download_root = str(_transcribe_cache_dir())
-        # #region agent log
-        _agent_debug(
-            "H2",
-            "worker.py:AudioTranscriber.__init__",
-            "transcriber init",
-            {
-                "raw_model": model_id,
-                "resolved_model": self.model_id,
-                "download_root": self._download_root,
-                "free_mb": _disk_free_mb(self._download_root),
-            },
-        )
-        # #endregion
 
     def _ensure_model(self) -> None:
         if self._model is not None:
             return
         free_mb = _disk_free_mb(self._download_root)
-        # #region agent log
-        _agent_debug(
-            "H1",
-            "worker.py:AudioTranscriber._ensure_model",
-            "loading whisper model",
-            {
-                "model": self.model_id,
-                "download_root": self._download_root,
-                "free_mb": free_mb,
-            },
-        )
-        # #endregion
         if free_mb is not None and free_mb < 512:
             raise RuntimeError(
                 f"Espaço insuficiente em {self._download_root} "
@@ -289,10 +248,10 @@ class AudioTranscriber:
                 compute_type="int8",
                 download_root=self._download_root,
             )
-            logging.info(
-                "[transcribe] faster-whisper model loaded | model=%s | cache=%s",
-                self.model_id,
-                self._download_root,
+            log_event(
+                "whatsapp.transcribe.model_loaded",
+                model=self.model_id,
+                cache=self._download_root,
             )
         except ImportError as exc:
             raise RuntimeError(
@@ -300,20 +259,6 @@ class AudioTranscriber:
                 f"Execute: cd bridges/whatsapp-neonize && uv sync  ({exc})"
             ) from exc
         except OSError as exc:
-            # #region agent log
-            _agent_debug(
-                "H1",
-                "worker.py:AudioTranscriber._ensure_model",
-                "model load OSError",
-                {
-                    "model": self.model_id,
-                    "download_root": self._download_root,
-                    "free_mb": _disk_free_mb(self._download_root),
-                    "errno": getattr(exc, "errno", None),
-                    "error": str(exc),
-                },
-            )
-            # #endregion
             raise RuntimeError(
                 f"Falha ao baixar/carregar modelo Whisper ({self.model_id}): {exc}. "
                 f"Cache: {self._download_root}. "
@@ -772,7 +717,12 @@ class NeonizeWorker:
         try:
             audio_bytes: bytes = client.download_any(evt.Message)
         except Exception as exc:
-            logging.error("[transcribe] download failed | chat=%s | %s", chat_id, exc)
+            log_event(
+                "whatsapp.transcribe.download_failed",
+                level=logging.ERROR,
+                chat=redact_jid(chat_id),
+                error=str(exc),
+            )
             return
         try:
             with tempfile.NamedTemporaryFile(
@@ -782,20 +732,13 @@ class NeonizeWorker:
                 tmp_path = fh.name
             text = self._transcriber.transcribe(tmp_path)
         except Exception as exc:
-            # #region agent log
-            _agent_debug(
-                "H1",
-                "worker.py:_do_transcribe_and_reply",
-                "transcription failed",
-                {
-                    "chat_id": chat_id,
-                    "model": self._transcriber.model_id,
-                    "free_mb": _disk_free_mb(_transcribe_cache_dir()),
-                    "error": str(exc),
-                },
+            log_event(
+                "whatsapp.transcribe.transcription_failed",
+                level=logging.ERROR,
+                chat=redact_jid(chat_id),
+                model=self._transcriber.model_id,
+                error=str(exc),
             )
-            # #endregion
-            logging.error("[transcribe] transcription failed | chat=%s | %s", chat_id, exc)
             return
         finally:
             if tmp_path:
@@ -809,9 +752,18 @@ class NeonizeWorker:
         try:
             chat_jid = self._jid_from_chat_id(chat_id)
             client.send_message(chat_jid, reply)
-            logging.info("[transcribe] OK | chat=%s | chars=%d", chat_id, len(text))
+            log_event(
+                "whatsapp.transcribe.ok",
+                chat=redact_jid(chat_id),
+                chars=len(text),
+            )
         except Exception as exc:
-            logging.error("[transcribe] send reply failed | chat=%s | %s", chat_id, exc)
+            log_event(
+                "whatsapp.transcribe.send_failed",
+                level=logging.ERROR,
+                chat=redact_jid(chat_id),
+                error=str(exc),
+            )
 
     def _transcribe_stored_audio(self, *, chat_id: str, message_id: str) -> str:
         """On-demand transcription for a cached audio message (RPC call)."""

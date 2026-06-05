@@ -34,4 +34,7 @@ Seguir o que já existe em `integrator/` e `tests/`.
 ## Logging
 
 - Fila assíncrona; `data/logs/integrator.log`, `errors.log`, `audit.jsonl`
+- Eventos operacionais: `integrator/ops_log.py` → `event=<domínio>.<ação> | key=value` (grep)
+- Worker WhatsApp: `bridges/whatsapp-neonize/ops_log.py` (mesmo formato no stderr)
+- Referência: [docs/LOGGING.md](../docs/LOGGING.md)
 - Sucesso de tool no audit desligado por padrão (`INTEGRATOR_AUDIT_LOG_SUCCESS=false`)
