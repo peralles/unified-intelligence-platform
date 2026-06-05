@@ -68,18 +68,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# uv kept for local dev fallback; Docker bridge uses bridges/whatsapp-neonize/.venv/bin/python
-COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
-
 WORKDIR /app
 
-# Copy pre-built venvs
-COPY --from=builder        /app/.venv                              ./.venv
-COPY --from=bridge-builder /bridge/.venv                           ./bridges/whatsapp-neonize/.venv
-
-# Copy application source
+# Copy pre-built main venv + source; bridge venv last so COPY . . cannot shadow it
+COPY --from=builder /app/.venv ./.venv
 COPY --from=builder /app/integrator ./integrator
 COPY . .
+COPY --from=bridge-builder /bridge/.venv ./bridges/whatsapp-neonize/.venv
 
 # Non-root user — reduces attack surface if a dependency is compromised
 RUN groupadd --gid 1000 app && \

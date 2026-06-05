@@ -42,11 +42,25 @@ def resolve_session_dir(explicit: Path | None = None) -> Path:
     return explicit or settings.whatsapp_session_path
 
 
+def _bridge_venv_executable(bridge: Path, name: str) -> Path | None:
+    candidate = bridge / ".venv" / "bin" / name
+    return candidate if candidate.is_file() else None
+
+
 def resolve_worker_command(bridge: Path) -> list[str]:
     """Launch bridge worker without uv at runtime (Docker read_only + UV_FROZEN safe)."""
-    venv_python = bridge / ".venv" / "bin" / "python"
-    if venv_python.is_file():
-        return [str(venv_python), "worker.py"]
+    worker_entry = _bridge_venv_executable(bridge, "whatsapp-neonize-worker")
+    if worker_entry is not None:
+        return [str(worker_entry)]
+    for name in ("python", "python3", "python3.12"):
+        py = _bridge_venv_executable(bridge, name)
+        if py is not None:
+            return [str(py), "worker.py"]
+    if os.environ.get("UV_FROZEN") == "1":
+        raise WhatsAppApiError(
+            "Bridge WhatsApp sem venv pré-instalado em "
+            f"{bridge / '.venv' / 'bin'}. Rebuild a imagem Docker."
+        )
     return [
         "uv",
         "run",
@@ -125,7 +139,11 @@ class WhatsAppBridgeClient:
                 f"Bridge neonize ausente em {bridge}. Verifique o repositório."
             )
         env = os.environ.copy()
-        env.pop("VIRTUAL_ENV", None)
+        venv_dir = bridge / ".venv"
+        if venv_dir.is_dir():
+            env["VIRTUAL_ENV"] = str(venv_dir.resolve())
+        else:
+            env.pop("VIRTUAL_ENV", None)
         env["INTEGRATOR_WHATSAPP_SESSION_DIR"] = str(self.session_dir.resolve())
         from integrator.whatsapp.session_store import WHATSAPP_CLIENT_NAME
 

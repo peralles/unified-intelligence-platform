@@ -29,11 +29,22 @@ def test_read_rpc_response_eof_raises() -> None:
         _read_rpc_response(stdout, "1", method="pair")
 
 
+def test_resolve_worker_command_prefers_worker_script(tmp_path: Path) -> None:
+    bridge = tmp_path / "bridge"
+    venv_bin = bridge / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    worker = venv_bin / "whatsapp-neonize-worker"
+    worker.write_text("", encoding="utf-8")
+    python = venv_bin / "python"
+    python.write_text("", encoding="utf-8")
+    assert resolve_worker_command(bridge) == [str(worker)]
+
+
 def test_resolve_worker_command_prefers_venv_python(tmp_path: Path) -> None:
     bridge = tmp_path / "bridge"
     venv_bin = bridge / ".venv" / "bin"
     venv_bin.mkdir(parents=True)
-    python = venv_bin / "python"
+    python = venv_bin / "python3"
     python.write_text("", encoding="utf-8")
     assert resolve_worker_command(bridge) == [str(python), "worker.py"]
 
@@ -49,6 +60,16 @@ def test_resolve_worker_command_falls_back_to_uv(tmp_path: Path) -> None:
         "python",
         "worker.py",
     ]
+
+
+def test_resolve_worker_command_blocks_uv_when_frozen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bridge = tmp_path / "bridge"
+    bridge.mkdir()
+    monkeypatch.setenv("UV_FROZEN", "1")
+    with pytest.raises(WhatsAppApiError, match="sem venv"):
+        resolve_worker_command(bridge)
 
 
 @patch("integrator.whatsapp.bridge_client.subprocess.Popen")
