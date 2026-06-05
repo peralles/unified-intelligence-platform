@@ -26,7 +26,8 @@ ENV UV_LINK_MODE=copy \
     UV_NO_CACHE=1
 
 # Dependency layer — only invalidated when lockfiles change
-COPY pyproject.toml uv.lock ./
+# README.md required by hatchling when installing the project (pyproject readme field)
+COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-install-project --no-dev
 
 # Source layer
