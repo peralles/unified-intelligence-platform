@@ -10,6 +10,7 @@ from integrator.providers.tools import (
     CONTACTS_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
+    LINKEDIN_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
     WHATSAPP_TOOL_COUNT,
     invoke_tool,
@@ -32,6 +33,7 @@ def test_tool_counts():
         + CALENDAR_EXTRA_TOOL_COUNT
         + CONTACTS_EXTRA_TOOL_COUNT
         + WHATSAPP_TOOL_COUNT
+        + LINKEDIN_TOOL_COUNT
     )
     assert len(meta) == TOTAL_TOOL_COUNT == expected
     names = {m["name"] for m in meta}
@@ -466,4 +468,5 @@ def test_whatsapp_total_tool_count() -> None:
         + CALENDAR_EXTRA_TOOL_COUNT
         + CONTACTS_EXTRA_TOOL_COUNT
         + WHATSAPP_TOOL_COUNT
+        + LINKEDIN_TOOL_COUNT
     )

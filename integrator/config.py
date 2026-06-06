@@ -69,6 +69,11 @@ class Settings(BaseSettings):
             return self.admin_runtime_file
         return self.root_dir / "data" / "admin" / "runtime.json"
 
+    # LinkedIn (OAuth 2.0 — w_member_social + openid profile email)
+    linkedin_enabled: bool = True
+    linkedin_client_id: str | None = None
+    linkedin_client_secret: str | None = None
+
     # WhatsApp (neonize worker em bridges/whatsapp-neonize)
     whatsapp_enabled: bool = True
     whatsapp_session_dir: Path | None = None

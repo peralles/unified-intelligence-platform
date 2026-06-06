@@ -38,6 +38,13 @@ DEFAULT_CONFIRM_REQUIRED = frozenset({
     "leave_whatsapp_group_and_purge",
     "edit_whatsapp_text",
     "whatsapp_react_message",
+    # LinkedIn — publicações e reações são ações públicas e irreversíveis
+    "share_linkedin_post",
+    "share_linkedin_article",
+    "delete_linkedin_post",
+    "comment_linkedin_post",
+    "like_linkedin_post",
+    "unlike_linkedin_post",
 })
 
 
@@ -153,3 +160,51 @@ def strip_control_args(arguments: dict[str, Any] | None) -> tuple[dict[str, Any]
 def strip_confirm_arg(arguments: dict[str, Any] | None) -> dict[str, Any]:
     args, _ = strip_control_args(arguments)
     return args
+
+
+def _enrich_linkedin_account_property(properties: dict[str, Any]) -> None:
+    """Add LinkedIn-specific account selector (separate from Google accounts)."""
+    from integrator.auth.linkedin_oauth import list_linkedin_accounts
+    accounts = list_linkedin_accounts()
+    ids = [a["id"] for a in accounts]
+    if not ids:
+        return
+    default_hint = ids[0] if len(ids) == 1 else "default"
+    prop: dict[str, Any] = {
+        "type": "string",
+        "description": (
+            f"Conta LinkedIn. IDs disponíveis: {', '.join(ids)}. "
+            f"Padrão: {default_hint}."
+        ),
+    }
+    if len(ids) > 1:
+        prop["enum"] = ids
+    properties["account"] = prop
+
+
+def enrich_linkedin_tool_schema(meta: dict[str, Any]) -> dict[str, Any]:
+    """Like enrich_tool_schema but with LinkedIn-specific account field."""
+    if not is_tool_allowed(meta["name"]):
+        return meta
+    enriched = dict(meta)
+    schema = dict(enriched.get("input_schema") or {"type": "object", "properties": {}})
+    properties = dict(schema.get("properties") or {})
+
+    _enrich_linkedin_account_property(properties)
+    schema["properties"] = properties
+
+    if meta["name"] in get_confirm_required_tools():
+        properties["confirm"] = {
+            "type": "boolean",
+            "description": (
+                "Obrigatório: deve ser true para executar esta ação destrutiva/irreversível."
+            ),
+        }
+        schema["properties"] = properties
+        enriched["description"] = (
+            (enriched.get("description") or "")
+            + " [Requer confirm=true para executar.]"
+        ).strip()
+
+    enriched["input_schema"] = schema
+    return enriched

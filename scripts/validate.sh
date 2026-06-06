@@ -20,6 +20,7 @@ from integrator.providers.tools import (
     CONTACTS_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
+    LINKEDIN_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
     WHATSAPP_TOOL_COUNT,
     list_all_tool_metadata,
@@ -35,6 +36,7 @@ expected_total = (
     + CALENDAR_EXTRA_TOOL_COUNT
     + CONTACTS_EXTRA_TOOL_COUNT
     + WHATSAPP_TOOL_COUNT
+    + LINKEDIN_TOOL_COUNT
 )
 assert len(meta) == TOTAL_TOOL_COUNT == expected_total, (len(meta), expected_total)
 confirm = get_confirm_required_tools()
@@ -69,18 +71,26 @@ for required in (
     'update_google_contact',
     'delete_google_contact',
     'leave_whatsapp_group_and_purge',
+    'share_linkedin_post',
+    'share_linkedin_article',
+    'delete_linkedin_post',
+    'comment_linkedin_post',
+    'like_linkedin_post',
+    'unlike_linkedin_post',
 ):
     assert required in confirm, required
 names = {m['name'] for m in meta}
 assert 'transcribe_whatsapp_audio' in names, 'transcribe_whatsapp_audio missing'
+assert 'get_linkedin_profile' in names, 'get_linkedin_profile missing'
 assert WHATSAPP_TOOL_COUNT == 40, f'Expected 40 WhatsApp tools, got {WHATSAPP_TOOL_COUNT}'
+assert LINKEDIN_TOOL_COUNT == 8, f'Expected 8 LinkedIn tools, got {LINKEDIN_TOOL_COUNT}'
 from integrator.accounts.registry import validate_account_id
 assert validate_account_id('Profissional') == 'profissional'
 print(
     'OK:', len(meta), 'tools (',
     GOOGLE_TOOL_COUNT, 'Google +', GMAIL_EXTRA_TOOL_COUNT, 'Gmail extra +',
     CALENDAR_EXTRA_TOOL_COUNT, 'Calendar extra +', CONTACTS_EXTRA_TOOL_COUNT,
-    'Contacts extra +', WHATSAPP_TOOL_COUNT, 'WhatsApp)',
+    'Contacts extra +', WHATSAPP_TOOL_COUNT, 'WhatsApp +', LINKEDIN_TOOL_COUNT, 'LinkedIn)',
 )
 "
 
@@ -90,7 +100,7 @@ import asyncio
 from integrator.mcp.server import handle_list_tools
 from integrator.providers.tools import TOTAL_TOOL_COUNT
 tools = asyncio.run(handle_list_tools())
-assert len(tools) == TOTAL_TOOL_COUNT
+assert len(tools) == TOTAL_TOOL_COUNT, (len(tools), TOTAL_TOOL_COUNT)
 print('OK: MCP list_tools', len(tools))
 "
 
@@ -112,7 +122,7 @@ routes = admin_routes()
 paths = {getattr(r, 'path', None) for r in routes}
 assert '/admin' in paths
 assert '/admin/api/tools' in paths
-assert len(routes) >= 18
+assert len(routes) >= 21
 print('OK: admin routes', len(routes))
 "
 

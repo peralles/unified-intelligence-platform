@@ -119,9 +119,11 @@ def _build_state() -> dict[str, Any]:
         "deployment": {
             "container": is_container(),
             "oauth_redirect": "/admin/oauth/google/callback",
+            "linkedin_oauth_redirect": "/admin/oauth/linkedin/callback",
             "oauth_public_base_url": settings.oauth_public_base_url or None,
             "persist_path": "/app/data",
         },
+        "linkedin": admin_handlers.linkedin_status(),
         "persistence": check_data_persistence().to_dict(),
     }
 
@@ -246,6 +248,85 @@ async def admin_api_hermes_install_link(_: Request) -> Response:
 
 async def admin_api_tools(_: Request) -> Response:
     return JSONResponse(admin_handlers.list_tools())
+
+
+async def admin_oauth_linkedin_start(request: Request) -> Response:
+    from integrator.auth.linkedin_oauth import (
+        LinkedInConfigError,
+        _resolve_public_base,
+        start_linkedin_authorization,
+    )
+
+    account_id = request.query_params.get("account_id", "default")
+    public_base = _resolve_public_base(
+        forwarded_proto=request.headers.get("x-forwarded-proto"),
+        forwarded_host=request.headers.get("x-forwarded-host"),
+        host=request.headers.get("host"),
+    )
+    try:
+        auth_url = await asyncio.to_thread(
+            start_linkedin_authorization,
+            public_base=public_base,
+            account_id=account_id,
+        )
+    except LinkedInConfigError as exc:
+        return RedirectResponse(
+            f"/admin?linkedin_oauth=error&message={quote(str(exc)[:200])}",
+            status_code=302,
+        )
+    except Exception as exc:
+        logger.warning("admin linkedin oauth start failed: %s", exc)
+        return RedirectResponse(
+            f"/admin?linkedin_oauth=error&message={quote(str(exc)[:200])}",
+            status_code=302,
+        )
+    return RedirectResponse(auth_url, status_code=302)
+
+
+async def admin_oauth_linkedin_callback(request: Request) -> Response:
+    from integrator.auth.linkedin_oauth import complete_linkedin_authorization
+
+    oauth_error = request.query_params.get("error")
+    if oauth_error:
+        detail = request.query_params.get("error_description") or oauth_error
+        return RedirectResponse(
+            f"/admin?linkedin_oauth=error&message={quote(detail[:200])}",
+            status_code=302,
+        )
+    state = request.query_params.get("state", "")
+    code = request.query_params.get("code", "")
+    if not state or not code:
+        return RedirectResponse(
+            "/admin?linkedin_oauth=error&message=Resposta+OAuth+LinkedIn+incompleta",
+            status_code=302,
+        )
+    try:
+        await asyncio.to_thread(
+            complete_linkedin_authorization,
+            state=state,
+            code=code,
+        )
+    except Exception as exc:
+        logger.warning("admin linkedin oauth callback failed: %s", exc)
+        log_event(
+            logger,
+            "admin.linkedin.oauth.callback_failed",
+            level=logging.WARNING,
+            error=str(exc),
+        )
+        return RedirectResponse(
+            f"/admin?linkedin_oauth=error&message={quote(str(exc)[:200])}",
+            status_code=302,
+        )
+    return RedirectResponse("/admin?linkedin_oauth=ok", status_code=302)
+
+
+async def admin_api_linkedin_disconnect(request: Request) -> Response:
+    body = await _json_body(request)
+    account_id = str(body.get("account_id", "")).strip()
+    if not account_id:
+        return JSONResponse({"ok": False, "error": "account_id obrigatório"}, status_code=400)
+    return JSONResponse(admin_handlers.linkedin_disconnect(account_id))
 
 
 async def admin_api_failures(request: Request) -> Response:
@@ -476,6 +557,9 @@ def admin_routes() -> list[Route | Mount]:
         Route("/admin/api/hermes/install", endpoint=admin_api_hermes_install_link, methods=["POST"]),
         Route("/admin/api/tools", endpoint=admin_api_tools, methods=["GET"]),
         Route("/admin/api/failures", endpoint=admin_api_failures, methods=["GET"]),
+        Route("/admin/oauth/linkedin/start", endpoint=admin_oauth_linkedin_start, methods=["GET"]),
+        Route("/admin/oauth/linkedin/callback", endpoint=admin_oauth_linkedin_callback, methods=["GET"]),
+        Route("/admin/api/linkedin/disconnect", endpoint=admin_api_linkedin_disconnect, methods=["POST"]),
     ]
     assets = _DIST / "assets"
     if assets.is_dir():
