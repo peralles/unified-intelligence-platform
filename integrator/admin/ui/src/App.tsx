@@ -3,6 +3,7 @@ import { useApp } from "@/context/AppContext";
 import { FerramentasView } from "@/views/FerramentasView";
 import { GoogleView } from "@/views/GoogleView";
 import { GuiaView } from "@/views/GuiaView";
+import { LinkedInView } from "@/views/LinkedInView";
 import { LogsView } from "@/views/LogsView";
 import { PainelView } from "@/views/PainelView";
 import { WhatsAppView } from "@/views/WhatsAppView";
@@ -12,6 +13,7 @@ const VIEWS: Record<ViewId, React.ComponentType> = {
   painel: PainelView,
   google: GoogleView,
   whatsapp: WhatsAppView,
+  linkedin: LinkedInView,
   ferramentas: FerramentasView,
   logs: LogsView,
   guia: GuiaView,

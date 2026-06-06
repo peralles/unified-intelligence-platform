@@ -10,6 +10,7 @@ from integrator.providers.tools import (
     CONTACTS_EXTRA_TOOL_COUNT,
     GMAIL_EXTRA_TOOL_COUNT,
     GOOGLE_TOOL_COUNT,
+    LINKEDIN_TOOL_COUNT,
     TOTAL_TOOL_COUNT,
     WHATSAPP_TOOL_COUNT,
     invoke_tool,
@@ -29,6 +30,7 @@ def test_total_tool_count():
         + CALENDAR_EXTRA_TOOL_COUNT
         + CONTACTS_EXTRA_TOOL_COUNT
         + WHATSAPP_TOOL_COUNT
+        + LINKEDIN_TOOL_COUNT
     )
     assert len(list_all_tool_metadata()) == TOTAL_TOOL_COUNT
 

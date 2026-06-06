@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  Linkedin,
   Mail,
   MessageCircle,
   Wrench,
@@ -19,6 +20,7 @@ export const NAV: NavItem[] = [
   { id: "painel", label: "Painel", icon: LayoutDashboard },
   { id: "google", label: "Google", icon: Mail },
   { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+  { id: "linkedin", label: "LinkedIn", icon: Linkedin },
   { id: "ferramentas", label: "Ferramentas", icon: Wrench },
   { id: "logs", label: "Logs", icon: ScrollText },
   { id: "guia", label: "Guia", icon: BookOpen },

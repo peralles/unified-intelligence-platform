@@ -2,6 +2,7 @@ export type ViewId =
   | "painel"
   | "google"
   | "whatsapp"
+  | "linkedin"
   | "ferramentas"
   | "logs"
   | "guia";
@@ -67,7 +68,26 @@ export interface AppState {
     oauth_public_base_url?: string | null;
     oauth_redirect?: string;
   };
+  linkedin?: {
+    enabled?: boolean;
+    client_id_set?: boolean;
+    client_secret_set?: boolean;
+    accounts?: LinkedInAccount[];
+    default_account?: string | null;
+  };
   persistence?: PersistenceState;
+}
+
+export interface LinkedInAccount {
+  id: string;
+  name?: string;
+  email?: string;
+  picture?: string;
+  sub?: string;
+  has_token?: boolean;
+  token_valid?: boolean;
+  refresh_valid?: boolean | null;
+  expires_at?: number | null;
 }
 
 export interface ToolMeta {

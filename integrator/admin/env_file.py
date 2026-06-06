@@ -36,8 +36,14 @@ def read_env_map() -> dict[str, str]:
 
 def env_file_writable() -> bool:
     """False when .env lives on a read-only layer (typical Docker/Coolify)."""
+    import stat
+
     path = env_file_path()
     if path.is_file():
+        # os.access() always returns True for root regardless of mode bits;
+        # check the actual permission bits so read-only mounts are detected.
+        if os.getuid() == 0:
+            return bool(path.stat().st_mode & stat.S_IWUSR)
         return os.access(path, os.W_OK)
     parent = path.parent
     return parent.exists() and os.access(parent, os.W_OK)

@@ -45,6 +45,8 @@ interface AppContextValue {
   loadFailures: () => Promise<void>;
   toolsLoaded: boolean;
   loadTools: () => Promise<{ name: string; description?: string }[] | null>;
+  onLinkedInConnect: (accountId: string) => void;
+  linkedInDisconnect: (accountId: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -90,6 +92,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const oauth = params.get("oauth");
+    const linkedinOauth = params.get("linkedin_oauth");
     if (oauth) {
       const message = params.get("message");
       if (oauth === "ok") {
@@ -101,6 +104,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : "Falha na autorização Google.";
         showToast(detail, "err");
         setActiveView("google");
+      }
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (linkedinOauth) {
+      const message = params.get("message");
+      if (linkedinOauth === "ok") {
+        showToast("Conta LinkedIn conectada com sucesso.");
+        setActiveView("linkedin");
+      } else {
+        const detail = message
+          ? decodeURIComponent(message.replace(/\+/g, " "))
+          : "Falha na autorização LinkedIn.";
+        showToast(detail, "err");
+        setActiveView("linkedin");
       }
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -124,6 +141,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return "ok";
       }
       if (id === "whatsapp") return wa.error ? "err" : st.logged_in ? "ok" : "warn";
+      if (id === "linkedin") {
+        const li = state.linkedin || {};
+        if (!li.enabled) return "";
+        if (!li.client_id_set || !li.client_secret_set) return "warn";
+        const accs = li.accounts || [];
+        if (!accs.some((a) => a.has_token && a.token_valid !== false)) return "warn";
+        return "ok";
+      }
       return "";
     },
     [state],
@@ -332,6 +357,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
             .join("\n") || "Nenhuma falha registrada.",
         );
       },
+      onLinkedInConnect: (accountId: string) => {
+        const id = accountId.trim() || "default";
+        window.location.href = `/admin/oauth/linkedin/start?account_id=${encodeURIComponent(id)}`;
+      },
+      linkedInDisconnect: async (accountId: string) => {
+        if (!confirm(`Desconectar a conta LinkedIn "${accountId}"?\nEsta ação remove o token local.`)) return;
+        await api("/admin/api/linkedin/disconnect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_id: accountId }),
+        });
+        showToast("Conta LinkedIn desconectada.");
+        await refreshAll();
+      },
       toolsLoaded,
       loadTools: async () => {
         setToolsLoaded(true);
@@ -363,6 +402,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       currentLog,
       toolsLoaded,
       showToast,
+      // LinkedIn callbacks have no state deps — stable via closure
     ],
   );
 

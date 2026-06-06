@@ -352,3 +352,41 @@ def operator_guide_markdown() -> dict[str, Any]:
     if not path.is_file():
         return {"markdown": "# Guia\n\nArquivo docs/ADMIN_OPERACAO.md não encontrado.\n"}
     return {"markdown": path.read_text(encoding="utf-8")}
+
+
+# ── LinkedIn ──────────────────────────────────────────────────────────────────
+
+def linkedin_status() -> dict[str, Any]:
+    from integrator.auth.linkedin_oauth import list_linkedin_accounts
+
+    accounts = list_linkedin_accounts()
+    default_id = accounts[0]["id"] if len(accounts) == 1 else (
+        next((a["id"] for a in accounts), None)
+    )
+    return {
+        "enabled": settings.linkedin_enabled,
+        "client_id_set": bool(settings.linkedin_client_id),
+        "client_secret_set": bool(settings.linkedin_client_secret),
+        "accounts": accounts,
+        "default_account": default_id,
+    }
+
+
+def linkedin_start_oauth(*, account_id: str, public_base: str) -> dict[str, Any]:
+    from integrator.auth.linkedin_oauth import LinkedInConfigError, start_linkedin_authorization
+    try:
+        url = start_linkedin_authorization(public_base=public_base, account_id=account_id)
+        return {"ok": True, "auth_url": url}
+    except LinkedInConfigError as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def linkedin_disconnect(account_id: str) -> dict[str, Any]:
+    from integrator.auth.linkedin_oauth import remove_linkedin_account
+    removed = remove_linkedin_account(account_id)
+    if removed:
+        log_event(logger, "admin.linkedin.disconnected", account_id=account_id)
+        return {"ok": True, "removed": account_id}
+    return {"ok": False, "error": f"Conta '{account_id}' não encontrada."}
